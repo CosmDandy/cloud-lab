@@ -1,0 +1,31 @@
+---
+- name: Stop and disable tailscaled
+  ansible.builtin.systemd:
+    name: tailscaled
+    state: stopped
+    enabled: false
+  failed_when: false
+
+- name: Remove binaries
+  ansible.builtin.file:
+    path: "{{ item }}"
+    state: absent
+  loop:
+    - /usr/sbin/tailscale
+    - /usr/sbin/tailscaled
+
+- name: Remove systemd service
+  ansible.builtin.file:
+    path: /etc/systemd/system/tailscaled.service
+    state: absent
+  notify: daemon_reload
+
+- name: Remove defaults file
+  ansible.builtin.file:
+    path: /etc/default/tailscaled
+    state: absent
+
+- name: Remove Tailscale state
+  ansible.builtin.file:
+    path: /var/lib/tailscale
+    state: absent

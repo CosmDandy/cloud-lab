@@ -1,29 +1,24 @@
----
 - name: Check sing-box version
   ansible.builtin.command:
     cmd: sing-box version
   register: singbox_installed
   failed_when: false
   changed_when: false
-
 - name: Set arch variable
   ansible.builtin.set_fact:
     _singbox_arch: "{{ 'amd64' if ansible_architecture == 'x86_64' else 'arm64' }}"
-
 - name: Download sing-box
   ansible.builtin.get_url:
     url: "https://github.com/SagerNet/sing-box/releases/download/v{{ singbox_version }}/sing-box-{{ singbox_version }}-linux-{{ _singbox_arch }}.tar.gz"
     dest: /tmp/sing-box.tar.gz
     mode: "0644"
   when: singbox_installed.rc != 0 or singbox_version not in (singbox_installed.stdout | default(''))
-
 - name: Extract sing-box binary
   ansible.builtin.unarchive:
     src: /tmp/sing-box.tar.gz
     dest: /tmp
     remote_src: true
   when: singbox_installed.rc != 0 or singbox_version not in (singbox_installed.stdout | default(''))
-
 - name: Install sing-box binary
   ansible.builtin.copy:
     src: "/tmp/sing-box-{{ singbox_version }}-linux-{{ _singbox_arch }}/sing-box"
@@ -32,14 +27,12 @@
     remote_src: true
   when: singbox_installed.rc != 0 or singbox_version not in (singbox_installed.stdout | default(''))
   notify: Restart sing-box
-
 - name: Create sing-box system user
   ansible.builtin.user:
     name: sing-box
     system: true
     shell: /usr/sbin/nologin
     create_home: false
-
 - name: Create config directory
   ansible.builtin.file:
     path: /etc/sing-box
@@ -47,7 +40,6 @@
     owner: root
     group: root
     mode: "0755"
-
 - name: Create data directory
   ansible.builtin.file:
     path: /var/lib/sing-box
@@ -55,12 +47,10 @@
     owner: sing-box
     group: sing-box
     mode: "0755"
-
 - name: Check for existing systemd unit
   ansible.builtin.stat:
     path: /usr/lib/systemd/system/sing-box.service
   register: _singbox_pkg_unit
-
 - name: Install systemd service (only if no package unit exists)
   ansible.builtin.copy:
     dest: /etc/systemd/system/sing-box.service
@@ -86,7 +76,6 @@
     mode: "0644"
   when: not _singbox_pkg_unit.stat.exists
   notify: Reload systemd
-
 - name: Enable sing-box
   ansible.builtin.systemd:
     name: sing-box

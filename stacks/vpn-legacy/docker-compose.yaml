@@ -1,0 +1,46 @@
+name: vpn
+
+services:
+  caddy:
+    image: caddy:2.9-alpine
+    container_name: caddy
+    restart: unless-stopped
+    init: true
+    ports:
+      - "80:80"
+      - "8443:8443/tcp"
+    volumes:
+      - caddy_data:/data
+      - ./caddy/Caddyfile:/etc/caddy/Caddyfile:ro
+      - ./client:/srv/configs:ro
+    healthcheck:
+      test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://127.0.0.1:2019/config/"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 10s
+
+  sing-box:
+    image: ghcr.io/sagernet/sing-box:latest
+    container_name: sing-box
+    restart: unless-stopped
+    environment:
+      ENABLE_DEPRECATED_LEGACY_DOMAIN_STRATEGY_OPTIONS: "true"
+    volumes:
+      - ./sing-box:/etc/sing-box
+    healthcheck:
+      test: ["CMD", "sing-box", "check", "-c", "/etc/sing-box/config.json"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 10s
+    ports:
+      - "443:443/tcp"
+      - "443:443/udp"
+      - "8446:8446/tcp"
+    cap_add:
+      - NET_ADMIN
+    command: run -c /etc/sing-box/config.json
+
+volumes:
+  caddy_data:

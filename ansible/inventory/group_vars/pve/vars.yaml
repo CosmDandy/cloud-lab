@@ -1,0 +1,6 @@
+---
+tailscale_login_server: "https://mesh.cosmdandy.dev/"
+tailscale_hostname: "{{ inventory_hostname }}.infra"
+# Dns
+tailscale_accept_dns: true
+tailscale_accept_routes: true

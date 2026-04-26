@@ -1,0 +1,7 @@
+---
+- name: Install Tailscale client
+  hosts: "{{ target_hosts | default('pve') }}"
+  become: true
+
+  roles:
+    - role: tailscale

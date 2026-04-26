@@ -4,10 +4,10 @@
 secrets/
 
 # Sing-box TLS certs
-configs/vpn/*/sing-box/tls/
+stacks/vpn-legacy/sing-box/tls/
 
 # Generated sing-box client configs (from .jsonnet)
-configs/vpn/*/sing-box/client-*.json.tpl
+stacks/vpn-legacy/sing-box/client-*.json.tpl
 
 # Terraform
 terraform/.terraform/

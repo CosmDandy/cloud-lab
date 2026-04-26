@@ -1,0 +1,48 @@
+name: "Deploy: monitoring"
+on:
+  workflow_dispatch:
+  push:
+    branches: [master]
+    paths:
+      - stacks/monitoring/**
+
+jobs:
+  deploy:
+    runs-on: hcloud-htz-hel-01
+    environment: htz-hel-01
+    env:
+      TEMPLATE_DIR: stacks/monitoring
+      DEPLOY_DIR: /opt/monitoring
+      MON_DOMAIN: ${{ vars.MON_DOMAIN }}
+      GRAFANA_ADMIN_PASSWORD: ${{ secrets.GRAFANA_ADMIN_PASSWORD }}
+      NODE_HEL_02_ADDRESS: ${{ vars.NODE_HEL_02_ADDRESS }}
+    steps:
+      - uses: actions/checkout@v6
+
+      - name: Render templates
+        run: |
+          for f in $(find $TEMPLATE_DIR -name '*.tpl'); do
+            envsubst < "$f" > "${f%.tpl}"
+          done
+
+      - name: Validate compose
+        run: docker compose -f $TEMPLATE_DIR/docker-compose.yaml config --quiet
+
+      - name: Deploy
+        run: |
+          sudo rsync -a --delete \
+            --exclude='*.tpl' \
+            "$TEMPLATE_DIR/" "$DEPLOY_DIR/"
+          cd "$DEPLOY_DIR" && docker compose pull && docker compose up -d --remove-orphans
+
+      - name: Verify
+        working-directory: /opt/monitoring
+        run: |
+          timeout 60 bash -c '
+            until docker compose ps --format json 2>/dev/null \
+              | jq -se "[.[] | select(.State != \"running\")] | length == 0" > /dev/null 2>&1
+            do sleep 2; done
+          ' || {
+            docker compose logs --tail 30
+            exit 1
+          }

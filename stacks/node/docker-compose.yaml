@@ -1,0 +1,39 @@
+name: node
+
+services:
+  remnawave-node:
+    image: remnawave/node:latest
+    container_name: remnawave-node
+    hostname: remnawave-node
+    restart: unless-stopped
+    network_mode: host
+    cap_add:
+      - NET_ADMIN
+    ulimits:
+      nofile:
+        soft: 1048576
+        hard: 1048576
+    env_file:
+      - .env
+    volumes:
+      - node_data:/opt/remnawave-node
+
+  node-exporter:
+    image: prom/node-exporter:v1.9.1
+    container_name: node-exporter
+    restart: unless-stopped
+    network_mode: host
+    pid: host
+    volumes:
+      - /proc:/host/proc:ro
+      - /sys:/host/sys:ro
+      - /:/rootfs:ro
+    command:
+      - "--path.procfs=/host/proc"
+      - "--path.sysfs=/host/sys"
+      - "--path.rootfs=/rootfs"
+      - "--collector.filesystem.mount-points-exclude=^/(sys|proc|dev|host|etc)($$|/)"
+
+volumes:
+  node_data:
+    name: node_data

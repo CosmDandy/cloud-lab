@@ -4,15 +4,14 @@ on:
   push:
     branches: [master]
     paths:
-      - configs/vpn/hel-01/**
-      - templates/sing-box/**
+      - stacks/vpn-legacy/**
 
 jobs:
   deploy:
     runs-on: hcloud-vpn-hel-01
     environment: vpn-hel-01
     env:
-      CONFIG_DIR: configs/vpn/hel-01
+      CONFIG_DIR: stacks/vpn-legacy
       COMPOSE_PROJECT_DIR: /opt/vpn-infra
     steps:
       - uses: actions/checkout@v6
@@ -35,7 +34,7 @@ jobs:
       - name: Generate client configs
         run: |
           for src in $CONFIG_DIR/sing-box/client-*.jsonnet; do
-            jsonnet --jpath templates/sing-box -o "${src%.jsonnet}.json.tpl" "$src"
+            jsonnet --jpath stacks/vpn-legacy/lib -o "${src%.jsonnet}.json.tpl" "$src"
           done
 
       - name: Validate compose

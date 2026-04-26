@@ -1,0 +1,24 @@
+---
+- name: Install Tailscale
+  ansible.builtin.import_tasks:
+    file: install.yaml
+  tags: [install]
+
+- name: Flush handlers
+  ansible.builtin.meta: flush_handlers
+  tags: [install, up]
+
+- name: Tailscale up
+  ansible.builtin.import_tasks:
+    file: up.yaml
+  tags: [install, up]
+
+- name: Tailscale down
+  ansible.builtin.import_tasks:
+    file: down.yaml
+  tags: [never, down]
+
+- name: Uninstall Tailscale
+  ansible.builtin.import_tasks:
+    file: uninstall.yaml
+  tags: [never, uninstall]

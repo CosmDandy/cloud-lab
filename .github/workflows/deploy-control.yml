@@ -4,23 +4,24 @@ on:
   push:
     branches: [master]
     paths:
-      - templates/control/**
-      - templates/subscription/**
-      - templates/panel/**
+      - stacks/control/**
+      - data/subscription/**
+      - data/panel/**
+      - scripts/panel-sync.sh
+      - scripts/subscription-sync.sh
 
 jobs:
   deploy:
     runs-on: hcloud-htz-hel-01
     environment: htz-hel-01
     env:
-      TEMPLATE_DIR: templates/control
+      TEMPLATE_DIR: stacks/control
       DEPLOY_DIR: /opt/control
       SERVER_ADDRESS: ${{ vars.SERVER_ADDRESS }}
       SERVER_IPV4: ${{ vars.SERVER_IPV4 }}
       ACME_EMAIL: ${{ vars.ACME_EMAIL }}
       PANEL_DOMAIN: ${{ vars.PANEL_DOMAIN }}
       MESH_DOMAIN: ${{ vars.MESH_DOMAIN }}
-      TRAEFIK_DOMAIN: ${{ vars.TRAEFIK_DOMAIN }}
       SUB_DOMAIN: ${{ vars.SUB_DOMAIN }}
       JWT_AUTH_SECRET: ${{ secrets.JWT_AUTH_SECRET }}
       JWT_API_TOKENS_SECRET: ${{ secrets.JWT_API_TOKENS_SECRET }}
@@ -35,7 +36,7 @@ jobs:
 
       - name: Render templates
         run: |
-          for f in $(find templates -name '*.tpl'); do
+          for f in $(find stacks/control -name '*.tpl'); do
             envsubst < "$f" > "${f%.tpl}"
           done
 
@@ -65,10 +66,10 @@ jobs:
         env:
           PANEL_URL: https://${{ vars.PANEL_DOMAIN }}
           API_TOKEN: ${{ secrets.PANEL_API_TOKEN }}
-        run: bash templates/panel/sync.sh templates/panel/config.json
+        run: bash scripts/panel-sync.sh data/panel/config.json
 
       - name: Sync subscription templates
         env:
           PANEL_URL: https://${{ vars.PANEL_DOMAIN }}
           API_TOKEN: ${{ secrets.PANEL_API_TOKEN }}
-        run: bash templates/subscription/sync.sh templates/subscription
+        run: bash scripts/subscription-sync.sh data/subscription

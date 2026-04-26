@@ -4,7 +4,7 @@ on:
   push:
     branches: [master]
     paths:
-      - templates/node/**
+      - stacks/node/**
 
 jobs:
   deploy:
@@ -14,7 +14,7 @@ jobs:
     runs-on: hcloud-${{ matrix.node }}
     environment: ${{ matrix.node }}
     env:
-      TEMPLATE_DIR: templates/node
+      TEMPLATE_DIR: stacks/node
       DEPLOY_DIR: /opt/node
     steps:
       - uses: actions/checkout@v6
