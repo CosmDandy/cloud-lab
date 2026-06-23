@@ -1,0 +1,4 @@
+---
+- name: Reexec systemd
+  ansible.builtin.command: systemctl daemon-reexec
+  changed_when: true

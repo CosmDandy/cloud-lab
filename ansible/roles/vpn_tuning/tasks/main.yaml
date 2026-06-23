@@ -1,0 +1,6 @@
+---
+- name: Apply sysctl tuning
+  ansible.builtin.import_tasks: sysctl.yaml
+
+- name: Apply file-descriptor limits
+  ansible.builtin.import_tasks: limits.yaml
