@@ -1,0 +1,51 @@
+---
+# Sysctl-параметры для VPN-нод (RemnaWave + Xray).
+# Значения выровнены под рекомендации из docs/dpi-report-22-06-26.md (Phase 1).
+# Override через group_vars/host_vars при необходимости.
+
+vpn_tuning_sysctl_file: /etc/sysctl.d/99-vpn-tuning.conf
+
+vpn_tuning_sysctl:
+  # TCP congestion + qdisc
+  net.core.default_qdisc: fq
+  net.ipv4.tcp_congestion_control: bbr
+
+  # Network buffers (рассчитано под BDP 100 Мбит × 200 мс)
+  net.core.rmem_max: "67108864"
+  net.core.wmem_max: "67108864"
+  net.core.rmem_default: "1048576"
+  net.core.wmem_default: "1048576"
+  net.ipv4.tcp_rmem: "4096 262144 67108864"
+  net.ipv4.tcp_wmem: "4096 262144 67108864"
+
+  # TCP performance
+  net.ipv4.tcp_window_scaling: "1"
+  net.ipv4.tcp_slow_start_after_idle: "0"
+  net.ipv4.tcp_notsent_lowat: "131072"
+  net.ipv4.tcp_fastopen: "3"
+
+  # Concurrency / backlog
+  net.core.somaxconn: "65535"
+  net.ipv4.tcp_max_syn_backlog: "65535"
+  net.core.netdev_max_backlog: "32768"
+  net.ipv4.ip_local_port_range: "1024 65535"
+  net.ipv4.tcp_fin_timeout: "15"
+  net.ipv4.tcp_tw_reuse: "1"
+
+  # Conntrack — высокий лимит соединений на прокси
+  net.netfilter.nf_conntrack_max: "131072"
+  net.netfilter.nf_conntrack_udp_timeout: "60"
+  net.netfilter.nf_conntrack_udp_timeout_stream: "180"
+
+  # Auto-reboot on kernel panic
+  kernel.panic: "10"
+  kernel.panic_on_oops: "1"
+
+  # File descriptors (system-wide)
+  fs.file-max: "2097152"
+
+# Пер-юзер file descriptor limit
+vpn_tuning_nofile_limit: 1048576
+
+# Файл systemd-overrides
+vpn_tuning_systemd_conf: /etc/systemd/system.conf

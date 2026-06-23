@@ -1,0 +1,20 @@
+---
+# VPN nodes (managed manually via Mivocloud and similar providers).
+# Terraform отвечает только за control-plane (htz-hel-01) — см. terraform/main.tf.
+
+all:
+  vars:
+    ansible_python_interpreter: /usr/bin/python3
+    ansible_ssh_common_args: "-o StrictHostKeyChecking=accept-new -o PreferredAuthentications=publickey"
+
+  children:
+    vpn_nodes:
+      vars:
+        ansible_user: root
+      hosts:
+        miv-chi-01:
+          ansible_host: 94.158.245.24
+          country_code: MD
+        miv-ldn-01:
+          ansible_host: 194.180.158.12
+          country_code: GB

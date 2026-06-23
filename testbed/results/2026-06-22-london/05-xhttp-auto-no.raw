@@ -1,0 +1,9 @@
+variant=05-xhttp-auto-no
+timestamp=2026-06-22T21:22:03+00:00
+server=194.180.158.12:11005
+exit_ip=2a0a:c802:5:1::d
+handshake=tcp=0.000184 tls=0.238089 ttfb=0.324226 code=200
+dl_run_1=9802743
+dl_run_2=10399812
+dl_avg=10101277
+dl_max=10399812

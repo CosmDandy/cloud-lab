@@ -1,0 +1,52 @@
+---
+all:
+  vars:
+    ansible_ssh_common_args: "-o StrictHostKeyChecking=no -o PreferredAuthentications=publickey"
+    ansible_python_interpreter: /usr/bin/python3
+
+  hosts:
+    # Work VM
+    work-d-01:
+      ansible_host: 192.168.82.61
+      ansible_user: cluster
+      ts_hostname: work-d-01.infra
+      ts_advertise_routes: "192.168.20.0/24,192.168.82.0/24"
+      singbox_client: true
+
+    # Proxmox Cluster
+    pve-work-l-01:
+      ansible_host: 192.168.20.151
+    pve-work-l-02:
+      ansible_host: 192.168.20.152
+    pve-work-l-03:
+      ansible_host: 192.168.20.153
+
+    # Local Proxmox
+    pve-local-l-01:
+      ansible_host: 10.0.1.4
+
+    # Local Backup
+    backup-home-01:
+      ansible_host: 10.0.1.67
+
+  children:
+    pve_work:
+      hosts:
+        pve-work-l-01:
+        pve-work-l-02:
+        pve-work-l-03:
+
+    pve_local:
+      hosts:
+        pve-local-l-01:
+
+    pve:
+      vars:
+        ansible_user: root
+      children:
+        pve_work:
+        pve_local:
+
+    vm_work:
+      hosts:
+        work-d-01:

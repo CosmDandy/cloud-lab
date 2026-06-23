@@ -1,0 +1,9 @@
+variant=06-xhttp-auto-xmux
+timestamp=2026-06-22T21:22:19+00:00
+server=194.180.158.12:11006
+exit_ip=2a0a:c802:5:1::d
+handshake=tcp=0.000198 tls=0.089701 ttfb=0.212755 code=200
+dl_run_1=10079645
+dl_run_2=10815728
+dl_avg=10447686
+dl_max=10815728

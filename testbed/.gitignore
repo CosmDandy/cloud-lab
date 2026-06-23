@@ -1,0 +1,8 @@
+# Secrets: env + .env.example (contains testbed keys, regen locally)
+.env
+.env.example
+# Generated artifacts that embed the Reality private key — regenerate via generate-configs.py
+dist/
+server-configs/*/config.json
+# Keep: generate-configs.py, build-server-bundle.py, render-client.py, bench/, README,
+#       server-configs/index.json (no secrets), results/ (benchmark records, no secrets)

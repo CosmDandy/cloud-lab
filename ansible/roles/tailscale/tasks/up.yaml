@@ -1,0 +1,16 @@
+---
+- name: Tailscale auth
+  ansible.builtin.command:
+    cmd: >-
+      tailscale up
+      --reset
+      --login-server={{ tailscale_login_server }}
+      --authkey={{ tailscale_auth_key }}
+      --hostname={{ tailscale_hostname }}
+      --accept-dns={{ tailscale_accept_dns | lower }}
+      --accept-routes={{ tailscale_accept_routes | lower }}
+      --advertise-exit-node={{ tailscale_advertise_exit_node | lower }}
+      --exit-node-allow-lan-access={{ tailscale_exit_node_allow_lan_access | lower }}
+      {% if tailscale_advertise_routes != '' %}--advertise-routes={{ tailscale_advertise_routes }}{% endif %}
+      {% if tailscale_advertise_tags != '' %}--advertise-tags={{ tailscale_advertise_tags }}{% endif %}
+      {% if tailscale_exit_node != '' %}--exit-node={{ tailscale_exit_node }}{% endif %}

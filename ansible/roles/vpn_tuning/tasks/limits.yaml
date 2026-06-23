@@ -1,0 +1,18 @@
+---
+- name: Set pam_limits nofile (soft + hard) for all users
+  community.general.pam_limits:
+    domain: "*"
+    limit_type: "{{ item }}"
+    limit_item: nofile
+    value: "{{ vpn_tuning_nofile_limit }}"
+  loop:
+    - soft
+    - hard
+
+- name: Ensure DefaultLimitNOFILE in systemd system.conf
+  ansible.builtin.lineinfile:
+    path: "{{ vpn_tuning_systemd_conf }}"
+    regexp: "^#?DefaultLimitNOFILE="
+    line: "DefaultLimitNOFILE={{ vpn_tuning_nofile_limit }}"
+    state: present
+  notify: Reexec systemd

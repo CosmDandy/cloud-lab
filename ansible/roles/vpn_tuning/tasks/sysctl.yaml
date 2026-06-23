@@ -1,0 +1,25 @@
+---
+- name: Load tcp_bbr kernel module
+  community.general.modprobe:
+    name: tcp_bbr
+    state: present
+
+- name: Persist tcp_bbr in modules-load.d
+  ansible.builtin.copy:
+    dest: /etc/modules-load.d/bbr.conf
+    content: "tcp_bbr\n"
+    owner: root
+    group: root
+    mode: "0644"
+
+- name: Apply sysctl parameters
+  ansible.posix.sysctl:
+    name: "{{ item.key }}"
+    value: "{{ item.value }}"
+    sysctl_file: "{{ vpn_tuning_sysctl_file }}"
+    sysctl_set: true
+    state: present
+    reload: true
+  loop: "{{ vpn_tuning_sysctl | dict2items }}"
+  loop_control:
+    label: "{{ item.key }}"

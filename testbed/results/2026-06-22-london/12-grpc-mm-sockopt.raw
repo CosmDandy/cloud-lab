@@ -1,0 +1,9 @@
+variant=12-grpc-mm-sockopt
+timestamp=2026-06-22T21:24:01+00:00
+server=194.180.158.12:11012
+exit_ip=2a0a:c802:5:1::d
+handshake=tcp=0.000191 tls=0.076468 ttfb=0.175329 code=200
+dl_run_1=9316575
+dl_run_2=10905280
+dl_avg=10110927
+dl_max=10905280

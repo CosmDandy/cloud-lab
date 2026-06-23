@@ -1,0 +1,19 @@
+---
+# Main
+tailscale_version: "1.96.4"
+tailscale_login_server: ""
+tailscale_hostname: "{{ inventory_hostname }}"
+tailscale_auth_key: ""
+
+# Dns
+tailscale_accept_dns: false
+tailscale_accept_routes: false
+tailscale_advertise_routes: ""
+
+# Tags
+tailscale_advertise_tags: ""
+
+# exit-node
+tailscale_exit_node: ""
+tailscale_exit_node_allow_lan_access: false
+tailscale_advertise_exit_node: false

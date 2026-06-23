@@ -1,0 +1,9 @@
+variant=04-vision-full
+timestamp=2026-06-22T21:21:46+00:00
+server=194.180.158.12:11004
+exit_ip=2a0a:c802:5:1::d
+handshake=tcp=0.000185 tls=0.212953 ttfb=0.315767 code=200
+dl_run_1=9161707
+dl_run_2=9955766
+dl_avg=9558736
+dl_max=9955766

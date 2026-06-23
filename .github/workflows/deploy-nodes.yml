@@ -1,10 +1,6 @@
 name: "Deploy: nodes"
 on:
   workflow_dispatch:
-  push:
-    branches: [master]
-    paths:
-      - templates/node/**
 
 jobs:
   deploy:
@@ -14,7 +10,7 @@ jobs:
     runs-on: hcloud-${{ matrix.node }}
     environment: ${{ matrix.node }}
     env:
-      TEMPLATE_DIR: templates/node
+      TEMPLATE_DIR: stacks/node
       DEPLOY_DIR: /opt/node
     steps:
       - uses: actions/checkout@v6

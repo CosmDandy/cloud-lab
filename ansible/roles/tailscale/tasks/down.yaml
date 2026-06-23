@@ -1,0 +1,8 @@
+---
+- name: Tailscale down
+  ansible.builtin.command:
+    cmd: tailscale down
+
+- name: Tailscale logout
+  ansible.builtin.command:
+    cmd: tailscale logout

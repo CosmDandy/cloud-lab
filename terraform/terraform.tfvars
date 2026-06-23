@@ -1,3 +1,10 @@
+# DEPRECATED FREEZE (2026-06-22): VPN-ноды теперь управляются
+# вручную через Mivocloud + Ansible (см. ansible/playbooks/vpn-node-deploy.yml).
+# Terraform отвечает только за control-plane (htz-hel-01 с RemnaWave).
+# Автотриггеры workflow убраны (см. .github/workflows/terraform.yml).
+# Перед `terraform apply` ВСЕГДА смотреть `terraform plan` глазами —
+# случайные изменения tfvars могут пересоздать или удалить prod-серверы.
+
 domain             = "cosmdandy.dev"
 cloudflare_zone_id = "1c6c22b9c953bcffffa5aec356eb547e"
 github_owner       = "cosmdandy"
