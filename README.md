@@ -14,6 +14,8 @@
 
 Personal VPN infrastructure managed entirely as code. Full lifecycle automation — from server provisioning to config deployment — using Terraform, GitHub Actions, and Docker Compose on Hetzner Cloud.
 
+> **Deployment policy (2026-06-22):** все workflow (`terraform`, `deploy-*`) триггерятся **только вручную** через `workflow_dispatch`. Push в `master` ничего автоматически не катит. VPN-ноды управляются вручную через Mivocloud + Ansible (`ansible/playbooks/vpn-node-deploy.yml`); Terraform отвечает только за control-plane (`htz-hel-01` с RemnaWave).
+
 ## Tech Stack
 
 | Layer | Tools |
@@ -104,7 +106,9 @@ Generated client configs are uploaded as GitHub artifacts (7-day retention).
 | Event | Action |
 |-------|--------|
 | Pull request | `fmt -check` + `validate` + `plan` (posted as PR comment) |
-| Push to master | Auto-apply |
+| `workflow_dispatch` | Apply (вручную из GitHub Actions UI) |
+
+Push в `master` Terraform не триггерит — apply только по ручному запуску.
 
 ### Client Configuration
 

@@ -1,10 +1,6 @@
 name: "Deploy: vpn-hel-01"
 on:
   workflow_dispatch:
-  push:
-    branches: [master]
-    paths:
-      - stacks/vpn-legacy/**
 
 jobs:
   deploy:

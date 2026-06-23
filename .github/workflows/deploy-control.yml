@@ -1,14 +1,6 @@
 name: "Deploy: control"
 on:
   workflow_dispatch:
-  push:
-    branches: [master]
-    paths:
-      - stacks/control/**
-      - data/subscription/**
-      - data/panel/**
-      - scripts/panel-sync.sh
-      - scripts/subscription-sync.sh
 
 jobs:
   deploy:

@@ -45,7 +45,13 @@ resource "null_resource" "runner_cleanup" {
 }
 
 # ──────────────────────────────────────────────
-# VPN servers (legacy, removed in Phase 5)
+# VPN servers (LEGACY, DEPRECATED 2026-06-22)
+#
+# VPN-ноды теперь управляются вручную через Mivocloud + Ansible
+# (см. ansible/playbooks/vpn-node-deploy.yml). Этот модуль
+# остаётся ради backward compatibility tfstate. НЕ применять
+# `terraform apply` без явного решения — это может пересоздать
+# legacy hcloud VPN-серверы.
 # ──────────────────────────────────────────────
 
 module "vpn_server" {

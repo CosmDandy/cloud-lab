@@ -1,10 +1,6 @@
 name: "Deploy: monitoring"
 on:
   workflow_dispatch:
-  push:
-    branches: [master]
-    paths:
-      - stacks/monitoring/**
 
 jobs:
   deploy:
