@@ -1,0 +1,9 @@
+variant=03-vision-testpre
+timestamp=2026-06-22T21:21:21+00:00
+server=194.180.158.12:11003
+exit_ip=2a0a:c802:5:1::d
+handshake=tcp=0.000206 tls=0.213004 ttfb=0.317377 code=200
+dl_run_1=6156921
+dl_run_2=4760726
+dl_avg=5458823
+dl_max=6156921

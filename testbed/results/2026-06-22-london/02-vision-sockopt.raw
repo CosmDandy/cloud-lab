@@ -1,0 +1,9 @@
+variant=02-vision-sockopt
+timestamp=2026-06-22T21:21:05+00:00
+server=194.180.158.12:11002
+exit_ip=2a0a:c802:5:1::d
+handshake=tcp=0.000198 tls=0.204181 ttfb=0.299094 code=200
+dl_run_1=9744457
+dl_run_2=9533720
+dl_avg=9639088
+dl_max=9744457

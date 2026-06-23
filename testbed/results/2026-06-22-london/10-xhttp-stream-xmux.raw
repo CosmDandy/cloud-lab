@@ -1,0 +1,9 @@
+variant=10-xhttp-stream-xmux
+timestamp=2026-06-22T21:23:22+00:00
+server=194.180.158.12:11010
+exit_ip=2a0a:c802:5:1::d
+handshake=tcp=0.000213 tls=0.084003 ttfb=0.197651 code=200
+dl_run_1=10355585
+dl_run_2=10733930
+dl_avg=10544757
+dl_max=10733930

@@ -1,0 +1,9 @@
+variant=08-xhttp-packet-xmux
+timestamp=2026-06-22T21:22:50+00:00
+server=194.180.158.12:11008
+exit_ip=2a0a:c802:5:1::d
+handshake=tcp=0.000201 tls=0.077717 ttfb=0.210968 code=200
+dl_run_1=10266360
+dl_run_2=10741798
+dl_avg=10504079
+dl_max=10741798

@@ -1,0 +1,9 @@
+variant=11-grpc-base
+timestamp=2026-06-22T21:23:38+00:00
+server=194.180.158.12:11011
+exit_ip=2a0a:c802:5:1::d
+handshake=tcp=0.000177 tls=0.070103 ttfb=0.157049 code=200
+dl_run_1=7964115
+dl_run_2=5012592
+dl_avg=6488353
+dl_max=7964115

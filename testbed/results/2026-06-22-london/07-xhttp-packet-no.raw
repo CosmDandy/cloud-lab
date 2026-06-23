@@ -1,0 +1,9 @@
+variant=07-xhttp-packet-no
+timestamp=2026-06-22T21:22:34+00:00
+server=194.180.158.12:11007
+exit_ip=2a0a:c802:5:1::d
+handshake=tcp=0.000217 tls=0.250849 ttfb=0.392057 code=200
+dl_run_1=9868599
+dl_run_2=10340972
+dl_avg=10104785
+dl_max=10340972
