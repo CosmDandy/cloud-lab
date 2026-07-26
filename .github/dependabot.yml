@@ -1,0 +1,15 @@
+# Пины по SHA не обновляются сами — этим занимается Dependabot: он поднимает PR
+# с новым SHA и правит комментарий-версию рядом.
+version: 2
+updates:
+  - package-ecosystem: github-actions
+    directory: /
+    schedule:
+      interval: weekly
+    # Пауза перед обновлением: большинство supply-chain атак на пакеты и экшены
+    # выявляют в первые дни, поэтому свежие релизы не тянем сразу.
+    cooldown:
+      default-days: 7
+    groups:
+      actions:
+        patterns: ["*"]

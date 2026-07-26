@@ -1,0 +1,92 @@
+# Базовые security-гейты. Все actions запиннены по полному commit SHA, а не по
+# тегу: тег может быть перемещён владельцем экшена на другой код. Это не
+# паранойя — в марте 2026 у trivy-action force-push'ем переписали 75 из 76
+# тегов версий, и пайплайны с `@v0.x` начали выгружать секреты. Версия в
+# комментарии — для читаемости, обновление пинов автоматизирует Dependabot.
+name: security
+
+on:
+  push:
+    branches: [main, master]
+  pull_request:
+  schedule:
+    # Раз в неделю: новые CVE и правила появляются без коммитов в репозиторий.
+    - cron: "0 6 * * 1"
+
+# Пусто на уровне workflow — каждая job запрашивает права явно и минимально.
+permissions: {}
+
+jobs:
+  secrets:
+    name: secrets (gitleaks)
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          # Вся история: секрет, удалённый следующим коммитом, остаётся в ней навсегда.
+          fetch-depth: 0
+          # По умолчанию checkout пишет токен в .git/config, откуда его прочитает
+          # любой последующий шаг. Здесь он не нужен.
+          persist-credentials: false
+      - uses: gitleaks/gitleaks-action@e0c47f4f8be36e29cdc102c57e68cb5cbf0e8d1e # v3.0.0
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+  iac:
+    name: iac (trivy)
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      security-events: write # для загрузки SARIF в Security tab (бесплатно для публичных репо)
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      # trivy config заменяет tfsec (свёрнут в trivy) и terrascan (архивирован
+      # 2025-11-20). Покрывает Terraform, Kubernetes, Helm, Dockerfile, Ansible.
+      #
+      # exit-code: 0 — режим наблюдения. Репозиторий большой и до сих пор не
+      # сканировался, поэтому сначала смотрим объём находок в Security tab, а
+      # гейт ужесточаем осознанно. Красный CI, который никто не чинит, хуже
+      # отсутствующего: его перестают замечать.
+      - uses: aquasecurity/trivy-action@ed142fd0673e97e23eac54620cfb913e5ce36c25 # v0.36.0
+        with:
+          scan-type: config
+          scan-ref: .
+          severity: CRITICAL,HIGH
+          exit-code: "0"
+          hide-progress: true
+
+      - uses: aquasecurity/trivy-action@ed142fd0673e97e23eac54620cfb913e5ce36c25 # v0.36.0
+        if: always()
+        with:
+          scan-type: config
+          scan-ref: .
+          format: sarif
+          output: trivy.sarif
+          hide-progress: true
+      - uses: github/codeql-action/upload-sarif@e58424170fb0262c8d7ed60a2e84b9bffe205c67 # codeql-bundle-v2.26.1
+        if: always()
+        # В приватных репо без GHAS загрузка SARIF недоступна — не роняем job.
+        continue-on-error: true
+        with:
+          sarif_file: trivy.sarif
+          category: trivy
+
+  workflows:
+    name: workflow-конфиги (zizmor)
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      security-events: write
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      # Нишу «безопасность самих CI-конфигов» trivy и checkov не покрывают.
+      # zizmor ловит непиннутые uses:, template injection, pwn-request через
+      # pull_request_target, избыточные permissions, утечку кред в артефакты.
+      - uses: zizmorcore/zizmor-action@6fc4b006235f201fdab3722e17240ab420d580e5 # v0.6.1
