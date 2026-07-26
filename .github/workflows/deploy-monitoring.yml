@@ -2,9 +2,14 @@ name: "Deploy: monitoring"
 on:
   workflow_dispatch:
 
+# Пусто на уровне workflow — job запрашивает права явно и минимально.
+permissions: {}
+
 jobs:
   deploy:
     runs-on: hcloud-htz-hel-01
+    permissions:
+      contents: read # только checkout; деплой ходит по ssh/docker, не в API GitHub
     environment: htz-hel-01
     env:
       TEMPLATE_DIR: stacks/monitoring
@@ -13,7 +18,11 @@ jobs:
       GRAFANA_ADMIN_PASSWORD: ${{ secrets.GRAFANA_ADMIN_PASSWORD }}
       NODE_HEL_02_ADDRESS: ${{ vars.NODE_HEL_02_ADDRESS }}
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
+        with:
+          # Раннер self-hosted: токен в .git/config пережил бы job и был бы
+          # доступен следующему запуску. Git-операций после клона тут нет.
+          persist-credentials: false
 
       - name: Render templates
         run: |

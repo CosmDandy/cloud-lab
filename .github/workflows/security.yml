@@ -89,4 +89,14 @@ jobs:
       # Нишу «безопасность самих CI-конфигов» trivy и checkov не покрывают.
       # zizmor ловит непиннутые uses:, template injection, pwn-request через
       # pull_request_target, избыточные permissions, утечку кред в артефакты.
+      #
+      # Экшен грузит находки в Security tab, но НЕ роняет job: входа «упасть при
+      # находках» у него нет вовсе. Поэтому гейт — отдельным шагом ниже.
       - uses: zizmorcore/zizmor-action@6fc4b006235f201fdab3722e17240ab420d580e5 # v0.6.1
+
+      # Настоящий гейт: CLI возвращает 14 при находках и 0 на чистом конфиге.
+      # Порог medium — informational (например template-injection с низкой
+      # уверенностью) не роняет CI, всё остальное роняет. Версия закреплена по
+      # той же причине, что actions пиннятся по SHA: воспроизводимость прогона.
+      - name: zizmor (гейт)
+        run: pipx run zizmor==1.28.0 --offline --min-severity=medium .

@@ -5,13 +5,17 @@ on:
       - terraform/**
   workflow_dispatch:
 
-permissions:
-  contents: read
-  pull-requests: write
+# Пусто на уровне workflow — каждая job запрашивает права явно и минимально.
+# pull-requests: write нужен ровно одному шагу в plan, поэтому объявлен там,
+# а не здесь: иначе это право получает и apply, который ходит в прод.
+permissions: {}
 
 jobs:
   plan:
     runs-on: ubuntu-latest
+    permissions:
+      contents: read # checkout
+      pull-requests: write # шаг "Comment PR with plan"
     defaults:
       run:
         working-directory: terraform
@@ -20,9 +24,14 @@ jobs:
       TF_VAR_cloudflare_api_token: ${{ secrets.CLOUDFLARE_API_TOKEN }}
       TF_VAR_github_token: ${{ secrets.GH_PAT_SECRETS }}
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
+        with:
+          # По умолчанию checkout пишет токен в .git/config, откуда его прочитает
+          # любой последующий шаг. Модули terraform локальные (./modules/*),
+          # провайдеры тянутся из registry — git-доступ после клона не нужен.
+          persist-credentials: false
 
-      - uses: hashicorp/setup-terraform@v3
+      - uses: hashicorp/setup-terraform@b9cd54a3c349d3f38e8881555d616ced269862dd # v3.1.2
         with:
           cli_config_credentials_token: ${{ secrets.TF_API_TOKEN }}
 
@@ -42,15 +51,21 @@ jobs:
 
       - name: Comment PR with plan
         if: github.event_name == 'pull_request'
-        uses: actions/github-script@v7
+        uses: actions/github-script@f28e40c7f34bde8b3046d885e986cb6290c5673b # v7.1.0
+        # Значения передаём через env, а не подстановкой ${{ }} в тело script:
+        # подстановка склеивается в исходник до запуска, и вывод terraform plan
+        # (имена ресурсов, содержимое переменных) стал бы исполняемым кодом.
+        env:
+          PLAN_OUTCOME: ${{ steps.plan.outcome }}
+          PLAN_STDOUT: ${{ steps.plan.outputs.stdout }}
         with:
           script: |
-            const output = `#### Terraform Plan \`${{ steps.plan.outcome }}\`
+            const output = `#### Terraform Plan \`${process.env.PLAN_OUTCOME}\`
 
             <details><summary>Show Plan</summary>
 
             \`\`\`
-            ${{ steps.plan.outputs.stdout }}
+            ${process.env.PLAN_STDOUT}
             \`\`\`
 
             </details>`;
@@ -70,6 +85,8 @@ jobs:
     needs: plan
     if: github.ref == 'refs/heads/master' && github.event_name != 'pull_request'
     runs-on: ubuntu-latest
+    permissions:
+      contents: read # checkout; комментировать PR этой job не нужно
     environment: terraform
     defaults:
       run:
@@ -79,9 +96,11 @@ jobs:
       TF_VAR_cloudflare_api_token: ${{ secrets.CLOUDFLARE_API_TOKEN }}
       TF_VAR_github_token: ${{ secrets.GH_PAT_SECRETS }}
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
+        with:
+          persist-credentials: false
 
-      - uses: hashicorp/setup-terraform@v3
+      - uses: hashicorp/setup-terraform@b9cd54a3c349d3f38e8881555d616ced269862dd # v3.1.2
         with:
           cli_config_credentials_token: ${{ secrets.TF_API_TOKEN }}
 

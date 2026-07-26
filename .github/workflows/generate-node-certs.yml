@@ -7,9 +7,15 @@ on:
         required: true
         type: string
 
+# Пусто на уровне workflow — job запрашивает права явно и минимально.
+permissions: {}
+
 jobs:
   generate:
     runs-on: hcloud-htz-hel-01
+    # checkout'а тут нет, а `gh secret set` авторизуется отдельным PAT
+    # (GH_PAT_SECRETS), не GITHUB_TOKEN — этой job не нужно вообще ничего.
+    permissions: {}
     environment: htz-hel-01
     steps:
       - name: Generate and store SSL_CERT for each node

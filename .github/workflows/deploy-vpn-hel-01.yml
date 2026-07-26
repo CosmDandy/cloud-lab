@@ -2,15 +2,25 @@ name: "Deploy: vpn-hel-01"
 on:
   workflow_dispatch:
 
+# Пусто на уровне workflow — job запрашивает права явно и минимально.
+permissions: {}
+
 jobs:
   deploy:
     runs-on: hcloud-vpn-hel-01
+    permissions:
+      contents: read # только checkout; деплой ходит по ssh/docker, не в API GitHub
     environment: vpn-hel-01
     env:
       CONFIG_DIR: stacks/vpn-legacy
       COMPOSE_PROJECT_DIR: /opt/vpn-infra
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
+        with:
+          # Раннер self-hosted: токен в .git/config пережил бы job и был бы
+          # доступен следующему запуску. Скачивание go-jsonnet идёт с публичного
+          # release-URL и авторизации не требует.
+          persist-credentials: false
 
       - name: Install jsonnet
         run: |
