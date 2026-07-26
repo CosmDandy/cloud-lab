@@ -13,7 +13,7 @@ jobs:
       GRAFANA_ADMIN_PASSWORD: ${{ secrets.GRAFANA_ADMIN_PASSWORD }}
       NODE_HEL_02_ADDRESS: ${{ vars.NODE_HEL_02_ADDRESS }}
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@v7
 
       - name: Render templates
         run: |

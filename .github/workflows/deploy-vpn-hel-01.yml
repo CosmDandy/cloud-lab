@@ -10,7 +10,7 @@ jobs:
       CONFIG_DIR: stacks/vpn-legacy
       COMPOSE_PROJECT_DIR: /opt/vpn-infra
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@v7
 
       - name: Install jsonnet
         run: |

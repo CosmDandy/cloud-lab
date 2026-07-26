@@ -13,7 +13,7 @@ jobs:
       TEMPLATE_DIR: stacks/node
       DEPLOY_DIR: /opt/node
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@v7
 
       - name: Render templates
         env:
