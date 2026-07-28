@@ -11,7 +11,6 @@ all:
       ansible_user: cluster
       ts_hostname: work-d-01.infra
       ts_advertise_routes: "192.168.20.0/24,192.168.82.0/24"
-      singbox_client: true
 
     # Proxmox Cluster
     pve-work-l-01:
@@ -48,5 +47,11 @@ all:
         pve_local:
 
     vm_work:
+      hosts:
+        work-d-01:
+
+    # Машины, которым нужен выход через собственную ноду Xray.
+    # Параметры подключения — в host_vars, секреты — в SOPS.
+    xray_clients:
       hosts:
         work-d-01:

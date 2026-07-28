@@ -1,0 +1,27 @@
+#!/bin/bash
+# Managed by ansible (roles/xray-client). Правки на хосте будут перезаписаны.
+#
+# Правила ставятся из ExecStartPost и снимаются из ExecStopPost: пока Xray
+# не слушает, заворачивать в него трафик нельзя — получится чёрная дыра.
+set -u
+
+iptables -t nat -N XRAY_REDIRECT 2>/dev/null || iptables -t nat -F XRAY_REDIRECT
+
+# Локальное и служебное мимо прокси. 100.64.0.0/10 здесь принципиален:
+# без него трафик tailnet уходит через выходную ноду и mesh разваливается.
+{% for net in xray_bypass_networks %}
+iptables -t nat -A XRAY_REDIRECT -d {{ net }} -j RETURN
+{% endfor %}
+{% for ip in xray_direct_ips %}
+# Сама выходная нода: заворачивать её в саму себя означает петлю.
+iptables -t nat -A XRAY_REDIRECT -d {{ ip }} -j RETURN
+{% endfor %}
+
+iptables -t nat -A XRAY_REDIRECT -p tcp -j REDIRECT --to-ports {{ xray_redirect_port }}
+
+{% for src in xray_redirect_sources %}
+# Сначала снимаем возможный дубль: при рестарте сервиса правило
+# добавилось бы второй раз и цепочка росла бы бесконечно.
+iptables -t nat -D PREROUTING -s {{ src }} -j XRAY_REDIRECT 2>/dev/null
+iptables -t nat -A PREROUTING -s {{ src }} -j XRAY_REDIRECT
+{% endfor %}

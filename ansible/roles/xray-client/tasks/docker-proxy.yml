@@ -1,0 +1,22 @@
+---
+# Контейнерам мало правил iptables: docker тянет образы сам, от имени
+# демона, и REDIRECT в цепочке PREROUTING его трафика не касается —
+# он идёт с самого хоста, а не из сети контейнеров.
+- name: Configure Docker daemon proxy
+  vars:
+    _proxy_url: "http://{{ xray_docker_proxy_host }}:{{ xray_http_port }}"
+  ansible.builtin.copy:
+    dest: /etc/docker/daemon.json
+    content: |
+      {
+        "dns": {{ xray_docker_dns | to_json }},
+        "proxies": {
+          "http-proxy": "{{ _proxy_url }}",
+          "https-proxy": "{{ _proxy_url }}",
+          "no-proxy": "{{ xray_docker_no_proxy | join(',') }}"
+        }
+      }
+    owner: root
+    group: root
+    mode: "0644"
+  notify: Restart docker

@@ -1,0 +1,109 @@
+---
+# Клиент Xray для машин, которым нужен выход через собственную ноду:
+# сервер в России не достаёт ни до tailscale.com, ни до control-plane,
+# пока не поднят обход. Поэтому роль ставится ПЕРЕД tailscale.
+xray_version: "25.9.11"
+xray_dir: /usr/local/etc/xray
+xray_bin: /usr/local/bin/xray
+# geoip.dat/geosite.dat. Путь передаётся явно через XRAY_LOCATION_ASSET:
+# без него xray ищет ассеты рядом с бинарём и молча падает на geoip:private.
+xray_asset_dir: /usr/local/share/xray
+
+# Официальный установщик XTLS сюда не годится: он не идемпотентен и
+# перезаписывает конфиг при каждом запуске. Роль раскладывает то же самое
+# сама. URL переопределяется на собственное зеркало для машин, которым
+# github недоступен.
+xray_release_base: https://github.com/XTLS/Xray-core/releases/download
+xray_release_url: >-
+  {{ xray_release_base }}/v{{ xray_version }}/Xray-linux-64.zip
+xray_release_sha256: ""
+
+# От кого работает сервис. Как у официального юнита — nobody; конфиг
+# отдаётся ему по группе, а не всему миру: в нём uuid и ключи reality.
+xray_run_user: nobody
+xray_run_group: nogroup
+
+# --- локальные слушатели ----------------------------------------------------
+# По умолчанию только петля. "::" нужен там, где в прокси ходят контейнеры
+# (адрес docker-bridge), но на машине с публичным IP это открытый прокси
+# для всего интернета — включать осознанно и только за фаерволом.
+xray_listen: "127.0.0.1"
+xray_http_port: 7890
+xray_redirect_port: 7891
+
+# --- нода, через которую выходим -------------------------------------------
+xray_server_address: ""
+xray_server_port: 443
+# uuid клиента; хранить только в SOPS.
+xray_user_id: ""
+xray_user_encryption: none
+xray_user_flow: ""
+
+# --- reality ----------------------------------------------------------------
+xray_reality_server_name: ""
+xray_reality_public_key: ""
+xray_reality_short_id: ""
+xray_reality_fingerprint: chrome
+# Пост-квантовая верификация; пусто — параметр не пишется вовсе.
+xray_reality_mldsa65_verify: ""
+
+# --- xhttp ------------------------------------------------------------------
+xray_xhttp_host: ""
+xray_xhttp_path: ""
+xray_xhttp_mode: packet-up
+xray_xhttp_extra:
+  xmux:
+    maxConcurrency: "16-32"
+    hMaxRequestTimes: "600-900"
+    hMaxReusableSecs: "1800-3000"
+  noSSEHeader: true
+  xPaddingBytes: "100-1000"
+  scMaxBufferedPosts: 30
+  scMaxEachPostBytes: 1000000
+  scMinPostsIntervalMs: 30
+  scStreamUpServerSecs: "20-80"
+
+# --- маршрутизация ----------------------------------------------------------
+# Что идёт мимо прокси. 100.64.0.0/10 здесь обязателен: без него трафик
+# tailnet пойдёт через выходную ноду, и mesh развалится — узлы должны
+# видеть друг друга напрямую.
+xray_bypass_networks:
+  - 10.0.0.0/8
+  - 127.0.0.0/8
+  - 172.16.0.0/12
+  - 192.168.0.0/16
+  - 100.64.0.0/10
+
+# Адреса, до которых нельзя ходить через прокси — прежде всего сама нода,
+# иначе получится петля.
+xray_direct_ips: []
+
+# Что маршрутизатор Xray пускает мимо прокси. Отличается от списка выше:
+# тот управляет правилами iptables, этот — решениями внутри самого Xray.
+xray_routing_direct:
+  - "geoip:private"
+  - 100.64.0.0/10
+
+# Чей трафик перехватывать. По умолчанию только docker-сети: заворачивать
+# весь хост означает отрезать себе ssh при первой же ошибке в правилах.
+xray_redirect_sources:
+  - 172.16.0.0/12
+
+xray_log_level: info
+
+# --- docker ------------------------------------------------------------------
+# Прокси для самого демона (docker pull), не для контейнеров. Выключено по
+# умолчанию: применение перезаписывает daemon.json и перезапускает docker,
+# то есть роняет всю нагрузку на хосте.
+xray_docker_proxy: false
+xray_docker_proxy_host: 172.17.0.1
+xray_docker_dns:
+  - 1.1.1.1
+  - 8.8.8.8
+xray_docker_no_proxy:
+  - localhost
+  - 127.0.0.0/8
+  - 10.0.0.0/8
+  - 172.16.0.0/12
+  - 192.168.0.0/16
+  - 100.64.0.0/10

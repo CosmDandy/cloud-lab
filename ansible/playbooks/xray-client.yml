@@ -1,0 +1,21 @@
+---
+# Клиент Xray для машин в России: выход в интернет через собственную ноду.
+# Ставится ПЕРЕД tailscale — без обхода не достучаться ни до tailscale.com,
+# ни до control-plane.
+#
+# Секреты (uuid, reality publicKey, xhttp path) живут в SOPS —
+# см. docs/secrets.md.
+#
+# Первый прогон на живой машине — только через --check --diff: роль
+# перезапишет config.json и перезапустит сервис, через который у хоста
+# работает весь исходящий трафик.
+#
+#   ansible-playbook ansible/playbooks/xray-client.yml \
+#     -e target_hosts=work-d-01 --check --diff
+
+- name: Deploy xray client
+  hosts: "{{ target_hosts | default('xray_clients') }}"
+  become: true
+
+  roles:
+    - role: xray-client
