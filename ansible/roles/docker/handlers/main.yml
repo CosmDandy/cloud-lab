@@ -1,5 +1,5 @@
 ---
-- name: Restart sshd
+- name: Restart docker
   ansible.builtin.service:
-    name: ssh
+    name: docker
     state: restarted

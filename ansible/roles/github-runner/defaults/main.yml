@@ -1,1 +1,18 @@
 ---
+# Версия закреплена намеренно: cloud-init тянул latest, из-за чего
+# одинаковые хосты получали разные раннеры.
+github_runner_version: "2.330.0"
+
+github_runner_user: github-runner
+github_runner_dir: "/home/{{ github_runner_user }}/actions-runner"
+
+# owner/repo, к которому цепляется раннер.
+github_runner_repository: ""
+
+# Имя и метки раннера; по меткам workflow выбирает хост.
+github_runner_name: "{{ inventory_hostname }}"
+github_runner_labels: "{{ inventory_hostname }}"
+
+# PAT с правами на управление раннерами репозитория.
+# Хранится в ansible-vault, в открытом виде в репозиторий не попадает.
+github_runner_pat: ""

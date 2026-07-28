@@ -1,1 +1,55 @@
 ---
+- name: Install base packages
+  ansible.builtin.apt:
+    name: "{{ base_packages }}"
+    state: present
+    update_cache: true
+    cache_valid_time: 3600
+
+- name: Ensure deploy user exists
+  ansible.builtin.user:
+    name: "{{ base_deploy_user }}"
+    shell: /bin/bash
+    create_home: true
+    state: present
+
+- name: Grant scoped sudo to deploy user
+  ansible.builtin.copy:
+    dest: "/etc/sudoers.d/60-{{ base_deploy_user }}"
+    content: "{{ base_deploy_user }} {{ base_deploy_user_sudo }}\n"
+    owner: root
+    group: root
+    mode: "0440"
+    validate: visudo -cf %s
+
+- name: Harden sshd
+  ansible.builtin.copy:
+    dest: /etc/ssh/sshd_config.d/99-hardening.conf
+    content: |
+      {% for key, value in base_sshd_hardening.items() %}
+      {{ key }} {{ value }}
+      {% endfor %}
+    owner: root
+    group: root
+    mode: "0644"
+    validate: sshd -t -f %s
+  notify: Restart sshd
+
+- name: Create stack directories
+  ansible.builtin.file:
+    path: "{{ item }}"
+    state: directory
+    owner: "{{ base_deploy_user }}"
+    group: "{{ base_deploy_user }}"
+    mode: "0755"
+  loop: "{{ base_stack_dirs }}"
+
+- name: Enable unattended upgrades
+  ansible.builtin.copy:
+    dest: /etc/apt/apt.conf.d/20auto-upgrades
+    content: |
+      APT::Periodic::Update-Package-Lists "1";
+      APT::Periodic::Unattended-Upgrade "1";
+    owner: root
+    group: root
+    mode: "0644"

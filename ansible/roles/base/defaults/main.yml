@@ -1,1 +1,28 @@
 ---
+base_packages:
+  - ca-certificates
+  - curl
+  - gettext-base
+  - jq
+  - rsync
+  - unattended-upgrades
+
+# Пользователь, от которого работает деплой и GitHub-раннер.
+base_deploy_user: github-runner
+
+# sudo выдаётся только на команды, нужные деплою, а не целиком.
+base_deploy_user_sudo: >-
+  ALL=(ALL) NOPASSWD: /usr/bin/apt-get, /usr/bin/mkdir, /usr/bin/chown,
+  /usr/bin/rsync, /usr/sbin/ufw, /usr/bin/docker
+
+# Каталоги под стеки; владельцем становится base_deploy_user.
+base_stack_dirs: []
+
+base_sshd_hardening:
+  PermitRootLogin: prohibit-password
+  PasswordAuthentication: "no"
+  KbdInteractiveAuthentication: "no"
+  X11Forwarding: "no"
+  MaxAuthTries: "3"
+  ClientAliveInterval: "300"
+  ClientAliveCountMax: "2"
