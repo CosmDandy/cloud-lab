@@ -1,0 +1,25 @@
+---
+# Коллекции, без которых плейбуки не собираются. До этого файла они нигде
+# не были объявлены и работали только потому, что на машине разработчика
+# стоял полный дистрибутив ansible, который тащит их с собой. В CI и под
+# `uvx ansible-lint` (свой изолированный ansible-core) их не было —
+# отсюда «couldn't resolve module community.docker.docker_compose_v2».
+#
+# Установка:
+#   ansible-galaxy collection install -r ansible/requirements.yml
+# Обновление уже установленного требует --upgrade: без него galaxy молча
+# оставляет старую версию.
+collections:
+  # docker_compose_v2 — на нём стоят все стековые роли.
+  - name: community.docker
+    version: ">=5.2.1,<6.0.0"
+  # modprobe в vpn_tuning.
+  - name: community.general
+    version: ">=13.1.0,<14.0.0"
+  # sysctl в tailscale и vpn_tuning.
+  - name: ansible.posix
+    version: ">=2.2.0,<3.0.0"
+  # vars-плагин, который расшифровывает group_vars/**/secrets.sops.yaml
+  # на лету. Без него роли увидят вместо секретов base64-шифротекст.
+  - name: community.sops
+    version: ">=2.4.0,<3.0.0"

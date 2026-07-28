@@ -1,0 +1,23 @@
+---
+# Запуск: uvx ansible-lint --profile moderate ansible/
+# Перед первым запуском: ansible-galaxy collection install -r ansible/requirements.yml
+# Без коллекций линтер валится на "couldn't resolve module community.docker.*" —
+# это отсутствующая зависимость, а не дефект плейбука.
+
+exclude_paths:
+  # Зашифрован ansible-vault от другого стенда; ключа здесь нет, и линтер
+  # каждый раз спотыкается о невозможность его прочитать.
+  - ansible/inventory/group_vars/pve/vault.yaml
+  # Пустые заготовки с 7e2abd3, так и не заполненные: в обоих файлах только
+  # «---». Их роль давно закрыта site.yml с тегами — bootstrap это
+  # `--tags base,docker`. Исключены, а не удалены, намеренно: решение
+  # «дописать или снести» за владельцем репозитория.
+  - ansible/playbooks/bootstrap.yml
+  - ansible/playbooks/update.yml
+
+skip_list:
+  # Дефис в имени роли (github-runner, xray-client). Ansible такие имена
+  # берёт без вопросов; правило существует ради установки из Galaxy, откуда
+  # эти роли никто ставить не будет. Переименование задело бы каждую ссылку
+  # в плейбуках и workflow ради косметики.
+  - role-name
