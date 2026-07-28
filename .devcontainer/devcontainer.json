@@ -5,6 +5,11 @@
 {
   "name": "cloud-lab DevContainer",
   "image": "ghcr.io/cosmdandy/devcontainer:devops",
+  // docker не перетягивает уже скачанный плавающий тег — хост залипает на
+  // первом образе (ловили сборку 5-дневной давности при живом CI). Команда
+  // идёт на хосте до создания контейнера: тот же дайджест — no-op, офлайн —
+  // едем на локальном (|| true).
+  "initializeCommand": "docker pull ghcr.io/cosmdandy/devcontainer:devops || true",
   "containerEnv": {
     "LANG": "en_US.UTF-8",
     "LC_ALL": "en_US.UTF-8",
