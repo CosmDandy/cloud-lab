@@ -14,14 +14,10 @@ ssh_public_keys = ["ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIDsx73RvU7CaBdKkAcRXcLdI
 
 acme_email = "tkondrashin@icloud.com"
 
-vpn_servers = {
-  hel-01 = {
-    location  = "hel1"
-    type      = "cax11"
-    tcp_ports = [80, 443, 8443, 8446, 5201]
-    udp_ports = [443, 5201]
-  }
-}
+# Пусто: hel-01 удалён в Hetzner ещё до 2026-07-28, а в конфигурации
+# оставался — план предлагал создать сервер заново. VPN-ноды живут на
+# Mivocloud и управляются ансиблом.
+vpn_servers = {}
 
 servers = {
   htz-hel-01 = {
@@ -29,13 +25,12 @@ servers = {
     type      = "cax11"
     role      = "control"
     tcp_ports = [80, 443, 3478]
-    udp_ports = [3478]
+    # 41641 — прямые соединения tailscale. Был открыт руками в панели
+    # Hetzner и отсутствовал здесь, поэтому apply закрыл бы его и увёл
+    # весь трафик tailnet на DERP.
+    udp_ports = [3478, 41641]
   }
-  htz-hel-02 = {
-    location  = "hel1"
-    type      = "cax11"
-    role      = "node"
-    tcp_ports = [443, 2222]
-    udp_ports = [443]
-  }
+  # htz-hel-02 удалён в Hetzner; описание убрано, чтобы apply не поднял
+  # его заново. Ноды Remnawave разворачиваются на машинах провайдеров,
+  # до которых дотягивается DPI — см. docs/dpi-report-22-06-26.md.
 }

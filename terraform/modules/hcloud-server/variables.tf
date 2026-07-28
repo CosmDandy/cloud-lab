@@ -37,3 +37,13 @@ variable "labels" {
   default = {}
 }
 
+
+variable "protected" {
+  type        = bool
+  default     = false
+  description = <<-EOT
+    Защита машины от удаления и пересборки. Была включена руками на
+    htz-hel-01 и отсутствовала в конфигурации, из-за чего apply снимал её
+    с боевого сервера.
+  EOT
+}

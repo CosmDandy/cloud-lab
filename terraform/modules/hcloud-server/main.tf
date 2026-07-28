@@ -18,6 +18,11 @@ resource "hcloud_server" "this" {
   ssh_keys    = var.ssh_key_ids
   user_data   = var.cloud_init
 
+  # Защита от удаления и пересборки. Hetzner требует одинакового значения
+  # у обеих: включить одну, не включив вторую, провайдер не даст.
+  delete_protection  = var.protected
+  rebuild_protection = var.protected
+
   labels = merge(var.labels, {
     managed-by = "terraform"
   })
