@@ -18,7 +18,7 @@
   ansible.builtin.file:
     path: /etc/systemd/system/tailscaled.service
     state: absent
-  notify: daemon_reload
+  notify: Reload systemd
 
 - name: Remove defaults file
   ansible.builtin.file:
