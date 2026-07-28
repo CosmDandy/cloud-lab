@@ -73,7 +73,7 @@ resource "github_actions_environment_variable" "vpn_server_address" {
   repository    = var.github_repository
   environment   = "vpn-${each.key}"
   variable_name = "SERVER_ADDRESS"
-  value         = module.vpn_server[each.key].fqdn
+  value         = local.vpn_fqdn[each.key]
 
   depends_on = [github_repository_environment.vpn]
 }
@@ -216,7 +216,7 @@ resource "github_actions_environment_variable" "server_address" {
   repository    = var.github_repository
   environment   = each.key
   variable_name = "SERVER_ADDRESS"
-  value         = module.server[each.key].fqdn
+  value         = local.server_fqdn[each.key]
 
   depends_on = [github_repository_environment.server]
 }

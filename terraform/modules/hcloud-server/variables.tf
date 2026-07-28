@@ -2,10 +2,6 @@ variable "name" {
   type = string
 }
 
-variable "dns_name" {
-  type = string
-}
-
 variable "location" {
   type = string
 }
@@ -41,10 +37,3 @@ variable "labels" {
   default = {}
 }
 
-variable "cloudflare_zone_id" {
-  type = string
-}
-
-variable "domain" {
-  type = string
-}

@@ -1,10 +1,10 @@
 #cloud-config
+# Минимальный bootstrap: довести машину до состояния, в котором до неё
+# дотянется Ansible. Пакеты, пользователь деплоя, hardening sshd, docker,
+# раннер и сетевой тюнинг делают роли base, docker, github-runner и
+# vpn_tuning — см. комментарий в server.yaml.tftpl.
 
 users:
-  - name: github-runner
-    groups: docker
-    shell: /bin/bash
-    sudo: "ALL=(ALL) NOPASSWD: /usr/bin/apt-get, /usr/bin/mkdir, /usr/bin/chown, /usr/bin/rsync, /usr/sbin/ufw"
   - name: root
     ssh_authorized_keys:
 %{ for key in ssh_public_keys ~}
@@ -12,101 +12,6 @@ users:
 %{ endfor ~}
 
 package_update: true
-package_upgrade: true
 
 packages:
-  - docker.io
-  - docker-compose-v2
-  - rsync
-  - jq
-  - gettext-base
-  - iperf3
-  - unattended-upgrades
-
-write_files:
-  - path: /etc/ssh/sshd_config.d/hardening.conf
-    content: |
-      PermitRootLogin prohibit-password
-      PasswordAuthentication no
-      KbdInteractiveAuthentication no
-      X11Forwarding no
-      MaxAuthTries 3
-      ClientAliveInterval 300
-      ClientAliveCountMax 2
-
-  - path: /etc/docker/daemon.json
-    content: |
-      {
-        "log-driver": "json-file",
-        "log-opts": {
-          "max-size": "10m",
-          "max-file": "3"
-        },
-        "default-ulimits": {
-          "nofile": {
-            "Name": "nofile",
-            "Soft": 65536,
-            "Hard": 65536
-          }
-        }
-      }
-
-  # NOTE: sysctl tuning + BBR moved to Ansible role `vpn_tuning`
-  # (see ansible/roles/vpn_tuning/). Run after provisioning:
-  #   ansible-playbook ansible/playbooks/vpn-node-tune.yml -l <host>
-
-runcmd:
-  - sysctl --system
-
-  # Enable automatic security updates
-  - dpkg-reconfigure -f noninteractive unattended-upgrades
-
-  # Restart sshd with hardened config
-  - systemctl restart sshd
-
-  # Enable and start Docker
-  - systemctl enable docker
-  - systemctl start docker
-
-  # Prepare deploy directory
-  - mkdir -p /opt/vpn-infra
-  - chown -R github-runner:github-runner /opt/vpn-infra
-
-  # Generate TLS certificates for Hysteria2/TUIC
-  - mkdir -p /opt/vpn-infra/sing-box/tls
-  - openssl req -x509 -newkey ec -pkeyopt ec_paramgen_curve:prime256v1 -days 3650 -nodes -keyout /opt/vpn-infra/sing-box/tls/hysteria2.key -out /opt/vpn-infra/sing-box/tls/hysteria2.crt -subj "/CN=bing.com"
-  - chown -R github-runner:github-runner /opt/vpn-infra/sing-box/tls
-
-  # Install GitHub Actions runner
-  - |
-    cd /home/github-runner
-    RUNNER_VERSION=$(curl -s https://api.github.com/repos/actions/runner/releases/latest | grep -oP '"tag_name":\s*"v\K[^"]+')
-    ARCH=$(dpkg --print-architecture)
-    case "$ARCH" in
-      amd64) RUNNER_ARCH="x64" ;;
-      arm64) RUNNER_ARCH="arm64" ;;
-      *) echo "Unsupported architecture: $ARCH"; exit 1 ;;
-    esac
-    curl -o actions-runner.tar.gz -L "https://github.com/actions/runner/releases/download/v$${RUNNER_VERSION}/actions-runner-linux-$${RUNNER_ARCH}-$${RUNNER_VERSION}.tar.gz"
-    mkdir -p actions-runner
-    tar xzf actions-runner.tar.gz -C actions-runner
-    rm actions-runner.tar.gz
-    chown -R github-runner:github-runner actions-runner
-
-  # Configure runner (must run as github-runner)
-  - |
-    su - github-runner -c ' \
-      cd ~/actions-runner && \
-      ./config.sh \
-        --url "https://github.com/${github_repository}" \
-        --token "${runner_token}" \
-        --name "${runner_name}" \
-        --labels "${runner_labels}" \
-        --work _work \
-        --unattended'
-
-  # Install runner as systemd service
-  - |
-    cd /home/github-runner/actions-runner
-    ./svc.sh install github-runner
-    ./svc.sh start
+  - python3

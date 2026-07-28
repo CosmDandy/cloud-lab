@@ -3,9 +3,6 @@ terraform {
     hcloud = {
       source = "hetznercloud/hcloud"
     }
-    cloudflare = {
-      source = "cloudflare/cloudflare"
-    }
   }
 }
 
@@ -83,26 +80,4 @@ resource "hcloud_firewall" "this" {
 resource "hcloud_firewall_attachment" "this" {
   firewall_id = hcloud_firewall.this.id
   server_ids  = [hcloud_server.this.id]
-}
-
-# ──────────────────────────────────────────────
-# Cloudflare DNS (v5: cloudflare_dns_record)
-# ──────────────────────────────────────────────
-
-resource "cloudflare_dns_record" "ipv4" {
-  zone_id = var.cloudflare_zone_id
-  name    = var.dns_name
-  type    = "A"
-  content = hcloud_server.this.ipv4_address
-  ttl     = 300
-  proxied = false
-}
-
-resource "cloudflare_dns_record" "ipv6" {
-  zone_id = var.cloudflare_zone_id
-  name    = var.dns_name
-  type    = "AAAA"
-  content = hcloud_server.this.ipv6_address
-  ttl     = 300
-  proxied = false
 }
