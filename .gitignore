@@ -18,3 +18,10 @@ terraform/secrets.auto.tfvars
 
 # Backups (contain sensitive data)
 backups/
+
+# Секреты попадают в git только зашифрованными. Файл с именем secrets,
+# но без .sops — это забытое шифрование, а не новая схема хранения.
+**/secrets*.yml
+**/secrets*.yaml
+!**/secrets.sops.yaml
+!**/secrets.sops.yml

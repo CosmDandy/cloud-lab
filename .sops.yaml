@@ -1,0 +1,28 @@
+# Правила шифрования. sops применяет первое подходящее по path_regex,
+# поэтому порядок значим.
+#
+# Шифруются только значения — имена переменных остаются читаемыми, и
+# `git diff` показывает, какое поле изменилось, не раскрывая содержимого.
+#
+# Добавить получателя к уже зашифрованным файлам:
+#   sops updatekeys ansible/inventory/host_vars/*/secrets.sops.yaml
+# Отредактировать секрет:
+#   sops ansible/inventory/host_vars/htz-hel-test/secrets.sops.yaml
+
+# Имена ниже — обычные YAML-якоря, видны только в этом файле: в
+# зашифрованные файлы попадает сам публичный ключ, а не его название.
+# Переименование ничего не ломает и не требует перешифрования.
+keys:
+  # Основной ключ.
+  - &main age1r7w9d59dtx5ksqxfujskjk5xwrt4ftv5czva2zzff2paggggy9nq4q0lxm
+  # Ключ этого девконтейнера: ~/.config/sops/age/keys.txt.
+  - &devcontainer age15senurg48rul7qhfq7s58grxd84ku4rgpx3qjvegn9hvdh7s84fq5d5qag
+
+creation_rules:
+  # Оба ключа — равноправные получатели: файл расшифровывается любым из
+  # них, потеря одного не запирает секреты.
+  - path_regex: ansible/inventory/(host_vars|group_vars)/.*/secrets\.sops\.ya?ml$
+    key_groups:
+      - age:
+          - *main
+          - *devcontainer

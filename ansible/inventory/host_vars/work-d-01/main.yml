@@ -1,0 +1,23 @@
+---
+# Xray-клиент. Через него у машины работает весь исходящий трафик,
+# включая docker pull и подключение к tailnet.
+#
+# Параметры подключения к ноде приезжают из SOPS и здесь отсутствуют
+# намеренно — репозиторий их не хранит:
+#   xray_server_address, xray_server_port, xray_user_id,
+#   xray_reality_server_name, xray_reality_public_key,
+#   xray_reality_mldsa65_verify, xray_xhttp_host, xray_xhttp_path
+# Без них роль остановится на assert в первой же задаче.
+
+# В прокси ходят контейнеры, поэтому слушаем не только петлю.
+# Машина в локальной сети за NAT, наружу порт не выставлен.
+xray_listen: "::"
+
+# Демон docker тянет образы от своего имени, мимо правил iptables,
+# поэтому ему прокси задаётся отдельно через daemon.json.
+xray_docker_proxy: true
+
+# Перехватываем трафик docker-сетей. Весь хост заворачивать нельзя:
+# ошибка в правилах отрезает ssh до машины.
+xray_redirect_sources:
+  - 172.16.0.0/12
