@@ -1,0 +1,32 @@
+# Managed by ansible (roles/edge). Правки на хосте будут перезаписаны.
+#
+# Middleware вешается на entryPoint websecure целиком (см. traefik.yaml),
+# поэтому заголовки получают все сервисы разом и добавление нового стека
+# не требует про них помнить.
+http:
+  middlewares:
+    security-headers:
+      headers:
+        # HSTS: браузер запоминает, что сюда только по https, и перестаёт
+        # делать первый запрос в открытую.
+        stsSeconds: {{ edge_hsts_seconds }}
+        stsIncludeSubdomains: {{ edge_hsts_include_subdomains | lower }}
+        stsPreload: {{ edge_hsts_preload | lower }}
+        forceSTSHeader: true
+        # Запрещает браузеру угадывать тип содержимого вопреки Content-Type.
+        contentTypeNosniff: true
+        # Ни один наш сервис не встраивается в чужие страницы.
+        frameDeny: true
+        referrerPolicy: strict-origin-when-cross-origin
+
+    compression:
+      compress: {}
+
+tls:
+  options:
+    default:
+      # TLS 1.0/1.1 давно сломаны; 1.2 оставлен ради старых клиентов.
+      minVersion: {{ edge_tls_min_version }}
+      # Клиент обязан прислать SNI: без этого traefik отдаёт первый
+      # попавшийся сертификат сканерам, которые ходят по голому IP.
+      sniStrict: {{ edge_tls_sni_strict | lower }}

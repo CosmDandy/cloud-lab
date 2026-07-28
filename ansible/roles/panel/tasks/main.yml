@@ -1,0 +1,70 @@
+---
+- name: Validate required variables
+  ansible.builtin.assert:
+    that:
+      - panel_domain | length > 0
+      - panel_sub_domain | length > 0
+      - panel_postgres_password | length > 0
+      - panel_jwt_auth_secret | length > 0
+      - panel_jwt_api_tokens_secret | length > 0
+    fail_msg: >-
+      Нужны panel_domain, panel_sub_domain и три секрета: пароль postgres
+      и обе JWT-соли. Смена JWT_AUTH_SECRET разлогинивает всех,
+      смена JWT_API_TOKENS_SECRET обнуляет выданные API-токены.
+
+- name: Create stack directories
+  ansible.builtin.file:
+    path: "{{ panel_dir }}/{{ item }}"
+    state: directory
+    owner: "{{ panel_owner }}"
+    group: "{{ panel_owner }}"
+    mode: "0750"
+  loop:
+    - ""
+    - panel
+    - subscription
+
+- name: Render panel environment file
+  ansible.builtin.template:
+    src: panel-env.j2
+    dest: "{{ panel_dir }}/panel/.env"
+    owner: "{{ panel_owner }}"
+    group: "{{ panel_owner }}"
+    mode: "0600"
+  no_log: true
+  notify: Restart panel stack
+
+- name: Render subscription environment file
+  ansible.builtin.template:
+    src: subscription-env.j2
+    dest: "{{ panel_dir }}/subscription/.env"
+    owner: "{{ panel_owner }}"
+    group: "{{ panel_owner }}"
+    mode: "0600"
+  no_log: true
+  notify: Restart panel stack
+
+- name: Render compose file
+  ansible.builtin.template:
+    src: docker-compose.yaml.j2
+    dest: "{{ panel_dir }}/docker-compose.yaml"
+    owner: "{{ panel_owner }}"
+    group: "{{ panel_owner }}"
+    mode: "0640"
+  notify: Restart panel stack
+
+- name: Deploy stack
+  community.docker.docker_compose_v2:
+    project_src: "{{ panel_dir }}"
+    state: present
+    pull: missing
+    remove_orphans: true
+
+# Токен выпускается в UI и в конфигурации не хранится: без него страница
+# подписок поднимется, но не покажет ни одной подписки.
+- name: Warn about missing subscription API token
+  ansible.builtin.debug:
+    msg: >-
+      panel_subscription_api_token пуст — выпустите токен в UI панели,
+      положите в SOPS и прогоните роль повторно.
+  when: panel_subscription_api_token | length == 0

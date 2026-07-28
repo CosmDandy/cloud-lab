@@ -1,0 +1,32 @@
+# Managed by ansible (roles/gatus). Правки на хосте будут перезаписаны.
+name: gatus
+
+services:
+  gatus:
+    image: {{ gatus_image }}
+    container_name: gatus
+    restart: unless-stopped
+    volumes:
+      - ./config.yaml:/config/config.yaml:ro
+      - gatus_data:/data
+    expose:
+      - "{{ gatus_port }}"
+    # Без healthcheck: образ собран без shell, проверять живость изнутри
+    # нечем — тот же случай, что у victoriametrics и loki.
+    networks:
+      - edge
+    labels:
+      traefik.enable: "true"
+      traefik.http.routers.gatus.rule: "Host(`{{ gatus_domain }}`)"
+      traefik.http.routers.gatus.entrypoints: websecure
+      traefik.http.routers.gatus.tls.certresolver: letsencrypt
+      traefik.http.services.gatus.loadbalancer.server.port: "{{ gatus_port }}"
+
+networks:
+  edge:
+    name: {{ gatus_edge_network }}
+    external: true
+
+volumes:
+  gatus_data:
+    name: gatus_data

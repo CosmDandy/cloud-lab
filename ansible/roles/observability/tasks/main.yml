@@ -1,0 +1,74 @@
+---
+- name: Validate required variables
+  ansible.builtin.assert:
+    that:
+      - observability_domain | length > 0
+      - observability_grafana_admin_password | length > 0
+    fail_msg: Нужны observability_domain и observability_grafana_admin_password.
+
+- name: Create stack directories
+  ansible.builtin.file:
+    path: "{{ observability_dir }}/{{ item }}"
+    state: directory
+    owner: "{{ observability_owner }}"
+    group: "{{ observability_owner }}"
+    mode: "0750"
+  loop:
+    - ""
+    - grafana
+    - loki
+    - promtail
+    - vmalert
+
+# 0644, а не 0640: loki и grafana работают не от root и свои конфиги
+# при более строгих правах просто не открывают.
+- name: Install static configs
+  ansible.builtin.copy:
+    src: "{{ item }}"
+    dest: "{{ observability_dir }}/{{ item }}"
+    owner: "{{ observability_owner }}"
+    group: "{{ observability_owner }}"
+    mode: "0644"
+  loop:
+    - grafana/datasources.yaml
+    - grafana/dashboards.yaml
+    - loki/config.yaml
+    - promtail/config.yaml
+    - vmalert/alerts.yaml
+  notify: Restart observability stack
+
+- name: Render scrape config
+  ansible.builtin.template:
+    src: prometheus.yml.j2
+    dest: "{{ observability_dir }}/prometheus.yml"
+    owner: "{{ observability_owner }}"
+    group: "{{ observability_owner }}"
+    mode: "0640"
+  no_log: "{{ observability_panel_metrics_enabled }}"
+  notify: Restart observability stack
+
+- name: Render grafana environment file
+  ansible.builtin.template:
+    src: grafana-env.j2
+    dest: "{{ observability_dir }}/grafana/.env"
+    owner: "{{ observability_owner }}"
+    group: "{{ observability_owner }}"
+    mode: "0600"
+  no_log: true
+  notify: Restart observability stack
+
+- name: Render compose file
+  ansible.builtin.template:
+    src: docker-compose.yaml.j2
+    dest: "{{ observability_dir }}/docker-compose.yaml"
+    owner: "{{ observability_owner }}"
+    group: "{{ observability_owner }}"
+    mode: "0640"
+  notify: Restart observability stack
+
+- name: Deploy stack
+  community.docker.docker_compose_v2:
+    project_src: "{{ observability_dir }}"
+    state: present
+    pull: missing
+    remove_orphans: true

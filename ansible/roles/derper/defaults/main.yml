@@ -1,0 +1,28 @@
+---
+derper_dir: /opt/derper
+derper_owner: root
+
+# Версия закреплена под клиентов, а не latest: образ тегируется ею же,
+# поэтому смена переменной сама вызывает пересборку.
+derper_version: v1.94.2
+derper_go_image: golang:1.26-alpine
+
+# FQDN релея; задаётся в инвентаре. Должен резолвиться в публичный адрес
+# этого хоста — иначе letsencrypt не выпустит сертификат.
+derper_hostname: ""
+
+# letsencrypt требует именно 443: autocert отдаёт сертификат по TLS-ALPN-01
+# на том же слушателе, что обслуживает DERP.
+derper_certmode: letsencrypt
+derper_https_port: 443
+
+# HTTP-порт derper — запасной путь для клиентов за жёстким фильтром.
+# -1 выключает; на релее 80 обычно нужен чему-то другому.
+derper_http_port: -1
+
+derper_stun_port: 3478
+
+# false: релей обслужит любого, кто знает имя хоста. true требует на самом
+# хосте tailscaled, подключённого к тому же tailnet, — роль его не ставит,
+# предусловие обеспечивает администратор.
+derper_verify_clients: false

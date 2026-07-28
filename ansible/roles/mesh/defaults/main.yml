@@ -1,0 +1,65 @@
+---
+mesh_dir: /opt/mesh
+mesh_owner: root
+
+# Версии закреплены: плавающие теги ломают воспроизводимость стенда.
+mesh_headscale_image: headscale/headscale:0.29.2
+mesh_headplane_image: ghcr.io/tale/headplane:0.7.0
+
+# Публикация идёт через traefik из роли edge — она владеет 80/443 и acme.
+mesh_edge_network: "{{ edge_network | default('edge') }}"
+mesh_traefik_dynamic_dir: >-
+  {{ edge_dir | default('/opt/edge') }}/traefik/dynamic
+
+# Домен, на котором отвечает headscale; задаётся в инвентаре.
+mesh_domain: ""
+
+# Публичный IPv4 — попадает в DERP-конфиг.
+mesh_server_ipv4: "{{ ansible_facts['default_ipv4']['address'] | default('') }}"
+
+# Встроенный DERP. Выключается, когда релей вынесен в отдельный derper:
+# трансграничный релей непригоден, поэтому в проде сюда подключается
+# российский регион через mesh_derp_paths.
+mesh_derp_server_enabled: true
+mesh_derp_region_id: 900
+mesh_derp_region_code: hel
+mesh_derp_region_name: Helsinki
+
+# Внешние DERP-регионы (в проде — российский релей, роль derper).
+# Роль сама рендерит derp-map и подключает его к headscale.
+mesh_derp_regions: []
+
+# Готовые derp-map файлы, положенные на хост мимо роли.
+mesh_derp_paths: []
+
+# Публичные DERP-регионы Tailscale как запасной путь.
+mesh_derp_urls:
+  - https://controlplane.tailscale.com/derpmap/default
+
+mesh_base_domain: hamster
+
+mesh_dns_nameservers:
+  - 1.1.1.1
+  - 1.0.0.1
+
+# Ровно 32 символа — headplane отвергает любую другую длину.
+mesh_cookie_secret: ""
+
+# Выпускается после первого старта headscale: headscale apikeys create.
+mesh_headscale_api_key: ""
+
+# Вход в headplane через Pocket ID.
+mesh_oidc_enabled: false
+mesh_oidc_issuer: ""
+mesh_oidc_client_id: ""
+mesh_oidc_client_secret: ""
+
+# Вход узлов в tailnet через Pocket ID вместо preauth-ключей.
+# Клиент отдельный от headplane: разные callback URL и разное назначение —
+# один пускает администратора в панель, второй заводит узлы в сеть.
+mesh_headscale_oidc_enabled: false
+mesh_headscale_oidc_issuer: ""
+mesh_headscale_oidc_client_id: ""
+mesh_headscale_oidc_client_secret: ""
+# Пусто — пускать любого, кто прошёл вход. Иначе список групп Pocket ID.
+mesh_headscale_oidc_allowed_groups: []

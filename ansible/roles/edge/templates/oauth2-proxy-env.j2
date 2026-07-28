@@ -1,0 +1,34 @@
+# Managed by ansible (roles/edge). Правки на хосте будут перезаписаны.
+OAUTH2_PROXY_PROVIDER=oidc
+OAUTH2_PROXY_OIDC_ISSUER_URL={{ edge_oidc_issuer }}
+OAUTH2_PROXY_CLIENT_ID={{ edge_oidc_client_id }}
+OAUTH2_PROXY_CLIENT_SECRET={{ edge_oidc_client_secret }}
+OAUTH2_PROXY_COOKIE_SECRET={{ edge_oidc_cookie_secret }}
+OAUTH2_PROXY_REDIRECT_URL=https://{{ edge_dashboard_domain }}/oauth2/callback
+
+OAUTH2_PROXY_HTTP_ADDRESS=0.0.0.0:4180
+# Реверс-прокси, а не forward-auth: так oauth2-proxy сам уводит
+# неаутентифицированного на логин, вместо голого 401 от traefik.
+OAUTH2_PROXY_UPSTREAMS=http://traefik:8080
+OAUTH2_PROXY_REVERSE_PROXY=true
+# Без этого X-Forwarded-* принимаются от кого угодно, и клиентский IP
+# в логах и rate-limit подделывается любым запросом.
+OAUTH2_PROXY_TRUSTED_PROXY_IP={{ edge_trusted_proxy_cidr }}
+OAUTH2_PROXY_COOKIE_SECURE=true
+{% if edge_oidc_skip_ssl_verify %}
+OAUTH2_PROXY_SSL_INSECURE_SKIP_VERIFY=true
+{% endif %}
+# Кого пускать, решает Pocket ID через allowed user groups на клиенте.
+OAUTH2_PROXY_EMAIL_DOMAINS=*
+OAUTH2_PROXY_SKIP_PROVIDER_BUTTON=true
+# Клиенты в Pocket ID заводятся с обязательным PKCE; без этого провайдер
+# отвергает запрос с "the 'code_challenge' parameter is missing".
+OAUTH2_PROXY_CODE_CHALLENGE_METHOD=S256
+# Заданный prompt вытесняет approval_prompt=force, который oauth2-proxy
+# шлёт по умолчанию: это наследие Google, и Pocket ID как сертифицированный
+# провайдер отвечает на него invalid_request.
+OAUTH2_PROXY_PROMPT=consent
+# Название пугающее, но проверять тут нечего: Pocket ID сам заводит
+# пользователей и ставит email_verified только при настроенном SMTP.
+# Без этого вход падает на "email in id_token isn't verified".
+OAUTH2_PROXY_INSECURE_OIDC_ALLOW_UNVERIFIED_EMAIL=true

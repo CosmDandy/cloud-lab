@@ -1,0 +1,125 @@
+# Managed by ansible (roles/mesh). Правки на хосте будут перезаписаны.
+#
+# В 0.29 ключ randomize_client_port убран отсюда: если он останется,
+# headscale не стартует. Он переехал в policy.json как randomizeClientPort.
+server_url: https://{{ mesh_domain }}/
+listen_addr: 0.0.0.0:8080
+metrics_listen_addr: 0.0.0.0:9090
+grpc_listen_addr: 0.0.0.0:50443
+grpc_allow_insecure: false
+
+noise:
+  private_key_path: /var/lib/headscale/noise_private.key
+
+prefixes:
+  v4: 100.64.0.0/10
+  v6: fd7a:115c:a1e0::/48
+  allocation: sequential
+
+derp:
+  server:
+    enabled: {{ mesh_derp_server_enabled | lower }}
+    region_id: {{ mesh_derp_region_id }}
+    region_code: "{{ mesh_derp_region_code }}"
+    region_name: "{{ mesh_derp_region_name }}"
+    verify_clients: true
+    stun_listen_addr: "0.0.0.0:3478"
+    private_key_path: /var/lib/headscale/derp_server_private.key
+    automatically_add_embedded_derp_region: true
+    ipv4: {{ mesh_server_ipv4 }}
+{% if mesh_derp_urls | length > 0 %}
+  urls:
+{% for url in mesh_derp_urls %}
+    - {{ url }}
+{% endfor %}
+{% else %}
+  urls: []
+{% endif %}
+{% set derp_paths = mesh_derp_paths + (['/etc/headscale/derp-external.yaml'] if mesh_derp_regions | length > 0 else []) %}
+{% if derp_paths | length > 0 %}
+  paths:
+{% for path in derp_paths %}
+    - {{ path }}
+{% endfor %}
+{% else %}
+  paths: []
+{% endif %}
+  auto_update_enabled: true
+  update_frequency: 24h
+
+disable_check_updates: false
+
+# В 0.29 ephemeral_node_inactivity_timeout переехал сюда; старый ключ
+# ещё принимается, но уже с предупреждением об удалении.
+node:
+  ephemeral:
+    inactivity_timeout: 30m
+
+database:
+  type: sqlite
+  debug: false
+  gorm:
+    prepare_stmt: true
+    parameterized_queries: true
+    skip_err_record_not_found: true
+    slow_threshold: 1000
+  sqlite:
+    path: /var/lib/headscale/db.sqlite
+    write_ahead_log: true
+    wal_autocheckpoint: 1000
+
+log:
+  format: text
+  level: info
+
+# mode: file — grants и randomizeClientPort должны лежать в репозитории
+# и применяться деплоем, а не редактироваться в базе на живую.
+policy:
+  mode: file
+  path: "/etc/headscale/policy.json"
+
+dns:
+  magic_dns: true
+  base_domain: {{ mesh_base_domain }}
+  override_local_dns: true
+  nameservers:
+    global:
+{% for ns in mesh_dns_nameservers %}
+      - {{ ns }}
+{% endfor %}
+    split: {}
+  search_domains: []
+  extra_records: []
+
+{% if mesh_headscale_oidc_enabled %}
+oidc:
+  # false намеренно: провайдер стоит на этом же хосте за тем же traefik.
+  # При true холодный старт превращается в гонку — headscale отказывается
+  # подниматься, пока не ответит pocket-id, который ещё не запущен.
+  only_start_if_oidc_is_available: false
+  issuer: "{{ mesh_headscale_oidc_issuer }}"
+  client_id: "{{ mesh_headscale_oidc_client_id }}"
+  client_secret: "{{ mesh_headscale_oidc_client_secret }}"
+  scope: ["openid", "profile", "email"]
+  # Срок сессии узла берётся из политики headscale, а не из токена:
+  # иначе узлы переспрашивают вход по расписанию провайдера.
+  use_expiry_from_token: false
+{% if mesh_headscale_oidc_allowed_groups | length > 0 %}
+  allowed_groups:
+{% for group in mesh_headscale_oidc_allowed_groups %}
+    - {{ group }}
+{% endfor %}
+{% endif %}
+  pkce:
+    enabled: true
+    method: S256
+
+{% endif %}
+unix_socket: /var/run/headscale/headscale.sock
+unix_socket_permission: "0770"
+
+logtail:
+  enabled: false
+
+taildrop:
+  enabled: true

@@ -1,0 +1,16 @@
+# Managed by ansible (roles/observability). Правки на хосте будут перезаписаны.
+GF_SECURITY_ADMIN_PASSWORD={{ observability_grafana_admin_password }}
+GF_SERVER_ROOT_URL=https://{{ observability_domain }}
+{% if observability_oidc_enabled %}
+
+GF_AUTH_GENERIC_OAUTH_ENABLED=true
+GF_AUTH_GENERIC_OAUTH_NAME={{ observability_oidc_name }}
+GF_AUTH_GENERIC_OAUTH_CLIENT_ID={{ observability_oidc_client_id }}
+GF_AUTH_GENERIC_OAUTH_CLIENT_SECRET={{ observability_oidc_client_secret }}
+GF_AUTH_GENERIC_OAUTH_SCOPES=openid profile email groups
+GF_AUTH_GENERIC_OAUTH_AUTH_URL={{ observability_oidc_issuer }}/authorize
+GF_AUTH_GENERIC_OAUTH_TOKEN_URL={{ observability_oidc_issuer }}/api/oidc/token
+GF_AUTH_GENERIC_OAUTH_API_URL={{ observability_oidc_issuer }}/api/oidc/userinfo
+GF_AUTH_GENERIC_OAUTH_USE_PKCE=true
+GF_AUTH_GENERIC_OAUTH_ALLOW_SIGN_UP=true
+{% endif %}

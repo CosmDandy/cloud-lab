@@ -18,3 +18,38 @@ all:
         miv-ldn-01:
           ansible_host: 194.180.158.12
           country_code: GB
+
+    # Control plane: headscale, headplane, traefik, OIDC, панель, наблюдаемость.
+    # Адреса статические намеренно — динамический inventory-плагин вернул бы
+    # привязку к провайдеру в слой, который от неё освобождается.
+    control:
+      vars:
+        ansible_user: root
+      hosts:
+        # Домены и секреты стенда — в host_vars/htz-hel-test.yml.
+        htz-hel-test:
+          ansible_host: 62.238.52.58
+        htz-hel-01:
+          ansible_host: 204.168.216.193
+          mesh_domain: mesh.cosmdandy.dev
+
+    # Релей в России. Состояния не держит: снести и поднять заново — норма.
+    relay:
+      vars:
+        ansible_user: github-runner
+      hosts:
+        vds-mesh-mos-01:
+          ansible_host: 83.220.174.55
+          derper_hostname: derp.cosmdandy.ru
+
+    # Релеи на чужих машинах: узел уже занят посторонней нагрузкой и
+    # управляется не только нами. Отдельная группа, потому что base и
+    # docker сюда раскатывать нельзя — base трогает sshd на живом
+    # сервере, а docker там уже стоит. Играет только derper (см. site.yml).
+    relay_external:
+      vars:
+        ansible_user: root
+      hosts:
+        hhh-sto-01:
+          ansible_host: 167.104.104.131
+          derper_hostname: derp-sto.cosmdandy.dev

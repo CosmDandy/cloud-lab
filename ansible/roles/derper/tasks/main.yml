@@ -1,0 +1,60 @@
+---
+- name: Validate required variables
+  ansible.builtin.assert:
+    that:
+      - derper_hostname | length > 0
+      - derper_certmode in ['letsencrypt', 'manual']
+      - derper_certmode != 'letsencrypt' or derper_https_port == 443
+    fail_msg: >-
+      Нужен derper_hostname; certmode — letsencrypt или manual, причём
+      letsencrypt работает только на 443 (autocert отдаёт сертификат
+      по TLS-ALPN-01 на том же слушателе).
+
+- name: Create stack directories
+  ansible.builtin.file:
+    path: "{{ derper_dir }}/{{ item }}"
+    state: directory
+    owner: "{{ derper_owner }}"
+    group: "{{ derper_owner }}"
+    mode: "0750"
+  loop:
+    - ""
+    - build
+    - certs
+    - key
+
+- name: Install build context
+  ansible.builtin.copy:
+    src: Dockerfile
+    dest: "{{ derper_dir }}/build/Dockerfile"
+    owner: "{{ derper_owner }}"
+    group: "{{ derper_owner }}"
+    mode: "0640"
+
+# Готового образа derper апстрим не публикует, поэтому собираем сами.
+# rebuild: never — тег содержит версию, так что собранный образ не трогаем.
+- name: Build derper image
+  community.docker.docker_image_build:
+    name: derper
+    tag: "{{ derper_version }}"
+    path: "{{ derper_dir }}/build"
+    args:
+      GO_IMAGE: "{{ derper_go_image }}"
+      DERPER_VERSION: "{{ derper_version }}"
+    rebuild: never
+
+- name: Render compose file
+  ansible.builtin.template:
+    src: docker-compose.yaml.j2
+    dest: "{{ derper_dir }}/docker-compose.yaml"
+    owner: "{{ derper_owner }}"
+    group: "{{ derper_owner }}"
+    mode: "0640"
+  notify: Restart derper
+
+- name: Deploy stack
+  community.docker.docker_compose_v2:
+    project_src: "{{ derper_dir }}"
+    state: present
+    pull: never
+    remove_orphans: true

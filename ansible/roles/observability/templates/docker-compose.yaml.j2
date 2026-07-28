@@ -1,0 +1,142 @@
+# Managed by ansible (roles/observability). Правки на хосте будут перезаписаны.
+name: observability
+
+services:
+  victoriametrics:
+    image: {{ observability_vm_image }}
+    container_name: victoriametrics
+    restart: unless-stopped
+    extra_hosts:
+      # node-exporter живёт в host-сети, из bridge он виден только так.
+      - "host.docker.internal:host-gateway"
+    volumes:
+      - vm_data:/victoria-metrics-data
+      - ./prometheus.yml:/etc/prometheus/prometheus.yml:ro
+    command:
+      - "-retentionPeriod={{ observability_metrics_retention }}"
+      - "-promscrape.config=/etc/prometheus/prometheus.yml"
+    # Без healthcheck: в образе нет ни shell, ни wget — проверять живость
+    # изнутри нечем. Состояние видно по /-/healthy снаружи.
+    networks:
+      - monitoring
+{% if observability_panel_metrics_enabled %}
+      - edge
+{% endif %}
+
+  vmalert:
+    image: {{ observability_vmalert_image }}
+    container_name: vmalert
+    restart: unless-stopped
+    volumes:
+      - ./vmalert:/etc/alerts:ro
+    command:
+      - "-datasource.url=http://victoriametrics:8428"
+      - "-rule=/etc/alerts/*.yaml"
+      - "-notifier.url=http://victoriametrics:8428"
+      - "-remoteRead.url=http://victoriametrics:8428"
+      - "-remoteWrite.url=http://victoriametrics:8428"
+    depends_on:
+      - victoriametrics
+    networks:
+      - monitoring
+
+  loki:
+    image: {{ observability_loki_image }}
+    container_name: loki
+    restart: unless-stopped
+    volumes:
+      - loki_data:/loki
+      - ./loki/config.yaml:/etc/loki/config.yaml:ro
+    command: -config.file=/etc/loki/config.yaml
+    # Тот же случай, что и у victoriametrics: образ без shell.
+    networks:
+      - monitoring
+
+  promtail:
+    image: {{ observability_promtail_image }}
+    container_name: promtail
+    restart: unless-stopped
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+      - /var/lib/docker/containers:/var/lib/docker/containers:ro
+      - ./promtail/config.yaml:/etc/promtail/config.yaml:ro
+      - promtail_positions:/tmp
+    command: -config.file=/etc/promtail/config.yaml
+    depends_on:
+      - loki
+    networks:
+      - monitoring
+
+  node-exporter:
+    image: {{ observability_node_exporter_image }}
+    container_name: node-exporter
+    restart: unless-stopped
+    network_mode: host
+    pid: host
+    volumes:
+      - /proc:/host/proc:ro
+      - /sys:/host/sys:ro
+      - /:/rootfs:ro
+    command:
+      - "--path.procfs=/host/proc"
+      - "--path.sysfs=/host/sys"
+      - "--path.rootfs=/rootfs"
+      - "--collector.filesystem.mount-points-exclude=^/(sys|proc|dev|host|etc)($$|/)"
+
+  cadvisor:
+    image: {{ observability_cadvisor_image }}
+    container_name: cadvisor
+    restart: unless-stopped
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+      - /sys:/sys:ro
+      - /var/lib/docker:/var/lib/docker:ro
+    networks:
+      - monitoring
+
+  grafana:
+    image: {{ observability_grafana_image }}
+    container_name: grafana
+    restart: unless-stopped
+    env_file:
+      - ./grafana/.env
+    volumes:
+      - grafana_data:/var/lib/grafana
+      - ./grafana/datasources.yaml:/etc/grafana/provisioning/datasources/datasources.yaml:ro
+      - ./grafana/dashboards.yaml:/etc/grafana/provisioning/dashboards/dashboards.yaml:ro
+    depends_on:
+      - victoriametrics
+      - loki
+    healthcheck:
+      test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://localhost:3000/api/health"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 30s
+    networks:
+      - monitoring
+      - edge
+    labels:
+      traefik.enable: "true"
+      traefik.http.routers.grafana.rule: "Host(`{{ observability_domain }}`)"
+      traefik.http.routers.grafana.entrypoints: websecure
+      traefik.http.routers.grafana.tls.certresolver: letsencrypt
+      traefik.http.services.grafana.loadbalancer.server.port: "3000"
+
+networks:
+  monitoring:
+    name: monitoring
+    driver: bridge
+  edge:
+    name: {{ observability_edge_network }}
+    external: true
+
+volumes:
+  vm_data:
+    name: observability_vm_data
+  grafana_data:
+    name: observability_grafana_data
+  loki_data:
+    name: observability_loki_data
+  promtail_positions:
+    name: observability_promtail_positions

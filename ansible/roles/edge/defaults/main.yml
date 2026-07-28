@@ -1,0 +1,54 @@
+---
+edge_dir: /opt/edge
+edge_owner: root
+
+edge_traefik_image: traefik:v3.7.9
+edge_oauth2_proxy_image: quay.io/oauth2-proxy/oauth2-proxy:v7.15.3
+
+# Внешняя сеть, к которой подключаются все публикуемые стеки: mesh, panel,
+# oidc, observability. Traefik — единственный владелец 80/443 на хосте.
+edge_network: edge
+
+edge_acme_email: ""
+
+# HTTP/3 (QUIC поверх UDP 443). Мобильные клиенты переживают смену сети
+# и потери пакетов заметно лучше, чем на TCP.
+edge_http3_enabled: true
+
+# HSTS. includeSubdomains по умолчанию выключен намеренно: он распространит
+# требование https на ВСЕ поддомены зоны, включая те, которых мы не видим.
+# preload необратим — попадание в списки браузеров не отменяется правкой
+# конфигурации, только многомесячной процедурой удаления.
+edge_hsts_seconds: 31536000
+edge_hsts_include_subdomains: false
+edge_hsts_preload: false
+
+edge_tls_min_version: VersionTLS12
+# Требовать SNI: иначе traefik отвечает сертификатом сканеру, пришедшему
+# на голый IP, и домены попадают в чужие базы.
+edge_tls_sni_strict: true
+
+# Пусто — боевой letsencrypt. На стенде сюда ставится staging-URL:
+# домены там не резолвятся, и боевые лимиты выжигаются за один вечер.
+edge_acme_ca_server: ""
+
+# Пусто — дашборд traefik не публикуется.
+# Публикуется он только за oauth2-proxy: у traefik нет своей аутентификации.
+edge_dashboard_domain: ""
+
+edge_oidc_issuer: ""
+edge_oidc_client_id: ""
+edge_oidc_client_secret: ""
+# openssl rand -base64 32 | tr -- '+/' '-_'
+edge_oidc_cookie_secret: ""
+
+# Кому oauth2-proxy верит на слово в X-Forwarded-*: только traefik,
+# то есть диапазон docker-сетей — адрес моста плавает между пересозданиями.
+edge_trusted_proxy_cidr: "172.16.0.0/12"
+
+# Обе опции нужны только стенду, где домены не в DNS, а сертификаты
+# выписаны staging-удостоверяющим центром. На проде остаются пустыми.
+edge_extra_hosts: []
+edge_oidc_skip_ssl_verify: false
+# Кого пускать, решает Pocket ID через allowed user groups на клиенте:
+# дублировать это списком на стороне прокси — второй источник правды.

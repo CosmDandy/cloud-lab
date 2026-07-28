@@ -1,0 +1,20 @@
+# Managed by ansible (roles/mesh). Правки на хосте будут перезаписаны.
+#
+# Регионы, которые headscale раздаёт клиентам поверх встроенного DERP.
+regions:
+{% for region in mesh_derp_regions %}
+  {{ region.region_id }}:
+    regionid: {{ region.region_id }}
+    regioncode: "{{ region.region_code }}"
+    regionname: "{{ region.region_name }}"
+    nodes:
+{% for node in region.nodes %}
+      - name: "{{ node.name }}"
+        regionid: {{ region.region_id }}
+        hostname: "{{ node.hostname }}"
+        ipv4: {{ node.ipv4 }}
+        derpport: {{ node.derpport | default(443) }}
+        stunport: {{ node.stunport | default(3478) }}
+        canport80: {{ node.canport80 | default(false) | lower }}
+{% endfor %}
+{% endfor %}

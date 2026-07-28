@@ -1,0 +1,48 @@
+---
+gatus_dir: /opt/gatus
+gatus_owner: root
+
+gatus_image: twinproduction/gatus:v5.36.0
+
+# Домен статус-страницы; задаётся в инвентаре.
+gatus_domain: ""
+gatus_edge_network: "{{ edge_network | default('edge') }}"
+gatus_port: 8080
+
+gatus_ui_title: Status
+gatus_ui_header: Инфраструктура
+
+# Проверки. Каждая — словарь: name, group, url, interval, conditions,
+# опционально client (dns, tcp) и alerts.
+#
+# Проверки бьют по публичным адресам намеренно: смысл в том, чтобы видеть
+# сервис глазами пользователя — вместе с traefik, сертификатом и DNS,
+# а не только живость контейнера, которую и так показывает docker.
+gatus_endpoints: []
+
+# Условия, подставляемые проверке, если она не задала свои.
+# CERTIFICATE_EXPIRATION — та самая страховка от протухшего letsencrypt:
+# 240h ≈ 10 дней, за которые ещё можно спокойно разобраться.
+gatus_default_conditions:
+  - "[STATUS] == 200"
+  - "[CERTIFICATE_EXPIRATION] > 240h"
+
+gatus_default_interval: 2m
+
+# Оповещения в телеграм. Пусто — Gatus только показывает историю в UI
+# и никого не будит.
+gatus_telegram_enabled: false
+gatus_telegram_token: ""
+gatus_telegram_id: ""
+# Сколько подряд неудачных проверок до алерта и сколько удачных до отбоя.
+gatus_alert_failure_threshold: 3
+gatus_alert_success_threshold: 2
+
+# Вход через Pocket ID. Клиент заводится ролью oidc,
+# redirect URI: https://<gatus_domain>/authorization-code/callback
+gatus_oidc_enabled: false
+gatus_oidc_issuer: ""
+gatus_oidc_client_id: ""
+gatus_oidc_client_secret: ""
+gatus_oidc_scopes:
+  - openid

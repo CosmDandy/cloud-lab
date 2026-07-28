@@ -1,0 +1,57 @@
+---
+# Полная раскатка с нуля. Критерий готовности: на чистой VM отрабатывает
+# без ручных шагов, второй прогон подряд даёт changed=0.
+#
+# Порядок ролей значим: edge поднимает сеть, к которой присоединяются
+# остальные стеки, поэтому идёт первой из стековых.
+- name: Control plane
+  hosts: control
+  become: true
+
+  roles:
+    # base_stack_dirs здесь намеренно пуст: каталоги под стеки создают
+    # сами стековые роли, своим владельцем. Дублирование давало вечный
+    # changed — две роли переставляли owner друг за другом каждый прогон.
+    - role: base
+      tags: [base]
+    - role: docker
+      tags: [docker]
+      vars:
+        docker_users:
+          - "{{ base_deploy_user | default('github-runner') }}"
+    - role: vpn_tuning
+      tags: [vpn_tuning]
+    - role: edge
+      tags: [edge]
+    - role: mesh
+      tags: [mesh]
+    - role: oidc
+      tags: [oidc]
+    - role: panel
+      tags: [panel]
+    - role: observability
+      tags: [observability]
+    - role: gatus
+      tags: [gatus]
+
+- name: Relay
+  hosts: relay
+  become: true
+
+  roles:
+    - role: base
+      tags: [base]
+    - role: docker
+      tags: [docker]
+    - role: derper
+      tags: [derper]
+
+# Машина не наша: на ней живёт посторонний сервис и чужая настройка ssh.
+# Поэтому ровно одна роль — base и docker сюда не приезжают намеренно.
+- name: External relay
+  hosts: relay_external
+  become: true
+
+  roles:
+    - role: derper
+      tags: [derper]

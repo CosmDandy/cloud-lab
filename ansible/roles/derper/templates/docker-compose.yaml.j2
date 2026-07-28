@@ -1,0 +1,40 @@
+# Managed by ansible (roles/derper). Правки на хосте будут перезаписаны.
+name: derper
+
+services:
+  derper:
+    image: derper:{{ derper_version }}
+    container_name: derper
+    restart: unless-stopped
+    # host-сеть намеренно: релей только и делает, что перекладывает чужой
+    # трафик, и лишний NAT-слой стоит той пропускной способности, ради
+    # которой релей и существует.
+    network_mode: host
+    command:
+      - "--hostname={{ derper_hostname }}"
+      - "-a=:{{ derper_https_port }}"
+      - "--http-port={{ derper_http_port }}"
+      - "--stun"
+      - "--stun-port={{ derper_stun_port }}"
+      - "--certmode={{ derper_certmode }}"
+      - "--certdir=/certs"
+      - "--verify-clients={{ derper_verify_clients | lower }}"
+    volumes:
+      # Кэш autocert переживает рестарт: без него каждый подъём — новый
+      # запрос к letsencrypt и быстрый выход на rate limit.
+      - ./certs:/certs{{ ':ro' if derper_certmode == 'manual' else '' }}
+      # Приватный ключ узла DERP. Без этого тома derper генерирует его
+      # заново при каждом пересоздании контейнера: клиенты, уже знающие
+      # прежний ключ, получают несовпадение и переподключаются заново.
+      - ./key:/var/lib/derper
+{% if derper_verify_clients %}
+      - /var/run/tailscale:/var/run/tailscale
+{% endif %}
+    healthcheck:
+      # Проверяем слушателя, а не HTTP: сертификат выписан на внешнее имя,
+      # и запрос на 127.0.0.1 сломался бы на проверке имени.
+      test: ["CMD", "nc", "-z", "127.0.0.1", "{{ derper_https_port }}"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 20s

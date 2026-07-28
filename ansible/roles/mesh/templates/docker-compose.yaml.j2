@@ -1,0 +1,78 @@
+# Managed by ansible (roles/mesh). Правки на хосте будут перезаписаны.
+name: mesh
+
+services:
+  headscale:
+    image: {{ mesh_headscale_image }}
+    container_name: headscale
+    restart: unless-stopped
+    command: serve
+    dns:
+      - 1.1.1.1
+      - 8.8.8.8
+    volumes:
+      - ./headscale:/etc/headscale
+      - headscale_data:/var/lib/headscale
+{% if mesh_derp_server_enabled %}
+    ports:
+      - "3478:3478/udp"
+{% endif %}
+    expose:
+      - "8080"
+      - "9090"
+    healthcheck:
+      test: ["CMD", "headscale", "health"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 15s
+    networks:
+      - edge
+    labels:
+      traefik.enable: "true"
+      traefik.http.routers.headscale.rule: "Host(`{{ mesh_domain }}`)"
+      traefik.http.routers.headscale.entrypoints: websecure
+      traefik.http.routers.headscale.tls.certresolver: letsencrypt
+      traefik.http.routers.headscale.tls.options: "headscale@file"
+      traefik.http.services.headscale.loadbalancer.server.port: "8080"
+      # Без отключённой буферизации long-poll копится в traefik, и узлы
+      # узнают об изменениях карты сети с задержкой.
+      traefik.http.services.headscale.loadbalancer.responseforwarding.flushinterval: "-1"
+
+  headplane:
+    image: {{ mesh_headplane_image }}
+    container_name: headplane
+    restart: unless-stopped
+    depends_on:
+      - headscale
+    volumes:
+      - ./headplane:/etc/headplane
+      - ./headscale:/etc/headscale
+      - headplane_data:/var/lib/headplane
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+    expose:
+      - "3000"
+    networks:
+      - edge
+    labels:
+      traefik.enable: "true"
+      traefik.http.routers.headplane.rule: >-
+        Host(`{{ mesh_domain }}`) && PathPrefix(`/admin`)
+      traefik.http.routers.headplane.entrypoints: websecure
+      traefik.http.routers.headplane.tls.certresolver: letsencrypt
+      # Тот же домен, что и headscale: traefik требует совпадающих TLS-опций
+      # у всех роутеров с одинаковым SNI, иначе отбрасывает конфигурацию.
+      traefik.http.routers.headplane.tls.options: "headscale@file"
+      traefik.http.routers.headplane.priority: "100"
+      traefik.http.services.headplane.loadbalancer.server.port: "3000"
+
+networks:
+  edge:
+    name: {{ mesh_edge_network }}
+    external: true
+
+volumes:
+  headscale_data:
+    name: mesh_headscale_data
+  headplane_data:
+    name: mesh_headplane_data
