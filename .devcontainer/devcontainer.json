@@ -5,6 +5,7 @@
 {
   "name": "cloud-lab DevContainer",
   "image": "ghcr.io/cosmdandy/devcontainer:devops",
+  "initializeCommand": "docker pull ghcr.io/cosmdandy/devcontainer:devops || true",
   "containerEnv": {
     "LANG": "en_US.UTF-8",
     "LC_ALL": "en_US.UTF-8",
