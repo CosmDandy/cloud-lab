@@ -16,6 +16,47 @@ Personal VPN infrastructure managed entirely as code. Full lifecycle automation 
 
 > **Deployment policy (2026-06-22):** все workflow (`terraform`, `deploy-*`) триггерятся **только вручную** через `workflow_dispatch`. Push в `master` ничего автоматически не катит. VPN-ноды управляются вручную через Mivocloud + Ansible (`ansible/playbooks/vpn-node-deploy.yml`); Terraform отвечает только за control-plane (`htz-hel-01` с RemnaWave).
 
+## Развёртывание control-plane
+
+Control-plane (traefik, headscale + headplane, Pocket ID, Remnawave,
+наблюдаемость) раскатывается плейбуком `ansible/playbooks/site.yml` с
+инвентарём `ansible/inventory/cloud.yml`. Каталог `stacks/` — предыдущее
+поколение того же стенда, разложенное compose-файлами; роли `ansible/roles/`
+его вытеснили, см. «Известные расхождения» ниже.
+
+```bash
+ansible-galaxy collection install -r ansible/requirements.yml
+cd ansible
+ansible-playbook -i inventory/cloud.yml playbooks/site.yml --limit htz-hel-test
+```
+
+Роли размечены тегами (`--tags edge`, `--tags mesh`, `--tags oidc` и т.д.),
+так что точечная правка не требует полного прогона.
+
+**Шесть шагов раскатки нельзя автоматизировать** — DNS, первый админ Pocket ID
+с passkey, API-ключи Pocket ID и headscale, админ и API-токен Remnawave,
+включение Generic OAuth2 в UI панели. Их порядок, что получается на выходе
+каждого и в какую переменную это класть — в
+**[docs/control-plane-bootstrap.md](docs/control-plane-bootstrap.md)**. Там же
+собраны подводные камни headplane/headscale/traefik/oauth2-proxy, на которые
+уже наступали.
+
+### Известные расхождения репозитория с реальностью
+
+- `stacks/mesh-test/` полностью заменён ролью `ansible/roles/mesh`.
+- `stacks/control/docker-compose.yaml` **разошёлся с прод-хостом
+  `htz-hel-01`**: в репозитории обратный прокси — Caddy и `remnawave/backend:2.7.4`,
+  на хосте в `/opt/control/` лежит правленный руками файл с `traefik:v3.6` и
+  `remnawave/backend:2.8.1`. Workflow `deploy-control.yml` делает
+  `rsync -a --delete stacks/control → /opt/control`, то есть запуск его
+  сегодня подменит traefik на caddy и откатит панель на две минорные версии.
+  **Не запускать, пока файл не приведён в соответствие.**
+- `stacks/monitoring/` вытеснен ролью `observability` и отстал по версиям
+  (VictoriaMetrics 1.118 против 1.148, Grafana 11.6 против 13.1); на
+  `htz-hel-01` не развёрнут вовсе.
+- `ansible/playbooks/bootstrap.yml` и `update.yml` — пустые заготовки
+  (только `---`); их роль закрыта тегами `site.yml`.
+
 ## Tech Stack
 
 | Layer | Tools |
