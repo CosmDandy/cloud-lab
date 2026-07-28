@@ -1,0 +1,14 @@
+[Unit]
+Description=Резервное копирование control-plane
+After=docker.service
+Requires=docker.service
+
+[Service]
+Type=oneshot
+EnvironmentFile={{ backup_dir }}/backup.env
+ExecStart={{ backup_dir }}/backup.sh
+# Выгрузки идут в staging и никуда больше; на остальную систему
+# сервису писать незачем.
+PrivateTmp=true
+ProtectHome=true
+NoNewPrivileges=true
