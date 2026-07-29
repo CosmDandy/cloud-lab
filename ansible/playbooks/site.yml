@@ -27,6 +27,10 @@
         key: "svc_{{ item }}"
       loop: "{{ host_services | default([]) }}"
       changed_when: false
+      # Без always любой запуск с --tags пропускает эту задачу, группы не
+      # создаются, и все последующие игры не находят ни одного хоста —
+      # прогон завершается успехом, не сделав ничего.
+      tags: always
 
 - name: Base
   hosts: svc_base
