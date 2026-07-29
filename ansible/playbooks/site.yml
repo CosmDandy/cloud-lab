@@ -2,10 +2,34 @@
 # Полная раскатка с нуля. Критерий готовности: на чистой VM отрабатывает
 # без ручных шагов, второй прогон подряд даёт changed=0.
 #
-# Порядок ролей значим: edge поднимает сеть, к которой присоединяются
-# остальные стеки, поэтому идёт первой из стековых.
-- name: Control plane
-  hosts: control
+# Что ставится на машину, решает список host_services в её host_vars, а не
+# группа инвентаря. Группы остались за связностью — ansible_user и то, чья
+# это машина; набор сервисов от неё не зависит и у разных провайдеров
+# складывается по-разному.
+#
+# Порядок игр значим и совпадает с порядком раскатки: edge поднимает сеть,
+# к которой присоединяются остальные стеки, поэтому идёт первой из стековых.
+# Ради этого здесь group_by и отдельная игра на роль, а не include_role с
+# when внутри одной игры: так сохраняются roles: с их дефолтами, хендлерами
+# и --tags, а порядок виден глазами.
+
+- name: Expand host_services into groups
+  hosts: all
+  gather_facts: false
+  # Раскладка идёт на контроллере: в инвентаре есть машины, до которых в
+  # момент прогона может не быть связи, а недоступный хост, не попавший в
+  # svc_*, молча выпал бы из всех последующих игр вместо явной ошибки.
+  connection: local
+
+  tasks:
+    - name: Build svc_* groups
+      ansible.builtin.group_by:
+        key: "svc_{{ item }}"
+      loop: "{{ host_services | default([]) }}"
+      changed_when: false
+
+- name: Base
+  hosts: svc_base
   become: true
 
   roles:
@@ -14,42 +38,76 @@
     # changed — две роли переставляли owner друг за другом каждый прогон.
     - role: base
       tags: [base]
+
+- name: Docker
+  hosts: svc_docker
+  become: true
+
+  roles:
     - role: docker
       tags: [docker]
       vars:
         docker_users:
           - "{{ base_deploy_user | default('github-runner') }}"
-    - role: vpn_tuning
-      tags: [vpn_tuning]
-    - role: edge
-      tags: [edge]
-    - role: mesh
-      tags: [mesh]
-    - role: oidc
-      tags: [oidc]
-    - role: panel
-      tags: [panel]
-    - role: observability
-      tags: [observability]
-    - role: gatus
-      tags: [gatus]
 
-- name: Relay
-  hosts: relay
+- name: VPN tuning
+  hosts: svc_vpn_tuning
   become: true
 
   roles:
-    - role: base
-      tags: [base]
-    - role: docker
-      tags: [docker]
-    - role: derper
-      tags: [derper]
+    - role: vpn_tuning
+      tags: [vpn_tuning]
 
-# Машина не наша: на ней живёт посторонний сервис и чужая настройка ssh.
-# Поэтому ровно одна роль — base и docker сюда не приезжают намеренно.
-- name: External relay
-  hosts: relay_external
+- name: Edge
+  hosts: svc_edge
+  become: true
+
+  roles:
+    - role: edge
+      tags: [edge]
+
+- name: Mesh
+  hosts: svc_mesh
+  become: true
+
+  roles:
+    - role: mesh
+      tags: [mesh]
+
+- name: OIDC
+  hosts: svc_oidc
+  become: true
+
+  roles:
+    - role: oidc
+      tags: [oidc]
+
+- name: Panel
+  hosts: svc_panel
+  become: true
+
+  roles:
+    - role: panel
+      tags: [panel]
+
+- name: Observability
+  hosts: svc_observability
+  become: true
+
+  roles:
+    - role: observability
+      tags: [observability]
+
+- name: Gatus
+  hosts: svc_gatus
+  become: true
+
+  roles:
+    - role: gatus
+      tags: [gatus]
+
+- name: Derper
+  hosts: svc_derper
   become: true
 
   roles:

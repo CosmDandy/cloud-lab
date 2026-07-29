@@ -1,6 +1,11 @@
 ---
 # VPN nodes (managed manually via Mivocloud and similar providers).
-# Terraform отвечает только за control-plane (htz-hel-01) — см. terraform/main.tf.
+# Terraform держит две машины: боевой htz-hel-01 (terraform/main.tf) и стенд
+# htz-hel-test (terraform/live/htz-hel-test/).
+#
+# Что раскатывается на машину, задаёт её host_services — список ролей из
+# playbooks/site.yml. Группы ниже отвечают только за связность: под каким
+# пользователем ходить и чья это машина.
 
 all:
   vars:
@@ -11,6 +16,8 @@ all:
     vpn_nodes:
       vars:
         ansible_user: root
+      # host_services не заданы: ноды разворачиваются отдельными плейбуками
+      # (vpn-node-tune.yml), а не site.yml.
       hosts:
         miv-chi-01:
           ansible_host: 94.158.245.24
@@ -26,12 +33,27 @@ all:
       vars:
         ansible_user: root
       hosts:
-        # Домены и секреты стенда — в host_vars/htz-hel-test.yml.
+        # Стенд. Домены и секреты — в host_vars/htz-hel-test/.
+        # Панели здесь нет: Remnawave переезжает отдельно и последним,
+        # дампом постгреса, чтобы пользователи VPN не заметили.
         htz-hel-test:
           ansible_host: 62.238.52.58
+          host_services:
+            - base
+            - docker
+            - vpn_tuning
+            - edge
+            - mesh
+            - oidc
+            - observability
+            - gatus
+
+        # Боевая машина. host_services пуст намеренно: она до сих пор
+        # развёрнута старой схемой (stacks/control + deploy-control.yml),
+        # и её содержимое разъехалось с git. Прогон site.yml по ней сейчас
+        # откатил бы прод назад, поэтому она в раскатку не входит вовсе.
         htz-hel-01:
           ansible_host: 204.168.216.193
-          mesh_domain: mesh.cosmdandy.dev
 
     # Релей в России. Состояния не держит: снести и поднять заново — норма.
     relay:
@@ -41,15 +63,24 @@ all:
         vds-mesh-mos-01:
           ansible_host: 83.220.174.55
           derper_hostname: derp.cosmdandy.ru
+          host_services: [base, docker, derper]
 
     # Релеи на чужих машинах: узел уже занят посторонней нагрузкой и
-    # управляется не только нами. Отдельная группа, потому что base и
-    # docker сюда раскатывать нельзя — base трогает sshd на живом
-    # сервере, а docker там уже стоит. Играет только derper (см. site.yml).
+    # управляется не только нами.
     relay_external:
       vars:
         ansible_user: root
       hosts:
+        # host_services пуст: релей снят вместе с замером 2026-07-28, а
+        # 29.07 удалена и запись derp-sto.cosmdandy.dev. Поднимать роль
+        # сейчас нельзя — derper берёт сертификат через TLS-ALPN-01, и на
+        # нерезолвящемся имени letsencrypt откажет.
+        #
+        # Чтобы вернуть: завести запись на 167.104.104.131, вернуть
+        # host_services: [derper] и раскомментировать mesh_derp_regions в
+        # host_vars стенда. Ровно одна роль: base трогает sshd на живом
+        # чужом сервере, а docker там уже стоит и настроен не нами.
         hhh-sto-01:
           ansible_host: 167.104.104.131
           derper_hostname: derp-sto.cosmdandy.dev
+          host_services: []
