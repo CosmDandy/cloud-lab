@@ -12,19 +12,6 @@ locals {
   control_servers = { for k, v in var.servers : k => v if v.role == "control" }
 }
 
-# Раннера заводит и снимает роль github-runner, terraform к нему больше
-# отношения не имеет. Ресурс уходит блоком removed, а не удалением кода:
-# у него был provisioner when = destroy, дерегистрировавший раннер через
-# GitHub API, — обычное удаление снесло бы живой раннер на htz-hel-01.
-# destroy = false обязателен, true действительно удаляет.
-removed {
-  from = null_resource.runner_cleanup
-
-  lifecycle {
-    destroy = false
-  }
-}
-
 # ──────────────────────────────────────────────
 # Unified servers (Remnawave architecture)
 #

@@ -12,19 +12,6 @@ variable "cloudflare_zone_id" {
   type = string
 }
 
-variable "github_token" {
-  type      = string
-  sensitive = true
-}
-
-variable "github_owner" {
-  type = string
-}
-
-variable "github_repository" {
-  type = string
-}
-
 variable "domain" {
   type    = string
   default = "cosmdandy.dev"
