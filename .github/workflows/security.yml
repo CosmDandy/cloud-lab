@@ -106,3 +106,15 @@ jobs:
       # той же причине, что actions пиннятся по SHA: воспроизводимость прогона.
       - name: zizmor (гейт)
         run: pipx run zizmor==1.28.0 --offline --min-severity=medium .
+
+      # Эту связку zizmor не ловит: он ищет литеральную метку `self-hosted`, а
+      # свои раннеры здесь именуются по хосту (hcloud-htz-hel-01).
+      #
+      # Закрепляет единственное, на чём держится безопасность своего раннера в
+      # публичном репозитории: до него дотягивается только workflow_dispatch, а
+      # его запускает лишь обладатель write-доступа. Договорённость, которую
+      # ничто не проверяет, живёт до первой правки.
+      - name: свой раннер только на workflow_dispatch (гейт)
+        run: |
+          python -m pip install --quiet pyyaml
+          python scripts/check-workflow-runners.py
