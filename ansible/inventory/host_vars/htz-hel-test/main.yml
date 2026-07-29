@@ -101,6 +101,18 @@ oidc_clients:
     callback_urls:
       - "https://{{ observability_domain }}/login/generic_oauth"
 
+  # Отсутствовал в списке: на прошлом стенде клиент был заведён руками, и
+  # это вскрылось только на чистом Pocket ID — вход в статус-страницу отдавал
+  # «The requested OAuth 2.0 Client does not exist».
+  - id: "{{ gatus_oidc_client_id }}"
+    name: gatus
+    callback_urls:
+      - "https://{{ gatus_domain }}/authorization-code/callback"
+    # У gatus в конфигурации есть только issuer, client_id, client_secret,
+    # redirect-url и scopes — code_verifier он не шлёт. С обязательным PKCE
+    # клиент создался бы, а вход всё равно падал бы, только по другой причине.
+    pkce_enabled: false
+
 # Клиента remnawave-generic здесь нет: панель на стенд не разворачивается,
 # она переезжает отдельно и последней. Вернуть вместе с panel_domain,
 # panel_sub_domain и panel_oidc_client_id — важно, что провайдер в панели
