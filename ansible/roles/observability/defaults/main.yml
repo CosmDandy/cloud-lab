@@ -31,6 +31,10 @@ observability_panel_metrics_password: ""
 # Вход в Grafana через Pocket ID. Клиент заводится в UI Pocket ID,
 # redirect URI: https://<observability_domain>/login/generic_oauth
 observability_oidc_enabled: false
+
+# Группа в Pocket ID, участники которой входят в Grafana администраторами.
+# Остальные получают Viewer.
+observability_oidc_admin_group: admins
 observability_oidc_name: Pocket ID
 observability_oidc_issuer: ""
 observability_oidc_client_id: ""

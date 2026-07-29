@@ -13,4 +13,9 @@ GF_AUTH_GENERIC_OAUTH_TOKEN_URL={{ observability_oidc_issuer }}/api/oidc/token
 GF_AUTH_GENERIC_OAUTH_API_URL={{ observability_oidc_issuer }}/api/oidc/userinfo
 GF_AUTH_GENERIC_OAUTH_USE_PKCE=true
 GF_AUTH_GENERIC_OAUTH_ALLOW_SIGN_UP=true
+# Без явного маппинга новый пользователь из OIDC получает роль по умолчанию,
+# то есть Viewer: дашборды видно, править нельзя, — а права администратора
+# остаются только на локальной учётке admin. Группы приезжают в claim groups,
+# он запрошен в scopes выше.
+GF_AUTH_GENERIC_OAUTH_ROLE_ATTRIBUTE_PATH=contains(groups[*], '{{ observability_oidc_admin_group }}') && 'Admin' || 'Viewer'
 {% endif %}
