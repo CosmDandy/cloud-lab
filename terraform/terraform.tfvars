@@ -14,11 +14,6 @@ ssh_public_keys = ["ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIDsx73RvU7CaBdKkAcRXcLdI
 
 acme_email = "tkondrashin@icloud.com"
 
-# Пусто: hel-01 удалён в Hetzner ещё до 2026-07-28, а в конфигурации
-# оставался — план предлагал создать сервер заново. VPN-ноды живут на
-# Mivocloud и управляются ансиблом.
-vpn_servers = {}
-
 servers = {
   htz-hel-01 = {
     location  = "hel1"
