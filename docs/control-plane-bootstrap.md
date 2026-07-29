@@ -6,9 +6,14 @@
 инвентарь. Этот документ — их список, порядок и куда класть значения.
 
 Целевой хост описывается в `ansible/inventory/cloud.yml`, переменные — в
-`ansible/inventory/host_vars/<host>.yml`. Пример полностью заполненного
-набора: `host_vars/htz-hel-test.yml` (тестовый стенд, секреты там открытым
-текстом намеренно; на проде тот же набор приезжает через SOPS+age).
+каталоге `ansible/inventory/host_vars/<host>/`: несекретная часть в
+`main.yml`, пароли и токены рядом в `secrets.sops.yaml` под age. Пример
+полностью заполненного набора — `host_vars/htz-hel-test/`.
+
+Что раскатывается на машину, задаёт её `host_services` в инвентаре — список
+ролей, который `site.yml` первой же игрой разворачивает в группы `svc_*`.
+У стенда в этом списке нет `panel`: Remnawave переезжает отдельно и
+последней, дампом постгреса, чтобы пользователи VPN не заметили.
 
 Перед первым запуском на новой машине:
 
@@ -26,7 +31,7 @@ ansible-galaxy collection install -r ansible/requirements.yml
 
 | Проход | Команда | Что происходит |
 |--------|---------|----------------|
-| 0 | *(руками)* | DNS-записи |
+| 0 | `terraform apply` в `terraform/live/<host>/` | машина и DNS-записи |
 | 1 | `ansible-playbook -i inventory/cloud.yml playbooks/site.yml --limit <host>` | всё поднимается без OIDC |
 | — | *(руками)* | шаги 2–5 ниже: админы, API-ключи |
 | 2 | `... --tags oidc` | клиенты Pocket ID создаются, секреты печатаются |
@@ -35,29 +40,46 @@ ansible-galaxy collection install -r ansible/requirements.yml
 
 Для прохода 1 в `host_vars` должны быть пустыми/выключенными:
 `edge_dashboard_domain: ""`, `oidc_api_key: ""`, `mesh_headscale_api_key: ""`,
-`panel_subscription_api_token: ""`, `mesh_oidc_enabled: false`,
-`mesh_headscale_oidc_enabled: false`, `observability_oidc_enabled: false`.
-Иначе ассерты ролей `edge` и `mesh` остановят прогон на пустых секретах —
-это защита, а не помеха.
+`mesh_oidc_enabled: false`, `mesh_headscale_oidc_enabled: false`,
+`observability_oidc_enabled: false`. Иначе ассерты ролей `edge` и `mesh`
+остановят прогон на пустых секретах — это защита, а не помеха.
+
+Без панели (стенд) шаги 6 и 7 не выполняются, а `panel_subscription_api_token`
+в инвентаре не нужен вовсе: `panel` просто отсутствует в `host_services`.
 
 Критерий готовности прохода 3: повторный запуск даёт `changed=0`.
 
 ---
 
-## Шаг 1. DNS-записи
+## Шаг 1. Машина и DNS-записи
 
-**Что сделать.** Завести A-записи на публичный IPv4 хоста. Для стенда это
-шесть имён: `mesh-`, `oidc-`, `panel-`, `sub-`, `mon-`, `traefik-`.
+**Что сделать.**
 
-**Почему руками.** Зона control-plane живёт в Cloudflare и не описана в
-`terraform/dns.tf` — там только записи VPN-нод. Записи должны существовать
-**до** прохода 1: traefik запрашивает боевые сертификаты Let's Encrypt по
-HTTP-01, и без резолва домена попытки уходят в лимит (5 неудач на домен в
-час, сброс — неделя).
+```bash
+cd terraform/live/htz-hel-test
+terraform plan -out=tfplan     # посмотреть глазами
+terraform apply tfplan
+```
 
-**Куда положить.** Имена — в `host_vars`: `mesh_domain`, `oidc_domain`,
-`panel_domain`, `panel_sub_domain`, `observability_domain`,
-`edge_dashboard_domain`.
+Модуль поднимает сервер и заводит на него A/AAAA плюс CNAME на боевые
+имена: `mesh`, `oidc`, `mon`, `status`, `traefik`. Имена боевые, а не
+`-test`, потому что redirect URI OIDC-клиентов прописываются с реальными
+URL — на временных их пришлось бы заводить дважды.
+
+**Перед первым `plan`** воркспейс HCP должен существовать (`htz-hel-test`,
+CLI-driven) и к нему должен быть привязан variable set с `hcloud_token` и
+`cloudflare_api_token`. Это делается в UI HashiCorp Cloud один раз.
+
+**После `apply`** взять `terraform output server_ipv4` и вписать адрес в
+`ansible/inventory/cloud.yml` — инвентарь статический намеренно, чтобы не
+тянуть привязку к провайдеру в слой, который от неё освобождается.
+
+**Почему записи нужны до прохода 1.** Traefik запрашивает боевые
+сертификаты Let's Encrypt по HTTP-01, и без резолва домена попытки уходят
+в лимит: 5 неудач на домен в час, сброс — неделя.
+
+**Куда положить имена.** В `host_vars`: `mesh_domain`, `oidc_domain`,
+`observability_domain`, `gatus_domain`, `edge_dashboard_domain`.
 
 > Пока домены не резолвятся, ставьте `edge_acme_ca_server` на staging-URL
 > Let's Encrypt. Пустое значение = боевой CA.
@@ -156,6 +178,9 @@ ssh root@<host> 'docker exec headscale headscale apikeys create --expiration 999
 
 ## Шаг 6. Администратор и API-токен Remnawave
 
+> Только там, где `panel` есть в `host_services`. На стенде панель не
+> разворачивается — шаги 6 и 7 пропускаются целиком.
+
 **Что сделать.** Открыть `https://<panel_domain>`, зарегистрировать первого
 админа (форма регистрации доступна, пока в базе нет ни одного пользователя),
 затем **Settings → API Tokens → Create**.
@@ -168,10 +193,9 @@ CLI и bootstrap-переменной у неё нет.
 **Куда положить.** `panel_subscription_api_token`. Без него
 `subscription-page` поднимется, но не покажет ни одной подписки.
 
-> Токен длиннее 160 символов и упирается в `yaml[line-length]`. В
-> `host_vars/htz-hel-test.yml` он разбит экранированным переносом:
-> обратный слэш в конце строки внутри двойных кавычек, YAML склеивает
-> такие строки без пробела.
+> Токен длиннее 160 символов и упирается в `yaml[line-length]`. Разбивается
+> экранированным переносом: обратный слэш в конце строки внутри двойных
+> кавычек, YAML склеивает такие строки без пробела.
 
 ---
 
@@ -199,7 +223,8 @@ Generic собирает redirect_uri из введённого адреса и 
 
 | Шаг | Почему нельзя автоматизировать |
 |-----|-------------------------------|
-| DNS control-plane | зона не заведена в terraform; нужна до выпуска сертификатов |
+| Воркспейс HCP и variable set | создаются в UI HashiCorp Cloud, terraform себя не бутстрапит |
+| Адрес машины в `cloud.yml` | инвентарь статический намеренно, из terraform не генерируется |
 | Первый админ + passkey | WebAuthn требует физический аутентификатор |
 | API-ключ Pocket ID | выпуск требует уже выполненного входа |
 | Перенос client_secret в инвентарь | v2.11.0 не принимает заданный секрет; писать в SOPS из плейбука нельзя |
