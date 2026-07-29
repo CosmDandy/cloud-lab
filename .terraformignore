@@ -1,0 +1,26 @@
+# При CLI-run с заданным Working Directory в HCP уезжает весь объединённый
+# каталог — то есть корень репозитория, а не только live/<машина>. Так
+# сделано ради общих модулей в terraform/modules: относительный путь
+# ../../modules обязан попасть в выгрузку, иначе удалённый init падает с
+# «Unable to evaluate directory symlink».
+#
+# Без этого файла на каждый план уходило бы 578 МБ: 500 МБ кэшей провайдеров
+# и 78 МБ бинарников в роли tailscale.
+
+.git/
+.terraform/
+*.tfstate
+*.tfstate.backup
+tfplan
+
+# Терраформу не нужно ничего из этого.
+ansible/
+stacks/
+testbed/
+scripts/
+docs/
+data/
+plans/
+.github/
+.devcontainer/
+*.md
