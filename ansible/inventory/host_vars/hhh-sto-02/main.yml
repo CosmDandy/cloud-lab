@@ -152,6 +152,14 @@ oidc_clients:
 panel_domain: vpn.cosmdandy.dev
 panel_sub_domain: sub.cosmdandy.dev
 
+# Корень домена подписок сам по себе ничего не отдаёт: страница обслуживает
+# только пути вида /<short_uuid>, а на / и /robots.txt закрывает соединение,
+# и traefik превращает это в 502. На старой машине поверх стоял отдельный
+# роутер с redirectregex на контакт поддержки — при переезде он потерялся,
+# потому что переменная осталась пустой. Восстановлено по меткам traefik,
+# снятым с htz-hel-01.
+panel_sub_root_redirect: https://t.me/CosmDandy
+
 # --- observability ----------------------------------------------------------
 observability_domain: grafana.cosmdandy.dev
 
@@ -205,6 +213,11 @@ gatus_endpoints:
   - name: panel
     group: vpn
     url: https://vpn.cosmdandy.dev/
+  # Ждём 302, а не 200: страница подписок обслуживает только /<short_uuid>,
+  # а корень отдан редиректу на поддержку. Проверка всё равно меряет весь
+  # путь целиком — DNS, Cloudflare, traefik и правило роутера.
   - name: subscription
     group: vpn
     url: https://sub.cosmdandy.dev/
+    conditions:
+      - "[STATUS] == 302"
