@@ -15,17 +15,18 @@ module "server_dns" {
   ipv4_address = module.server[each.key].ipv4_address
   ipv6_address = module.server[each.key].ipv6_address
 
-  # Сервисные имена висят алиасами на записи control-плоскости и
-  # проксируются Cloudflare — адрес сервера наружу не виден.
+  # Алиасов здесь больше нет.
   #
-  # traefik отсюда убран: дашборд снаружи не нужен никому, а имя понадобилось
-  # стенду. Вместе с ним ушла и отдельная A-запись mesh — установка headscale
-  # на этой машине нерабочая (узлы offline с мая), боевой tailnet живёт на
-  # mesh.cosmdandy.ru. Обе записи удаляются по-настоящему.
-  aliases = each.value.role == "control" ? {
-    vpn = { target = "${each.key}.${var.domain}", proxied = true }
-    sub = { target = "${each.key}.${var.domain}", proxied = true }
-  } : {}
+  # traefik и mesh ушли раньше: дашборд снаружи не нужен никому, а установка
+  # headscale на этой машине была нерабочей (узлы offline с мая).
+  #
+  # vpn и sub уехали 30.07.2026 в terraform/live/hhh-sto-02 вместе с самой
+  # панелью. Условие по role здесь не при чём и специально не трогалось:
+  # `role = "control"` держит ещё и `protected` у сервера (main.tf:42), то
+  # есть защиту от удаления боевой машины. Снимать его ради DNS нельзя.
+  #
+  # A-запись htz-hel-01 остаётся: машина жива, и через неё идёт ssh.
+  aliases = {}
 }
 
 # Блоки moved, переносившие записи в модуль dns-record, удалены: перенос
