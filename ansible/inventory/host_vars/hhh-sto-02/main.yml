@@ -1,0 +1,179 @@
+---
+# БОЕВОЙ control-plane, hhh-sto-02 (HostHatch Стокгольм). Здесь только
+# несекретная часть — домены, идентификаторы клиентов и описания сервисов.
+# Пароли, токены и client_secret лежат рядом в secrets.sops.yaml под
+# шифрованием.
+#
+# Файл пришёл со стенда htz-hel-test без единой правки доменов: имена там
+# были боевые с самого начала, ровно чтобы redirect URI OIDC-клиентов не
+# пришлось заводить дважды. Клиентские секреты те же, потому что вместе с
+# машиной переезжает том oidc_pocket_id_data — иначе Pocket ID поднялся бы
+# пустым и все четыре секрета пришлось бы перевыпускать.
+#
+# Внутренние комментарии secrets.sops.yaml всё ещё ссылаются на htz-hel-test:
+# менять их означало бы перешифровать файл целиком и получить диff, в котором
+# изменилось каждое значение. Оставлено намеренно.
+#
+# client_id не секрет по спецификации OAuth2: он уходит в браузер при
+# каждом редиректе на провайдера. Держим его открытым, чтобы списки
+# клиентов ниже читались без расшифровки.
+
+# --- edge (traefik) ---------------------------------------------------------
+edge_acme_email: admin@cosmdandy.dev
+
+# Пусто — боевой letsencrypt. Пока домены стенда не были заведены в DNS,
+# здесь стоял staging: иначе неудачные попытки выжгли бы боевой лимит.
+edge_acme_ca_server: ""
+
+# HTTP/3 выключен: QUIC ходит по UDP, а он у российских провайдеров
+# режется охотнее TCP — браузер получает alt-svc, уходит на UDP 443
+# и виснет. curl этого не делает, поэтому из консоли всё выглядело живым.
+edge_http3_enabled: false
+
+edge_dashboard_domain: traefik.cosmdandy.dev
+edge_oidc_issuer: https://oidc.cosmdandy.dev
+# Заводится в Pocket ID: Settings → OIDC Clients → Add.
+# Callback URL: https://traefik.cosmdandy.dev/oauth2/callback
+edge_oidc_client_id: 098f02a7-3b37-4aec-b7e3-25dadb4f608b
+
+# --- mesh (headscale + headplane) -------------------------------------------
+mesh_domain: mesh.cosmdandy.dev
+
+# Внешний DERP-релей на HostHatch (Стокгольм), region_id 901: 900 занят
+# встроенным, публичные регионы tailscale двузначные. Добавляется рядом со
+# встроенным, а не вместо — клиент выбирает быстрейший сам.
+#
+# Выключен: релей поднимался на чужой рабочей ноде под замер 2026-07-28 и
+# снят вместе с ней. Раздавать клиентам регион, за которым никого нет,
+# нельзя — они будут ходить в него по netcheck и получать таймауты.
+# Чтобы вернуть: поднять derper (--tags derper --limit hhh-sto-01) и
+# раскомментировать блок.
+# mesh_derp_regions:
+#   - region_id: 901
+#     region_code: sto
+#     region_name: Stockholm
+#     nodes:
+#       - name: derp-sto
+#         hostname: derp-sto.cosmdandy.dev
+#         ipv4: 167.104.104.131
+#         derpport: 443
+#         stunport: 3478
+
+mesh_oidc_enabled: true
+mesh_oidc_issuer: https://oidc.cosmdandy.dev
+# Callback URL: https://mesh.cosmdandy.dev/admin/oidc/callback
+mesh_oidc_client_id: d891c5c1-94a1-4cc3-bb68-204c33e14f96
+
+# Вход узлов в tailnet. Клиент отдельный от headplane.
+# Callback URL: https://mesh.cosmdandy.dev/oidc/callback
+mesh_headscale_oidc_enabled: true
+mesh_headscale_oidc_issuer: https://oidc.cosmdandy.dev
+mesh_headscale_oidc_client_id: b154ef42-8655-4730-8ab7-971a28a80ec6
+
+# --- oidc (Pocket ID) -------------------------------------------------------
+oidc_domain: oidc.cosmdandy.dev
+
+# Группы и клиенты, которые роль oidc держит в описанном виде.
+# Всё, что заведено в Pocket ID помимо этих списков, роль не трогает.
+oidc_user_groups:
+  - name: admins
+    friendly_name: Admins
+    # Список задан — роль приводит состав группы ровно к нему. Убрать
+    # ключ целиком, если членством управляют через UI.
+    members: [cosmdandy]
+    custom_claims:
+      # Remnawave проверяет его после успешного входа: без claim-а
+      # аутентификация проходит, а панель отвечает Forbidden.
+      remnawaveAccess: "true"
+
+oidc_clients:
+  # id берутся из переменных выше — один источник правды на клиента.
+  - id: "{{ mesh_oidc_client_id }}"
+    name: headplane
+    callback_urls:
+      - "https://{{ mesh_domain }}/admin/oidc/callback"
+    group_restricted: true
+    allowed_user_groups: [admins]
+
+  - id: "{{ mesh_headscale_oidc_client_id }}"
+    name: headscale
+    callback_urls:
+      - "https://{{ mesh_domain }}/oidc/callback"
+
+  - id: "{{ edge_oidc_client_id }}"
+    name: traefik-dashboard
+    callback_urls:
+      - "https://{{ edge_dashboard_domain }}/oauth2/callback"
+    group_restricted: true
+    allowed_user_groups: [admins]
+
+  - id: "{{ observability_oidc_client_id }}"
+    name: grafana
+    callback_urls:
+      - "https://{{ observability_domain }}/login/generic_oauth"
+
+  # Отсутствовал в списке: на прошлом стенде клиент был заведён руками, и
+  # это вскрылось только на чистом Pocket ID — вход в статус-страницу отдавал
+  # «The requested OAuth 2.0 Client does not exist».
+  - id: "{{ gatus_oidc_client_id }}"
+    name: gatus
+    callback_urls:
+      - "https://{{ gatus_domain }}/authorization-code/callback"
+    # У gatus в конфигурации есть только issuer, client_id, client_secret,
+    # redirect-url и scopes — code_verifier он не шлёт. С обязательным PKCE
+    # клиент создался бы, а вход всё равно падал бы, только по другой причине.
+    pkce_enabled: false
+
+# Клиента remnawave-generic здесь нет: панель на стенд не разворачивается,
+# она переезжает отдельно и последней. Вернуть вместе с panel_domain,
+# panel_sub_domain и panel_oidc_client_id — важно, что провайдер в панели
+# заводится как Generic, а не Pocket ID: для pocketid она шлёт
+# redirect_uri=null, и сертифицированный провайдер это отвергает.
+
+# --- observability ----------------------------------------------------------
+observability_domain: grafana.cosmdandy.dev
+
+# Выключено вместе с панелью: без неё vmagent скрёб бы несуществующий
+# /metrics и ронял бы проверки на пустом месте.
+observability_panel_metrics_enabled: false
+
+observability_oidc_enabled: true
+observability_oidc_issuer: https://oidc.cosmdandy.dev
+# Callback URL: https://grafana.cosmdandy.dev/login/generic_oauth
+observability_oidc_client_id: 6ece9d45-1960-41d7-8b7c-be9035159169
+
+# --- gatus (статус-страница) ------------------------------------------------
+gatus_domain: status.cosmdandy.dev
+gatus_ui_title: cosmdandy.dev
+gatus_ui_header: Инфраструктура
+
+gatus_telegram_enabled: true
+
+gatus_oidc_enabled: true
+gatus_oidc_issuer: https://oidc.cosmdandy.dev
+gatus_oidc_client_id: 92ba05d1-584e-452b-a5f1-18dc197d0e75
+
+# Проверки бьют по публичным адресам: смысл в том, чтобы видеть сервис
+# глазами пользователя — вместе с traefik, сертификатом и DNS.
+gatus_endpoints:
+  - name: headscale
+    group: mesh
+    url: https://mesh.cosmdandy.dev/health
+  - name: headplane
+    group: mesh
+    url: https://mesh.cosmdandy.dev/admin
+  - name: pocket-id
+    group: sso
+    url: https://oidc.cosmdandy.dev/
+  - name: discovery
+    group: sso
+    url: https://oidc.cosmdandy.dev/.well-known/openid-configuration
+    conditions:
+      - "[STATUS] == 200"
+      - "[BODY].issuer == https://oidc.cosmdandy.dev"
+  - name: grafana
+    group: observability
+    url: https://grafana.cosmdandy.dev/api/health
+  - name: traefik-dashboard
+    group: edge
+    url: https://traefik.cosmdandy.dev/
