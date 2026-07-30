@@ -206,7 +206,7 @@ Pocket ID принимает заданный `client_id`), прогнать `--
 | `headplane` | `mesh_oidc_client_secret` |
 | `headscale` | `mesh_headscale_oidc_client_secret` |
 | `grafana` | `observability_oidc_client_secret` |
-| `remnawave-generic` | в UI панели, шаг 7 (в инвентаре не хранится) |
+| `remnawave-generic` | `panel_oidc_client_secret` |
 
 ---
 
@@ -263,16 +263,38 @@ CLI и bootstrap-переменной у неё нет.
 ## Шаг 7. Generic OAuth2 в UI Remnawave
 
 **Что сделать.** В UI панели включить OAuth2 и выбрать провайдер
-**Generic** — не «Pocket ID». Ввести issuer, `client_id` и `client_secret`
-клиента `remnawave-generic`.
+**Generic** — не «Pocket ID». Панель просит не issuer, а два адреса
+отдельно; берутся они из discovery Pocket ID:
 
-**Почему именно Generic.** У панели есть преднастроенный провайдер
-`pocketid`, и он сломан: в authorization-запрос уходит `redirect_uri=null`,
-а Pocket ID как сертифицированный провайдер такой запрос отвергает.
-Generic собирает redirect_uri из введённого адреса и работает.
+```
+Authorization URL   https://<oidc_domain>/authorize
+Token URL           https://<oidc_domain>/api/oidc/token
+Frontend domain     <panel_domain>
+Client ID           panel_oidc_client_id
+Client Secret       panel_oidc_client_secret
+PKCE (withPkce)     выключено
+```
 
-**Почему руками.** Настройки OAuth2 у Remnawave лежат в её собственной БД
-и в переменные окружения не выносятся — описать их конфигурацией нечем.
+**Сам клиент заводить руками не надо** — он описан в `oidc_clients` как
+`remnawave-generic` и создаётся проходом 2 вместе с остальными. Раньше здесь
+было написано обратное; так был заведён клиент gatus, и на чистом Pocket ID
+это вскрылось ошибкой «The requested OAuth 2.0 Client does not exist».
+Клиент, живущий только в UI, не переживает пересборку.
+
+**Callback URL** — `https://<panel_domain>/oauth2/callback/generic`. В
+инвентаре он уже прописан. Значение взято из бандла фронтенда панели, где
+маршрут объявлен как `/oauth2/callback/:provider`; в документации попадается
+путь `.../oauth2/callback/pocketid`, но он для сломанного режима.
+
+**PKCE выключен** (`pkce_enabled: false` у клиента). Remnawave его не шлёт —
+это записано и в дефолтах роли `oidc`. Если флажок `withPkce` у панели
+однажды заработает, включать надо СРАЗУ с обеих сторон, иначе вход упадёт
+на «the code_challenge parameter is missing».
+
+**Почему руками.** Сами настройки OAuth2 у Remnawave лежат в её собственной
+БД (`remnawave_settings.oauth2_settings`) и в переменные окружения не
+выносятся — описать их конфигурацией нечем. При переносе панели дампом они
+приезжают вместе с базой, а вот при установке с нуля их вводят заново.
 
 **Что ещё нужно.** Группа с кастомным claim `remnawaveAccess=true` — иначе
 вход проходит, а панель отвечает Forbidden. Claim описан декларативно
@@ -505,6 +527,24 @@ claim-ы, ограничение клиентов по группам — опи
 - **`subscription-page` рвёт TCP на любой 404.** Снаружи это выглядит как
   502 от traefik. Корень домена подписок страницы не отдаёт — это норма,
   проверять надо конкретный путь подписки.
+
+### gatus
+
+- **Неизвестные ключи в `client:` он молча игнорирует.** Конфиг принимается,
+  контейнер стартует, поведение не меняется — опечатку видно только по
+  результату проверки. Стоило часа: написал `follow-redirects: false`
+  вместо правильного `ignore-redirect: true`.
+- По умолчанию gatus **идёт по редиректу**, и в условие попадает код
+  конечной страницы, а не 3xx. Проверка `sub` ждёт 302 и потому требует
+  `client: {ignore-redirect: true}`.
+- `success=false` при `errors=0` в логе — это «ответ получен, но условие не
+  совпало», а не сетевая ошибка. Различать полезно: сеть чинить не надо.
+- Заданные свои `conditions` ЗАМЕЩАЮТ дефолтные целиком, вместе с
+  `[CERTIFICATE_EXPIRATION] > 240h`. Если условие своё — страховку от
+  протухшего сертификата надо повторить руками.
+- С включённым OIDC под аутентификацию уходит и API: `/api/v1/endpoints/statuses`
+  отдаёт 401 даже изнутри docker-сети. Смотреть состояние проверок в этом
+  случае — только в логах контейнера.
 
 ### observability
 
