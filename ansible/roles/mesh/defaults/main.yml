@@ -22,6 +22,11 @@ mesh_server_ipv4: "{{ ansible_facts['default_ipv4']['address'] | default('') }}"
 # российский регион через mesh_derp_paths.
 mesh_derp_server_enabled: true
 mesh_derp_region_id: 900
+# Код и имя ОБЯЗАНЫ совпадать с реальным городом машины: клиенты видят их в
+# `tailscale netcheck`, и неверная метка врёт про задержку. Значения ниже —
+# заглушка, переопределять в host_vars. Стенд стоял в Хельсинки, переехал в
+# Стокгольм, а метка осталась — netcheck месяц показывал «Nearest DERP:
+# Helsinki» для реле, стоящего в Швеции.
 mesh_derp_region_code: hel
 mesh_derp_region_name: Helsinki
 

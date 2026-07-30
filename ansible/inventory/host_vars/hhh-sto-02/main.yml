@@ -51,6 +51,13 @@ edge_oidc_client_id: 098f02a7-3b37-4aec-b7e3-25dadb4f608b
 # --- mesh (headscale + headplane) -------------------------------------------
 mesh_domain: mesh.cosmdandy.dev
 
+# Машина в Стокгольме, и метка встроенного DERP должна это отражать: код и
+# имя видны клиентам в `tailscale netcheck`. В дефолтах роли стоит hel от
+# прежнего стенда в Хельсинки — с ней netcheck показывал «Nearest DERP:
+# Helsinki» для реле, физически стоящего в Швеции.
+mesh_derp_region_code: sto
+mesh_derp_region_name: Stockholm
+
 # Внешний DERP-релей на HostHatch (Стокгольм), region_id 901: 900 занят
 # встроенным, публичные регионы tailscale двузначные. Добавляется рядом со
 # встроенным, а не вместо — клиент выбирает быстрейший сам.
