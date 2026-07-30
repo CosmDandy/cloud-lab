@@ -39,7 +39,10 @@ module "server" {
 
   # Control-плоскость держит состояние, которое нельзя пересоздать
   # плейбуком, поэтому удаляется только осознанно — через снятие флага.
-  protected = each.value.role == "control"
+  # Значение берётся из описания машины, а не выводится из role: role
+  # используется ещё и в метках, и связывать с ним защиту от удаления
+  # означало бы, что снять защиту нельзя, не переписав метки.
+  protected = each.value.protected
 
   cloud_init = templatefile("${path.module}/cloud-init/server.yaml.tftpl", {
     ssh_public_keys = var.ssh_public_keys

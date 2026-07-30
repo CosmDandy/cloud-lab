@@ -34,6 +34,11 @@ variable "servers" {
     udp_ports = list(number)
     image     = optional(string, "ubuntu-24.04")
     labels    = optional(map(string), {})
+    # Защита от удаления. По умолчанию включена: машины в этом модуле
+    # держат состояние, которое плейбуком не пересоздать. Снимается
+    # отдельным apply перед выводом машины из эксплуатации — так удаление
+    # требует двух осознанных шагов, а не одного.
+    protected = optional(bool, true)
   }))
   default = {}
 }

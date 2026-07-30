@@ -14,9 +14,13 @@ acme_email = "tkondrashin@icloud.com"
 
 servers = {
   htz-hel-01 = {
-    location  = "hel1"
-    type      = "cax11"
-    role      = "control"
+    location = "hel1"
+    type     = "cax11"
+    role     = "control"
+    # Снято 30.07.2026: панель переехала на hhh-sto-02, машина выводится
+    # из эксплуатации. Пока стоит true, apply на удаление падает — это и
+    # есть смысл флага. Вернуть true, если машина внезапно останется.
+    protected = false
     tcp_ports = [80, 443, 3478]
     # 41641 — прямые соединения tailscale. Был открыт руками в панели
     # Hetzner и отсутствовал здесь, поэтому apply закрыл бы его и увёл
