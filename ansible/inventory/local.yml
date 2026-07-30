@@ -5,11 +5,15 @@ all:
     ansible_python_interpreter: /usr/bin/python3
 
   hosts:
-    # Work VM
+    # Work VM. Ключ инвентаря — work-d-01, а в tailnet узел зовётся
+    # kvt-d-01.infra: имя в сети выбрано при регистрации 30.07.2026 и
+    # оставлено осознанно. Переименовывать ключ не стали — за него
+    # цепляются host_vars/work-d-01/, пример в playbooks/xray-client.yml
+    # и ссылки в docs/dpi/.
     work-d-01:
       ansible_host: 192.168.82.61
       ansible_user: cluster
-      ts_hostname: work-d-01.infra
+      ts_hostname: kvt-d-01.infra
       ts_advertise_routes: "192.168.20.0/24,192.168.82.0/24"
 
     # Proxmox Cluster
