@@ -143,6 +143,23 @@ oidc_clients:
     # клиент создался бы, а вход всё равно падал бы, только по другой причине.
     pkce_enabled: false
 
+  # Вход в веб-интерфейс кластера Proxmox pve-kvt-l. Redirect URI Proxmox не
+  # настраивается — он собирает его из адреса, по которому пришёл браузер,
+  # поэтому перечислены все три ноды в обоих видах: по IP и по имени .local
+  # из их же сертификата. Заходите с четвёртой ноды или через новое имя —
+  # адрес нужно добавить сюда, иначе Pocket ID отвергнет redirect.
+  - id: "{{ proxmox_oidc_client_id }}"
+    name: proxmox
+    callback_urls:
+      - "https://192.168.20.151:8006"
+      - "https://192.168.20.152:8006"
+      - "https://192.168.20.153:8006"
+      - "https://pve-kvt-l-01.local:8006"
+      - "https://pve-kvt-l-02.local:8006"
+      - "https://pve-kvt-l-03.local:8006"
+    group_restricted: true
+    allowed_user_groups: [admins]
+
   # Вход в панель. Клиент описан здесь, а НЕ заводится руками в UI, хотя
   # runbook раньше советовал именно так: клиент gatus был заведён руками, в
   # коде его не было, и это вскрылось только на чистом Pocket ID ошибкой
@@ -181,6 +198,11 @@ panel_sub_domain: sub.cosmdandy.dev
 # /oauth2/callback/:provider, и для провайдера Generic это
 # /oauth2/callback/generic.
 panel_oidc_client_id: 01cf34f5-dab9-4d7a-bf52-6771264069a8
+
+# Вход в Proxmox. Машины кластера живут в домашней сети и ролями не
+# управляются — здесь только клиент Pocket ID; сам realm заводится на
+# кластере командой pveum, см. docs/proxmox-sso.md.
+proxmox_oidc_client_id: 4d41a3ad-ff75-4167-aba6-76684b3c8982
 
 # Корень домена подписок сам по себе ничего не отдаёт: страница обслуживает
 # только пути вида /<short_uuid>, а на / и /robots.txt закрывает соединение,
