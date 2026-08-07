@@ -1,7 +1,6 @@
 ---
-# VPN nodes (managed manually via Mivocloud and similar providers).
-# Terraform держит две машины: боевой htz-hel-01 (terraform/main.tf) и стенд
-# htz-hel-test (terraform/live/htz-hel-test/).
+# Машины за пределами дома. Terraform ни одну из них не создаёт: в
+# terraform/live/hhh-sto-02/ описан только DNS, а провайдера у HostHatch нет.
 #
 # Что раскатывается на машину, задаёт её host_services — список ролей из
 # playbooks/site.yml. Группы ниже отвечают только за связность: под каким
@@ -13,18 +12,39 @@ all:
     ansible_ssh_common_args: "-o StrictHostKeyChecking=accept-new -o PreferredAuthentications=publickey"
 
   children:
+    # Боевые ноды Remnawave. Контейнер remnanode развёрнут вне репозитория —
+    # роли для него нет, Ansible отвечает только за тюнинг ядра
+    # (playbooks/vpn-node-tune.yml). Адреса и страны сверены с панелью
+    # 03.08.2026; машины Mivocloud (miv-chi-01, miv-ldn-01) убраны — их нет
+    # ни в панели, ни в жизни.
+    #
+    # host_services не заданы: ноды разворачиваются отдельным плейбуком, а не
+    # site.yml.
     vpn_nodes:
       vars:
         ansible_user: root
-      # host_services не заданы: ноды разворачиваются отдельными плейбуками
-      # (vpn-node-tune.yml), а не site.yml.
       hosts:
-        miv-chi-01:
-          ansible_host: 94.158.245.24
-          country_code: MD
-        miv-ldn-01:
-          ansible_host: 194.180.158.12
-          country_code: GB
+        # Коды стран в кавычках не для красоты: NO без них YAML читает как
+        # булево false, и Осло получает country_code: False.
+        hhh-ams-01:
+          ansible_host: 85.155.190.66
+          country_code: "NL"
+        hhh-osl-01:
+          ansible_host: 91.190.155.237
+          country_code: "NO"
+        hhh-sto-01:
+          ansible_host: 167.104.104.131
+          country_code: "SE"
+          # Здесь же стоял derper, снят вместе с замером 2026-07-28, а 29.07
+          # удалена и запись derp-sto.cosmdandy.dev. Поднимать роль на
+          # нерезолвящемся имени нельзя — derper берёт сертификат через
+          # TLS-ALPN-01, и letsencrypt откажет.
+          #
+          # Чтобы вернуть: завести запись на этот адрес, добавить
+          # host_services: [derper] и раскомментировать mesh_derp_regions в
+          # host_vars control-plane. Ровно одна роль: base трогает sshd на
+          # живой машине, а docker тут стоит и настроен не нами.
+          derper_hostname: derp-sto.cosmdandy.dev
 
     # Control plane: headscale, headplane, traefik, OIDC, панель, наблюдаемость.
     # Адреса статические намеренно — динамический inventory-плагин вернул бы
@@ -83,23 +103,3 @@ all:
           ansible_host: 83.220.174.55
           derper_hostname: derp.cosmdandy.ru
           host_services: [base, docker, derper]
-
-    # Релеи на чужих машинах: узел уже занят посторонней нагрузкой и
-    # управляется не только нами.
-    relay_external:
-      vars:
-        ansible_user: root
-      hosts:
-        # host_services пуст: релей снят вместе с замером 2026-07-28, а
-        # 29.07 удалена и запись derp-sto.cosmdandy.dev. Поднимать роль
-        # сейчас нельзя — derper берёт сертификат через TLS-ALPN-01, и на
-        # нерезолвящемся имени letsencrypt откажет.
-        #
-        # Чтобы вернуть: завести запись на 167.104.104.131, вернуть
-        # host_services: [derper] и раскомментировать mesh_derp_regions в
-        # host_vars стенда. Ровно одна роль: base трогает sshd на живом
-        # чужом сервере, а docker там уже стоит и настроен не нами.
-        hhh-sto-01:
-          ansible_host: 167.104.104.131
-          derper_hostname: derp-sto.cosmdandy.dev
-          host_services: []

@@ -2,11 +2,11 @@
 
 Идемпотентный server-tuning для VPN-нод (RemnaWave + Xray-core): BBR + fq, увеличенные TCP/UDP буферы, `tcp_notsent_lowat`, TFO, file-descriptor лимиты, conntrack.
 
-Значения соответствуют рекомендациям из `docs/dpi-report-22-06-26.md` (Phase 1) и заменяют статический sysctl-блок из `terraform/cloud-init/vpn.yaml.tftpl`, который применялся однократно при provisioning Hetzner-серверов. Для нод, развёрнутых вручную через Mivocloud (`miv-chi-01`, `miv-ldn-01`), эта роль — единственный путь применить тюнинг.
+Значения соответствуют рекомендациям из `docs/dpi/report-2026-06-22.md` (Phase 1). Целевые машины — три ноды HostHatch (`hhh-ams-01`, `hhh-osl-01`, `hhh-sto-01`) из группы `vpn_nodes`: контейнер `remnanode` на них развёрнут вне репозитория, и эта роль — единственное, чем ими управляет Ansible.
 
 ## Что делает
 
-- `tasks/sysctl.yaml` — `modprobe tcp_bbr`, `/etc/modules-load.d/bbr.conf`, через `ansible.posix.sysctl` пишет все значения в `/etc/sysctl.d/99-vpn-tuning.conf` с `reload: true`
+- `tasks/sysctl.yaml` — `modprobe tcp_bbr`, `/etc/modules-load.d/bbr.conf`, через `ansible.posix.sysctl` пишет все значения в `/etc/sysctl.d/99-vpn-tuning.conf` с `reload: true`, и отдельно применяет корневой qdisc к уже поднятому интерфейсу: `net.core.default_qdisc` действует только на интерфейсы, поднятые после его установки, поэтому на живой машине одним sysctl не обойтись
 - `tasks/limits.yaml` — `community.general.pam_limits` для `* soft/hard nofile = 1048576`, плюс `DefaultLimitNOFILE` в `/etc/systemd/system.conf` (с `systemctl daemon-reexec` через handler)
 
 ## Переменные
@@ -26,11 +26,16 @@
     - vpn_tuning
 ```
 
+Дефолтный инвентарь в `ansible.cfg` — домашний `local.yml`, поэтому
+`-i inventory/cloud.yml` обязателен: без него группа `vpn_nodes` не находится и
+прогон завершается успехом, не сделав ничего.
+
 ```bash
-ansible-lint ansible/roles/vpn_tuning/
-ansible-playbook ansible/playbooks/vpn-node-tune.yml --syntax-check
-ansible-playbook ansible/playbooks/vpn-node-tune.yml -l miv-ldn-01 --check --diff
-ansible-playbook ansible/playbooks/vpn-node-tune.yml -l miv-ldn-01
+cd ansible
+uvx ansible-lint --profile production roles/vpn_tuning playbooks/vpn-node-tune.yml
+ansible-playbook -i inventory/cloud.yml playbooks/vpn-node-tune.yml --syntax-check
+ansible-playbook -i inventory/cloud.yml playbooks/vpn-node-tune.yml -l hhh-ams-01 --check --diff
+ansible-playbook -i inventory/cloud.yml playbooks/vpn-node-tune.yml -l hhh-ams-01
 ```
 
 ## Verification
@@ -39,8 +44,11 @@ ansible-playbook ansible/playbooks/vpn-node-tune.yml -l miv-ldn-01
 ```bash
 ssh root@<node> '
   sysctl net.ipv4.tcp_congestion_control net.core.default_qdisc \
-         net.core.rmem_max fs.file-max net.ipv4.tcp_notsent_lowat'
-# bbr / fq / 67108864 / 2097152 / 131072
+         net.core.rmem_max fs.file-max net.ipv4.tcp_notsent_lowat \
+         net.core.rmem_default net.ipv4.tcp_slow_start_after_idle
+  tc qdisc show dev eth0 | head -1'
+# bbr / fq / 67108864 / 2097152 / 131072 / 1048576 / 0
+# и корневой qdisc — fq, а не pfifo_fast
 
 # В новой сессии:
 ssh root@<node> 'ulimit -n'  # ≥ 1048576
