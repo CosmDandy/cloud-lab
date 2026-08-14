@@ -5,12 +5,11 @@
       - panel_domain | length > 0
       - panel_sub_domain | length > 0
       - panel_postgres_password | length > 0
-      - panel_jwt_auth_secret | length > 0
-      - panel_jwt_api_tokens_secret | length > 0
+      - panel_app_secret | length > 0
     fail_msg: >-
-      Нужны panel_domain, panel_sub_domain и три секрета: пароль postgres
-      и обе JWT-соли. Смена JWT_AUTH_SECRET разлогинивает всех,
-      смена JWT_API_TOKENS_SECRET обнуляет выданные API-токены.
+      Нужны panel_domain, panel_sub_domain и два секрета: пароль postgres
+      и panel_app_secret. Смена panel_app_secret разлогинивает всех и
+      обнуляет выданные API-токены — одной солью подписаны и те, и другие.
 
 - name: Create stack directories
   ansible.builtin.file:

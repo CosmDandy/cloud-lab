@@ -18,8 +18,13 @@ panel_postgres_db: remnawave
 panel_postgres_user: remnawave
 panel_postgres_password: ""
 
-panel_jwt_auth_secret: ""
-panel_jwt_api_tokens_secret: ""
+# Единственная соль: в 3.0 бэкенд слил JWT_AUTH_SECRET и
+# JWT_API_TOKENS_SECRET в APP_SECRET и обеих старых переменных больше не
+# знает. Значение перенесено из прежней panel_jwt_auth_secret: ею, вопреки
+# названию, подписывались и выданные в UI API-токены — проверено сверкой
+# HMAC подписи токена страницы подписок. Смена значения обнуляет разом
+# сессии и все API-токены, включая тот, что лежит в SOPS.
+panel_app_secret: ""
 
 # /metrics закрыт basic auth — из-под него скрейпит роль observability.
 panel_metrics_user: metrics

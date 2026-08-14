@@ -7,11 +7,9 @@ DATABASE_URL=postgresql://{{ panel_postgres_user }}:{{ panel_postgres_password }
 REDIS_HOST=redis
 REDIS_PORT=6379
 
-# 3.2.0 свёл обе JWT-соли в одну переменную: без APP_SECRET панель не
+# 3.0 свела обе JWT-соли в одну переменную: без APP_SECRET панель не
 # стартует вовсе, а падает в цикл перезапусков с ошибкой валидации env.
-# Значение берётся из прежней panel_jwt_auth_secret намеренно — сменить
-# его здесь значит разлогинить всех и обнулить выданные API-токены.
-APP_SECRET={{ panel_jwt_auth_secret }}
+APP_SECRET={{ panel_app_secret }}
 
 IS_TELEGRAM_NOTIFICATIONS_ENABLED={{ panel_telegram_notifications_enabled | lower }}
 
