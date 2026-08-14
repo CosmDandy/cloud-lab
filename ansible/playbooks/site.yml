@@ -110,6 +110,30 @@
     - role: gatus
       tags: [gatus]
 
+# Второй экземпляр той же роли — публичная витрина. Переменные приходят с
+# префиксом gatus_public_ и переопределяются здесь: host_vars общие для
+# хоста, и без префикса домен, набор проверок и заголовки столкнулись бы с
+# настройками внутреннего экземпляра.
+- name: Gatus public
+  hosts: svc_gatus_public
+  become: true
+
+  roles:
+    - role: gatus
+      vars:
+        gatus_instance: gatus-public
+        gatus_domain: "{{ gatus_public_domain }}"
+        gatus_endpoints: "{{ gatus_public_endpoints }}"
+        gatus_ui_title: "{{ gatus_public_ui_title }}"
+        gatus_ui_header: "{{ gatus_public_ui_header }}"
+        # Витрина: без входа, без адресов, без алертов и метрик — они уже
+        # есть у внутреннего экземпляра, дублировать нечего.
+        gatus_oidc_enabled: false
+        gatus_telegram_enabled: false
+        gatus_metrics_enabled: false
+        gatus_hide_endpoint_details: true
+      tags: [gatus-public]
+
 - name: Derper
   hosts: svc_derper
   become: true

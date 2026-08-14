@@ -2,9 +2,11 @@
 web:
   port: {{ gatus_port }}
 
+{% if gatus_metrics_enabled %}
 # /metrics в формате prometheus на том же порту. Скрейпит vmagent изнутри
 # docker-сети, минуя traefik: наружу эндпоинт не выставлен.
 metrics: true
+{% endif %}
 
 storage:
   # sqlite, а не память: иначе история проверок обнуляется при каждом
@@ -47,6 +49,12 @@ endpoints:
     group: {{ ep.group }}
 {% endif %}
     url: "{{ ep.url }}"
+{% if gatus_hide_endpoint_details %}
+    ui:
+      hide-hostname: true
+      hide-url: true
+      hide-conditions: true
+{% endif %}
 {% if ep.headers is defined %}
     headers:
 {% for key, value in ep.headers.items() %}

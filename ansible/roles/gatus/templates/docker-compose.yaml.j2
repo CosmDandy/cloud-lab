@@ -1,14 +1,14 @@
 # Managed by ansible (roles/gatus). Правки на хосте будут перезаписаны.
-name: gatus
+name: {{ gatus_instance }}
 
 services:
   gatus:
     image: {{ gatus_image }}
-    container_name: gatus
+    container_name: {{ gatus_instance }}
     restart: unless-stopped
     volumes:
       - ./config.yaml:/config/config.yaml:ro
-      - gatus_data:/data
+      - {{ gatus_instance }}_data:/data
     expose:
       - "{{ gatus_port }}"
     # ICMP-проверки шлют raw-пакеты. Без этой привилегии они не падают с
@@ -22,10 +22,10 @@ services:
       - edge
     labels:
       traefik.enable: "true"
-      traefik.http.routers.gatus.rule: "Host(`{{ gatus_domain }}`)"
-      traefik.http.routers.gatus.entrypoints: websecure
-      traefik.http.routers.gatus.tls.certresolver: letsencrypt
-      traefik.http.services.gatus.loadbalancer.server.port: "{{ gatus_port }}"
+      traefik.http.routers.{{ gatus_instance }}.rule: "Host(`{{ gatus_domain }}`)"
+      traefik.http.routers.{{ gatus_instance }}.entrypoints: websecure
+      traefik.http.routers.{{ gatus_instance }}.tls.certresolver: letsencrypt
+      traefik.http.services.{{ gatus_instance }}.loadbalancer.server.port: "{{ gatus_port }}"
 
 networks:
   edge:
@@ -33,5 +33,5 @@ networks:
     external: true
 
 volumes:
-  gatus_data:
-    name: gatus_data
+  {{ gatus_instance }}_data:
+    name: {{ gatus_instance }}_data

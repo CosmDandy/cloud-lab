@@ -376,3 +376,53 @@ gatus_endpoints:
     conditions:
       - "[STATUS] == 200"
       - "[BODY].response.isConnected == true"
+
+# --- gatus-public (публичная статус-страница) --------------------------------
+# Отдельный экземпляр той же роли, переопределяется в site.yml. Отвечает на
+# единственный вопрос пользователя: «это у меня или у них». Поэтому здесь
+# нет ни внутренних сервисов, ни адресов узлов — только страны и результат.
+#
+# Запись A на этот домен обязана быть непроксируемой: сквозь оранжевое
+# облако страница не откроется как раз в России, ради которой она и нужна.
+gatus_public_domain: status.vpn.cosmdandy.dev
+gatus_public_ui_title: cosmdandy VPN
+gatus_public_ui_header: Состояние сервиса
+
+# Проверяется isConnected, а не TCP-порт: открытый порт сохраняется и у
+# ноды, потерявшей связь с панелью, — для витрины это была бы ложь в
+# зелёную сторону. Токен тот же read-only, что у внутреннего экземпляра.
+gatus_public_endpoints:
+  - name: Швеция
+    group: Узлы
+    url: https://vpn.cosmdandy.dev/api/nodes/98895b84-da4f-4fde-9111-e7970c93410f
+    headers:
+      Authorization: "Bearer {{ gatus_panel_api_token }}"
+    conditions:
+      - "[STATUS] == 200"
+      - "[BODY].response.isConnected == true"
+  - name: Нидерланды
+    group: Узлы
+    url: https://vpn.cosmdandy.dev/api/nodes/43cb4483-02c1-4c81-904a-82442c0691aa
+    headers:
+      Authorization: "Bearer {{ gatus_panel_api_token }}"
+    conditions:
+      - "[STATUS] == 200"
+      - "[BODY].response.isConnected == true"
+  - name: Норвегия
+    group: Узлы
+    url: https://vpn.cosmdandy.dev/api/nodes/48b8e924-ac49-4a65-a57e-02cd2282f28f
+    headers:
+      Authorization: "Bearer {{ gatus_panel_api_token }}"
+    conditions:
+      - "[STATUS] == 200"
+      - "[BODY].response.isConnected == true"
+
+  # Без страницы подписок клиент не обновит конфиг, даже когда все узлы
+  # живы, — для пользователя это тоже «не работает».
+  - name: Подписки
+    group: Сервис
+    url: https://sub.cosmdandy.dev/
+    client:
+      ignore-redirect: true
+    conditions:
+      - "[STATUS] == 302"
