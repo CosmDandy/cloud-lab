@@ -313,3 +313,47 @@ gatus_endpoints:
     url: "tcp://hhh-osl-01.vpn.cosmdandy.dev:443"
     conditions:
       - "[CONNECTED] == true"
+
+  # Отдельная проверка самого API. Нужна, чтобы отличить протухший токен от
+  # упавших нод: при 401 покраснели бы разом все три проверки ниже, и вывод
+  # «ноды легли» был бы неверным — TCP-проверки выше в этот момент остаются
+  # зелёными. Здесь же в уведомление придёт имя panel-api.
+  - name: panel-api
+    group: vpn
+    url: https://vpn.cosmdandy.dev/api/nodes
+    headers:
+      Authorization: "Bearer {{ gatus_panel_api_token }}"
+    conditions:
+      - "[STATUS] == 200"
+
+  # Нода глазами панели — единственный ответ на вопрос «обслуживает ли она
+  # людей». TCP-порт остаётся открытым, пока жив процесс Xray, даже когда
+  # нода потеряла связь с панелью и не получает ни конфига, ни списка
+  # пользователей.
+  #
+  # По эндпоинту на ноду, а не разбор массива из /api/nodes: порядок в
+  # ответе не гарантирован, а так у каждой свой uptime и своё уведомление.
+  - name: hhh-sto-01-panel
+    group: nodes
+    url: https://vpn.cosmdandy.dev/api/nodes/98895b84-da4f-4fde-9111-e7970c93410f
+    headers:
+      Authorization: "Bearer {{ gatus_panel_api_token }}"
+    conditions:
+      - "[STATUS] == 200"
+      - "[BODY].response.isConnected == true"
+  - name: hhh-ams-01-panel
+    group: nodes
+    url: https://vpn.cosmdandy.dev/api/nodes/43cb4483-02c1-4c81-904a-82442c0691aa
+    headers:
+      Authorization: "Bearer {{ gatus_panel_api_token }}"
+    conditions:
+      - "[STATUS] == 200"
+      - "[BODY].response.isConnected == true"
+  - name: hhh-osl-01-panel
+    group: nodes
+    url: https://vpn.cosmdandy.dev/api/nodes/48b8e924-ac49-4a65-a57e-02cd2282f28f
+    headers:
+      Authorization: "Bearer {{ gatus_panel_api_token }}"
+    conditions:
+      - "[STATUS] == 200"
+      - "[BODY].response.isConnected == true"
