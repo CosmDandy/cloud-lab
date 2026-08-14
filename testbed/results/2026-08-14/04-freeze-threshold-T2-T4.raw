@@ -1,0 +1,77 @@
+=== T2: порог параллельности, 23:25:38Z ===
+--- 2 параллельных ---
+n=2#1 получено=100000 t=3.955325
+n=2#2 получено=100000 t=4.061933
+(пауза 150 с)
+--- 3 параллельных ---
+n=3#3 получено=100000 t=7.474189
+n=3#2 получено=100000 t=7.511993
+n=3#1 получено=100000 t=7.601652
+(пауза 150 с)
+--- 4 параллельных ---
+curl: (28) Connection timed out after 9468 milliseconds
+n=4#3 получено=0 t=9.468114
+curl: (28) Connection timed out after 9546 milliseconds
+n=4#1 получено=0 t=9.545298
+curl: (28) Connection timed out after 9552 milliseconds
+n=4#4 получено=0 t=9.551191
+curl: (28) Connection timed out after 9636 milliseconds
+n=4#2 получено=0 t=9.635611
+(пауза 150 с)
+--- 5 параллельных ---
+curl: (28) Connection timed out after 12738 milliseconds
+n=5#1 получено=0 t=12.737503
+curl: (28) Connection timed out after 13281 milliseconds
+curl: (28) Connection timed out after 13399 milliseconds
+n=5#5 получено=0 t=13.281501
+n=5#3 получено=0 t=13.399938
+curl: (28) Connection timed out after 13404 milliseconds
+n=5#2 получено=0 t=13.404767
+curl: (28) Connection timed out after 13733 milliseconds
+n=5#4 получено=0 t=13.732129
+(пауза 150 с)
+
+=== T3: длительность заморозки, 23:36:17Z ===
+--- триггер: 6 параллельных ---
+curl: (28) Connection timed out after 16453 milliseconds
+trig#4 получено=0 t=16.454052
+curl: (28) Connection timed out after 16483 milliseconds
+trig#6 получено=0 t=16.483494
+curl: (28) Connection timed out after 16574 milliseconds
+curl: (28) Connection timed out after 16657 milliseconds
+curl: (28) Connection timed out after 16626 milliseconds
+curl: (28) Connection timed out after 16646 milliseconds
+trig#3 получено=0 t=16.574223
+trig#2 получено=0 t=16.657795
+trig#5 получено=0 t=16.626795
+trig#1 получено=0 t=16.646719
+t+15c получено=100000 t=2.231281
+t+30c получено=100000 t=2.452568
+t+45c получено=100000 t=2.480384
+t+60c получено=100000 t=2.352987
+t+75c получено=100000 t=2.426602
+t+90c получено=100000 t=2.403636
+t+105c получено=100000 t=2.256220
+t+120c получено=100000 t=2.289764
+
+=== T4: к чему привязана заморозка, 23:38:56Z ===
+--- повторный триггер ---
+curl: (28) Connection timed out after 9599 milliseconds
+trig2#5 получено=0 t=9.599887
+curl: (28) Connection timed out after 9674 milliseconds
+trig2#6 получено=0 t=9.674591
+curl: (28) Connection timed out after 10166 milliseconds
+curl: (28) Connection timed out after 10158 milliseconds
+trig2#1 получено=0 t=10.166194
+trig2#4 получено=0 t=10.158337
+curl: (28) Connection timed out after 10246 milliseconds
+trig2#3 получено=0 t=10.246751
+curl: (28) Operation timed out after 10909 milliseconds with 0 bytes received
+trig2#2 получено=0 t=10.908858
+тот же SNI: получено=100000
+другой SNI на CF: получено=204
+curl: (35) OpenSSL/3.0.20: error:0A000458:SSL routines::tlsv1 unrecognized name
+своя нода sto-02: получено=0 код=000
+своя нода sto-01: получено=0 код=302
+
+конец 23:39:14Z

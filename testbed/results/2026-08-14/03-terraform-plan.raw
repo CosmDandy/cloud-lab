@@ -1,0 +1,30 @@
+      + comment_modified_on = (known after apply)
+      + content             = "167.104.104.131"
+      + created_on          = (known after apply)
+      + id                  = (known after apply)
+      + meta                = (known after apply)
+      + modified_on         = (known after apply)
+      + name                = "hhh-sto-01.vpn"
+      + proxiable           = (known after apply)
+      + proxied             = false
+      + settings            = (known after apply)
+      + tags                = (known after apply)
+      + tags_modified_on    = (known after apply)
+      + ttl                 = 300
+      + type                = "A"
+      + zone_id             = "1c6c22b9c953bcffffa5aec356eb547e"
+    }
+
+Plan: 3 to add, 0 to change, 0 to destroy.
+
+Changes to Outputs:
+  + node_names = {
+      + hhh-ams-01 = "hhh-ams-01.vpn.cosmdandy.dev"
+      + hhh-osl-01 = "hhh-osl-01.vpn.cosmdandy.dev"
+      + hhh-sto-01 = "hhh-sto-01.vpn.cosmdandy.dev"
+    }
+
+─────────────────────────────────────────────────────────────────────────────
+
+Note: You didn't use the -out option to save this plan, so Terraform can't
+guarantee to take exactly these actions if you run "terraform apply" now.

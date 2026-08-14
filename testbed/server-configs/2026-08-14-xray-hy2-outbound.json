@@ -1,0 +1,44 @@
+{
+  "log": {
+    "loglevel": "debug"
+  },
+  "inbounds": [
+    {
+      "port": 1100,
+      "listen": "127.0.0.1",
+      "protocol": "socks",
+      "settings": {
+        "udp": true
+      }
+    }
+  ],
+  "outbounds": [
+    {
+      "protocol": "hysteria",
+      "settings": {
+        "version": 2,
+        "address": "hhh-ams-01.vpn.cosmdandy.dev",
+        "port": 39501
+      },
+      "streamSettings": {
+        "network": "hysteria",
+        "security": "tls",
+        "tlsSettings": {
+          "alpn": [
+            "h3"
+          ],
+          "serverName": "hhh-ams-01.vpn.cosmdandy.dev"
+        },
+        "hysteriaSettings": {
+          "version": 2,
+          "auth": "ЗАМЕНИТЬ"
+        },
+        "finalMask": {
+          "salamander": {
+            "password": "ЗАМЕНИТЬ"
+          }
+        }
+      }
+    }
+  ]
+}
