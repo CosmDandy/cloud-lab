@@ -75,18 +75,6 @@ all:
             - gatus_public
             - atuin
 
-        # Стенд. Своё дело сделал: все роли обкатаны, три прохода runbook
-        # пройдены, повтор давал changed=0. Машина остаётся поднятой как
-        # запасной аэродром на время переезда, но ролями больше не
-        # управляется — host_services пуст намеренно.
-        #
-        # Иначе прогон без --limit раскатывал бы стенд и hhh-sto-02
-        # одновременно, и обе машины дрались бы за одни и те же имена в
-        # ACME и за одних и тех же OIDC-клиентов.
-        htz-hel-test:
-          ansible_host: 62.238.52.58
-          host_services: []
-
         # Боевая машина. host_services пуст намеренно: она до сих пор
         # развёрнута схемой из docker-compose и ручных workflow (снесены
         # вместе со stacks/control и stacks/monitoring, когда переезд на
@@ -95,13 +83,3 @@ all:
         # раскатку не входит вовсе.
         htz-hel-01:
           ansible_host: 204.168.216.193
-
-    # Релей в России. Состояния не держит: снести и поднять заново — норма.
-    relay:
-      vars:
-        ansible_user: github-runner
-      hosts:
-        vds-mesh-mos-01:
-          ansible_host: 83.220.174.55
-          derper_hostname: derp.cosmdandy.ru
-          host_services: [base, docker, derper]
