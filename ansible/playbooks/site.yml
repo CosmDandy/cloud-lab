@@ -110,6 +110,14 @@
     - role: gatus
       tags: [gatus]
 
+- name: Atuin
+  hosts: svc_atuin
+  become: true
+
+  roles:
+    - role: atuin
+      tags: [atuin]
+
 - name: Derper
   hosts: svc_derper
   become: true

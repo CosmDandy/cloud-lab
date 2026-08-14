@@ -289,3 +289,11 @@ gatus_endpoints:
     conditions:
       - "[STATUS] == 302"
       - "[CERTIFICATE_EXPIRATION] > 240h"
+
+# --- atuin (синхронизация истории shell) ------------------------------------
+atuin_domain: atuin.cosmdandy.dev
+
+# Регистрация закрыта. Чтобы завести аккаунт: поставить true, прогнать роль,
+# выполнить `atuin register` с клиента, вернуть false и прогнать ещё раз.
+# Пароль и ключ шифрования — единственная защита: SSO у atuin нет и не будет.
+atuin_open_registration: false

@@ -1,0 +1,42 @@
+---
+- name: Validate required variables
+  ansible.builtin.assert:
+    that:
+      - atuin_domain | length > 0
+      - atuin_db_uri | length > 0
+    fail_msg: Нужны atuin_domain и atuin_db_uri.
+
+- name: Create stack directory
+  ansible.builtin.file:
+    path: "{{ atuin_dir }}"
+    state: directory
+    owner: "{{ atuin_owner }}"
+    group: "{{ atuin_owner }}"
+    mode: "0750"
+
+- name: Render compose file
+  ansible.builtin.template:
+    src: docker-compose.yaml.j2
+    dest: "{{ atuin_dir }}/docker-compose.yaml"
+    owner: "{{ atuin_owner }}"
+    group: "{{ atuin_owner }}"
+    mode: "0640"
+  notify: Restart atuin stack
+
+- name: Deploy stack
+  community.docker.docker_compose_v2:
+    project_src: "{{ atuin_dir }}"
+    state: present
+    pull: missing
+    remove_orphans: true
+
+# Открытая регистрация — состояние на несколько минут, ровно чтобы завести
+# себе аккаунт. Если роль отработала с ней включённой, об этом должно быть
+# видно в выводе, иначе сервер так и останется принимать чужие регистрации.
+- name: Warn about open registration
+  ansible.builtin.debug:
+    msg: >-
+      ВНИМАНИЕ: atuin_open_registration включена — сервер принимает
+      регистрацию кого угодно. Заведите аккаунт (atuin register) и сразу
+      верните false, затем прогоните роль ещё раз.
+  when: atuin_open_registration | bool
