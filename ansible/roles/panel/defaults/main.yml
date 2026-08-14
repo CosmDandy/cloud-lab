@@ -5,7 +5,7 @@ panel_owner: root
 # Версии закреплены, включая subscription-page: на проде он ехал с latest
 # и обновлялся при каждом pull незаметно для деплоя.
 panel_backend_image: remnawave/backend:3.2.3
-panel_subscription_image: remnawave/subscription-page:7.2.6
+panel_subscription_image: remnawave/subscription-page:8.0.0
 panel_postgres_image: postgres:17-alpine
 panel_redis_image: redis:7-alpine
 
