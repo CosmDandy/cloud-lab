@@ -1,3 +1,4 @@
+---
 # Правила шифрования. sops применяет первое подходящее по path_regex,
 # поэтому порядок значим.
 #
@@ -30,7 +31,7 @@ keys:
 creation_rules:
   # Все ключи — равноправные получатели: файл расшифровывается любым из них,
   # потеря одного не запирает секреты.
-  - path_regex: ansible/inventory/(host_vars|group_vars)/.*/secrets\.sops\.ya?ml$
+  - path_regex: \.sops\.ya?ml$
     key_groups:
       - age:
           - *main

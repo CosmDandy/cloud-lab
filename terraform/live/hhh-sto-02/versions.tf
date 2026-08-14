@@ -11,8 +11,7 @@ terraform {
 
   # Только cloudflare: машину терраформ не создаёт. У HostHatch нет
   # провайдера, сервер заводится руками в панели, а сюда приезжает готовым
-  # адресом. Ровно тот случай, ради которого dns-record вынесен из модуля
-  # машины — см. комментарий в terraform/dns.tf.
+  # адресом. Ровно ради этого случая dns-record и вынесен в отдельный модуль.
   required_providers {
     cloudflare = {
       source  = "cloudflare/cloudflare"

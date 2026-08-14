@@ -58,7 +58,17 @@ module "dns" {
       for name in ["vpn", "sub"] :
       name => {
         target  = "${var.server_name}.${var.domain}"
-        proxied = true
+        proxied = false
+      }
+    },
+    # atuin — синхронизация истории shell. Проксируется: сюда ходит только
+    # CLI по HTTPS, никаких длинных соединений и UDP. История шифруется
+    # end-to-end на клиенте, так что Cloudflare видит шифротекст ровно как и
+    # сам сервер.
+    {
+      atuin = {
+        target  = "${var.server_name}.${var.domain}"
+        proxied = false
       }
     },
   )
