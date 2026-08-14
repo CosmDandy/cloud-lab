@@ -30,8 +30,13 @@ module "dns" {
     # Инфраструктурные имена НЕ проксируются, и это не недосмотр: headscale
     # раздаёт клиентам адрес узла под встроенный DERP, а за Cloudflare виден
     # был бы только адрес Cloudflare.
+    #
+    # status.vpn — публичная страница состояния, и для неё прямая запись
+    # обязательна по другой причине: её открывают из России, а адреса
+    # Cloudflare оттуда недоступны. Проксировать её значит спрятать ответ
+    # ровно от тех, кому он адресован.
     {
-      for name in ["mesh", "oidc", "grafana", "status", "traefik"] :
+      for name in ["mesh", "oidc", "grafana", "status", "status.vpn", "traefik"] :
       name => {
         target  = "${var.server_name}.${var.domain}"
         proxied = false

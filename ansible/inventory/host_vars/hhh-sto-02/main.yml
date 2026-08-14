@@ -290,6 +290,143 @@ gatus_endpoints:
       - "[STATUS] == 302"
       - "[CERTIFICATE_EXPIRATION] > 240h"
 
+  # Отдельная проверка самого API. Нужна, чтобы отличить протухший токен от
+  # упавших нод: при 401 покраснели бы разом все три проверки ниже, и вывод
+  # «ноды легли» был бы неверным — TCP-проверки в этот момент остаются
+  # зелёными. Здесь же в уведомление придёт имя panel-api.
+  - name: panel-api
+    group: vpn
+    url: https://vpn.cosmdandy.dev/api/nodes
+    headers:
+      Authorization: "Bearer {{ gatus_panel_api_token }}"
+    conditions:
+      - "[STATUS] == 200"
+
+  # Ноды. Каждая проверяется тремя способами, и слить их в одну проверку
+  # нельзя: эндпоинт в gatus — это один запрос по одному протоколу, а
+  # условия относятся к ответу на него. Да и не нужно — смысл именно в
+  # различении, одна общая проверка сказала бы «сломалось», не сказав что.
+  #
+  #   -tcp    порт 443 принимает соединение: машина жива и Xray держит
+  #           инбаунд. HTTP-запросом Reality не проверить — он для того и
+  #           сделан, чтобы отвечать чужому неотличимо от обычного сайта.
+  #           443, а не порт агента 2222: это путь, которым ходят
+  #           пользователи, и он же ломается первым при блокировке.
+  #   -icmp   машина отвечает на ping. Живой icmp при мёртвом tcp — упал
+  #           Xray; оба мёртвые — машина или сеть провайдера.
+  #   -panel  isConnected из API панели: единственный ответ на вопрос,
+  #           обслуживает ли нода людей. Порт остаётся открытым и тогда,
+  #           когда нода уже потеряла связь с панелью.
+  #
+  # По эндпоинту на ноду, а не разбор массива из /api/nodes: порядок в
+  # ответе не гарантирован, а так у каждой свой uptime и своё уведомление.
+  - name: hhh-sto-01-tcp
+    group: vpn nodes
+    url: "tcp://hhh-sto-01.vpn.cosmdandy.dev:443"
+    conditions:
+      - "[CONNECTED] == true"
+  - name: hhh-sto-01-icmp
+    group: vpn nodes
+    url: "icmp://hhh-sto-01.vpn.cosmdandy.dev"
+    conditions:
+      - "[CONNECTED] == true"
+  - name: hhh-sto-01-panel
+    group: vpn nodes
+    url: https://vpn.cosmdandy.dev/api/nodes/98895b84-da4f-4fde-9111-e7970c93410f
+    headers:
+      Authorization: "Bearer {{ gatus_panel_api_token }}"
+    conditions:
+      - "[STATUS] == 200"
+      - "[BODY].response.isConnected == true"
+
+  - name: hhh-ams-01-tcp
+    group: vpn nodes
+    url: "tcp://hhh-ams-01.vpn.cosmdandy.dev:443"
+    conditions:
+      - "[CONNECTED] == true"
+  - name: hhh-ams-01-icmp
+    group: vpn nodes
+    url: "icmp://hhh-ams-01.vpn.cosmdandy.dev"
+    conditions:
+      - "[CONNECTED] == true"
+  - name: hhh-ams-01-panel
+    group: vpn nodes
+    url: https://vpn.cosmdandy.dev/api/nodes/43cb4483-02c1-4c81-904a-82442c0691aa
+    headers:
+      Authorization: "Bearer {{ gatus_panel_api_token }}"
+    conditions:
+      - "[STATUS] == 200"
+      - "[BODY].response.isConnected == true"
+
+  - name: hhh-osl-01-tcp
+    group: vpn nodes
+    url: "tcp://hhh-osl-01.vpn.cosmdandy.dev:443"
+    conditions:
+      - "[CONNECTED] == true"
+  - name: hhh-osl-01-icmp
+    group: vpn nodes
+    url: "icmp://hhh-osl-01.vpn.cosmdandy.dev"
+    conditions:
+      - "[CONNECTED] == true"
+  - name: hhh-osl-01-panel
+    group: vpn nodes
+    url: https://vpn.cosmdandy.dev/api/nodes/48b8e924-ac49-4a65-a57e-02cd2282f28f
+    headers:
+      Authorization: "Bearer {{ gatus_panel_api_token }}"
+    conditions:
+      - "[STATUS] == 200"
+      - "[BODY].response.isConnected == true"
+
+# --- gatus-public (публичная статус-страница) --------------------------------
+# Отдельный экземпляр той же роли, переопределяется в site.yml. Отвечает на
+# единственный вопрос пользователя: «это у меня или у них». Поэтому здесь
+# нет ни внутренних сервисов, ни адресов узлов — только страны и результат.
+#
+# Запись A на этот домен обязана быть непроксируемой: сквозь оранжевое
+# облако страница не откроется как раз в России, ради которой она и нужна.
+gatus_public_domain: status.vpn.cosmdandy.dev
+gatus_public_ui_title: cosmdandy VPN
+gatus_public_ui_header: Состояние сервиса
+
+# Проверяется isConnected, а не TCP-порт: открытый порт сохраняется и у
+# ноды, потерявшей связь с панелью, — для витрины это была бы ложь в
+# зелёную сторону. Токен тот же read-only, что у внутреннего экземпляра.
+gatus_public_endpoints:
+  - name: Швеция
+    group: Узлы
+    url: https://vpn.cosmdandy.dev/api/nodes/98895b84-da4f-4fde-9111-e7970c93410f
+    headers:
+      Authorization: "Bearer {{ gatus_panel_api_token }}"
+    conditions:
+      - "[STATUS] == 200"
+      - "[BODY].response.isConnected == true"
+  - name: Нидерланды
+    group: Узлы
+    url: https://vpn.cosmdandy.dev/api/nodes/43cb4483-02c1-4c81-904a-82442c0691aa
+    headers:
+      Authorization: "Bearer {{ gatus_panel_api_token }}"
+    conditions:
+      - "[STATUS] == 200"
+      - "[BODY].response.isConnected == true"
+  - name: Норвегия
+    group: Узлы
+    url: https://vpn.cosmdandy.dev/api/nodes/48b8e924-ac49-4a65-a57e-02cd2282f28f
+    headers:
+      Authorization: "Bearer {{ gatus_panel_api_token }}"
+    conditions:
+      - "[STATUS] == 200"
+      - "[BODY].response.isConnected == true"
+
+  # Без страницы подписок клиент не обновит конфиг, даже когда все узлы
+  # живы, — для пользователя это тоже «не работает».
+  - name: Подписки
+    group: Сервис
+    url: https://sub.cosmdandy.dev/
+    client:
+      ignore-redirect: true
+    conditions:
+      - "[STATUS] == 302"
+
 # --- atuin (синхронизация истории shell) ------------------------------------
 atuin_domain: atuin.cosmdandy.dev
 
