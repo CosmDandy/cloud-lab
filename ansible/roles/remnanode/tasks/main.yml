@@ -97,3 +97,49 @@
     host: 127.0.0.1
     port: "{{ remnanode_port }}"
     timeout: 90
+
+# Port hopping ставится после контейнера: заворачивать диапазон на порт,
+# который ещё никто не слушает, значит несколько секунд отбивать клиентов
+# ICMP port unreachable вместо тишины.
+- name: Create nftables rules directory
+  ansible.builtin.file:
+    path: "{{ remnanode_porthop_rules | dirname }}"
+    state: directory
+    owner: root
+    group: root
+    mode: "0755"
+
+- name: Render port hopping rules
+  ansible.builtin.template:
+    src: hyhop.nft.j2
+    dest: "{{ remnanode_porthop_rules }}"
+    owner: root
+    group: root
+    mode: "0644"
+  notify: Restart port hopping
+
+- name: Install port hopping unit
+  ansible.builtin.template:
+    src: hysteria-porthop.service.j2
+    dest: /etc/systemd/system/hysteria-porthop.service
+    owner: root
+    group: root
+    mode: "0644"
+  notify: Restart port hopping
+
+- name: Enable port hopping
+  ansible.builtin.systemd_service:
+    name: hysteria-porthop
+    enabled: true
+    state: started
+    daemon_reload: true
+
+# Юнит типа oneshot рапортует об успехе, даже если nft отверг правило по
+# синтаксису: systemd видит нулевой код возврата от уже отработавшего
+# процесса. Проверяется поэтому сама таблица, а не состояние сервиса.
+- name: Verify the redirect is in place
+  ansible.builtin.command:
+    cmd: /usr/sbin/nft list table ip hyhop
+  register: remnanode_hyhop
+  changed_when: false
+  failed_when: remnanode_porthop_range not in remnanode_hyhop.stdout

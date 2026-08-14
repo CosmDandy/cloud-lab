@@ -1,0 +1,18 @@
+[Unit]
+Description=Hysteria2 port hopping: UDP {{ remnanode_porthop_range }} -> {{ remnanode_porthop_target }}
+Documentation=https://v2.hysteria.network/docs/advanced/Port-Hopping/
+# Правило живёт в своей таблице и docker не мешает, но сеть должна быть
+# поднята: nft отвергает правило на несуществующем стеке.
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+RemainAfterExit=yes
+ExecStart=/usr/sbin/nft -f {{ remnanode_porthop_rules }}
+# Без ExecStop таблица переживает остановку юнита, и systemd считает
+# сервис выключенным, пока трафик продолжает заворачиваться.
+ExecStop=/usr/sbin/nft delete table ip hyhop
+
+[Install]
+WantedBy=multi-user.target
