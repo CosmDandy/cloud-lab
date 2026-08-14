@@ -289,3 +289,27 @@ gatus_endpoints:
     conditions:
       - "[STATUS] == 302"
       - "[CERTIFICATE_EXPIRATION] > 240h"
+
+  # Ноды. Reality не проверить HTTP-запросом: инбаунд для того и сделан,
+  # чтобы на чужой запрос отвечать неотличимо от настоящего сайта. Поэтому
+  # TCP-connect — он говорит, что машина жива и Xray держит порт, но
+  # ничего не говорит о том, обслуживает ли нода людей. За это отвечает
+  # опрос панели: у неё есть isConnected по каждой ноде.
+  #
+  # Проверяется 443, а не порт агента 2222: 443 — тот путь, которым реально
+  # ходят пользователи, и он же ломается первым при блокировке.
+  - name: hhh-sto-01
+    group: nodes
+    url: "tcp://hhh-sto-01.vpn.cosmdandy.dev:443"
+    conditions:
+      - "[CONNECTED] == true"
+  - name: hhh-ams-01
+    group: nodes
+    url: "tcp://hhh-ams-01.vpn.cosmdandy.dev:443"
+    conditions:
+      - "[CONNECTED] == true"
+  - name: hhh-osl-01
+    group: nodes
+    url: "tcp://hhh-osl-01.vpn.cosmdandy.dev:443"
+    conditions:
+      - "[CONNECTED] == true"

@@ -43,6 +43,12 @@ endpoints:
     group: {{ ep.group }}
 {% endif %}
     url: "{{ ep.url }}"
+{% if ep.headers is defined %}
+    headers:
+{% for key, value in ep.headers.items() %}
+      {{ key }}: "{{ value }}"
+{% endfor %}
+{% endif %}
 {% if ep.client is defined %}
     client:
 {% for key, value in ep.client.items() %}
