@@ -1,0 +1,23 @@
+---
+docker_packages:
+  - docker-ce
+  - docker-ce-cli
+  - containerd.io
+  - docker-buildx-plugin
+  - docker-compose-plugin
+
+# Ротация логов и лимиты дескрипторов: без них растёт journal
+# и упирается nofile.
+docker_daemon_options:
+  log-driver: json-file
+  log-opts:
+    max-size: 10m
+    max-file: "3"
+  default-ulimits:
+    nofile:
+      Name: nofile
+      Soft: 65536
+      Hard: 65536
+
+# Пользователи, которым нужен доступ к docker.sock.
+docker_users: []

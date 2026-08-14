@@ -12,6 +12,20 @@
     group: root
     mode: "0644"
 
+# Без этого пять conntrack-строк из 99-vpn-tuning.conf не применяются НА
+# ЗАГРУЗКЕ: systemd-sysctl идёт после systemd-modules-load, но nf_conntrack на
+# чистой загрузке не грузит никто — его подтягивает docker уже потом. На живой
+# машине незаметно, потому что модуль давно в памяти. Вместе с kernel.panic=10
+# это значит, что после каждой тихой автоперезагрузки conntrack-тюнинг молча
+# возвращался бы к дефолтам.
+- name: Persist nf_conntrack in modules-load.d
+  ansible.builtin.copy:
+    dest: /etc/modules-load.d/nf-conntrack.conf
+    content: "nf_conntrack\n"
+    owner: root
+    group: root
+    mode: "0644"
+
 - name: Apply sysctl parameters
   ansible.posix.sysctl:
     name: "{{ item.key }}"
@@ -23,3 +37,25 @@
   loop: "{{ vpn_tuning_sysctl | dict2items }}"
   loop_control:
     label: "{{ item.key }}"
+
+# net.core.default_qdisc действует только на интерфейсы, поднятые после его
+# установки. На живой машине корневой qdisc остаётся прежним — на боевых нодах
+# он месяц простоял pfifo_fast при выставленном fq, и BBR работал без pacing,
+# ради которого fq и ставится.
+- name: Read current root qdisc
+  ansible.builtin.command:
+    cmd: tc qdisc show dev {{ ansible_facts['default_ipv4']['interface'] }}
+  register: vpn_tuning_qdisc
+  changed_when: false
+  # Без этого в --check задача пропускается, register остаётся пустым, и
+  # следующая падает на обращении к .stdout.
+  check_mode: false
+
+- name: Apply default qdisc to the already-up interface
+  ansible.builtin.command:
+    cmd: >-
+      tc qdisc replace dev {{ ansible_facts['default_ipv4']['interface'] }}
+      root {{ vpn_tuning_sysctl['net.core.default_qdisc'] }}
+  when: >-
+    vpn_tuning_sysctl['net.core.default_qdisc'] not in vpn_tuning_qdisc.stdout
+  changed_when: true

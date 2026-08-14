@@ -1,0 +1,45 @@
+---
+- name: Validate required variables
+  ansible.builtin.assert:
+    that:
+      - gatus_domain | length > 0
+      - not gatus_telegram_enabled or gatus_telegram_token | length > 0
+      - not gatus_telegram_enabled or gatus_telegram_id | length > 0
+      - not gatus_oidc_enabled or gatus_oidc_client_id | length > 0
+    fail_msg: >-
+      Нужен gatus_domain; при включённом телеграме — токен и id чата,
+      при включённом OIDC — client_id.
+
+- name: Create stack directory
+  ansible.builtin.file:
+    path: "{{ gatus_dir }}"
+    state: directory
+    owner: "{{ gatus_owner }}"
+    group: "{{ gatus_owner }}"
+    mode: "0750"
+
+- name: Render config
+  ansible.builtin.template:
+    src: config.yaml.j2
+    dest: "{{ gatus_dir }}/config.yaml"
+    owner: "{{ gatus_owner }}"
+    group: "{{ gatus_owner }}"
+    mode: "0640"
+  no_log: "{{ gatus_telegram_enabled or gatus_oidc_enabled }}"
+  notify: Restart gatus stack
+
+- name: Render compose file
+  ansible.builtin.template:
+    src: docker-compose.yaml.j2
+    dest: "{{ gatus_dir }}/docker-compose.yaml"
+    owner: "{{ gatus_owner }}"
+    group: "{{ gatus_owner }}"
+    mode: "0640"
+  notify: Restart gatus stack
+
+- name: Deploy stack
+  community.docker.docker_compose_v2:
+    project_src: "{{ gatus_dir }}"
+    state: present
+    pull: missing
+    remove_orphans: true

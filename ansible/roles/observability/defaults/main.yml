@@ -1,0 +1,41 @@
+---
+observability_dir: /opt/observability
+observability_owner: root
+
+observability_vm_image: victoriametrics/victoria-metrics:v1.148.0
+observability_vmalert_image: victoriametrics/vmalert:v1.148.0
+observability_grafana_image: grafana/grafana:13.1.1
+# loki и promtail держим одной парой версий: push API стабилен,
+# но конфиг-схемы между минорами разъезжаются.
+observability_loki_image: grafana/loki:3.5.0
+observability_promtail_image: grafana/promtail:3.5.0
+observability_node_exporter_image: prom/node-exporter:v1.12.1
+observability_cadvisor_image: gcr.io/cadvisor/cadvisor:v0.52.1
+
+observability_domain: ""
+observability_edge_network: "{{ edge_network | default('edge') }}"
+
+observability_grafana_admin_password: ""
+
+observability_metrics_retention: 30d
+
+# Узлы, где крутится node-exporter, кроме локального.
+# [{address: "10.0.0.2:9100", instance: "miv-chi-01"}]
+observability_remote_targets: []
+
+# Скрейп панели Remnawave: /metrics закрыт basic auth.
+observability_panel_metrics_enabled: false
+observability_panel_metrics_user: metrics
+observability_panel_metrics_password: ""
+
+# Вход в Grafana через Pocket ID. Клиент заводится в UI Pocket ID,
+# redirect URI: https://<observability_domain>/login/generic_oauth
+observability_oidc_enabled: false
+
+# Группа в Pocket ID, участники которой входят в Grafana администраторами.
+# Остальные получают Viewer.
+observability_oidc_admin_group: admins
+observability_oidc_name: Pocket ID
+observability_oidc_issuer: ""
+observability_oidc_client_id: ""
+observability_oidc_client_secret: ""

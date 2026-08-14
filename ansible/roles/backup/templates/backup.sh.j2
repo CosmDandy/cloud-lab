@@ -1,0 +1,110 @@
+#!/bin/bash
+# Managed by ansible (roles/backup). Правки на хосте будут перезаписаны.
+#
+# Порядок важен: сначала штатные выгрузки баз в staging, потом restic.
+# Копировать файлы работающей базы напрямую нельзя — снимок придётся
+# на середину записи, и восстановится он битым.
+set -euo pipefail
+
+STAGING="{{ backup_staging }}"
+FAILED=""
+
+notify() {
+{% if backup_telegram_enabled %}
+    curl -sS --max-time 20 \
+        -X POST "https://api.telegram.org/bot${TELEGRAM_TOKEN}/sendMessage" \
+        -d "chat_id=${TELEGRAM_ID}" \
+        -d "text=$1" >/dev/null || true
+{% else %}
+    logger -t backup "$1"
+{% endif %}
+}
+
+fail() {
+    FAILED="yes"
+    logger -t backup -p user.err "$1"
+    notify "❌ Бэкап {{ inventory_hostname }}: $1"
+}
+
+cleanup() {
+    rm -rf "${STAGING:?}"/*
+}
+trap cleanup EXIT
+
+mkdir -p "$STAGING"
+cleanup
+
+{% if backup_pocket_id_enabled %}
+# Штатный экспорт, а не копия sqlite: он забирает и то, что лежит рядом
+# с базой, одним согласованным ZIP.
+if ! docker exec {{ backup_pocket_id_container }} \
+        /app/pocket-id export -p - > "$STAGING/pocket-id.zip" 2>/dev/null; then
+    fail "экспорт pocket-id не удался"
+fi
+{% endif %}
+
+{% if backup_postgres_enabled %}
+if ! docker exec {{ backup_postgres_container }} \
+        pg_dump -U {{ backup_postgres_user }} -Fc {{ backup_postgres_db }} \
+        > "$STAGING/remnawave.dump" 2>/dev/null; then
+    fail "pg_dump панели не удался"
+fi
+{% endif %}
+
+{% if backup_headscale_enabled %}
+HS_DATA="$(docker volume inspect {{ backup_headscale_volume }} \
+    --format '{% raw %}{{ .Mountpoint }}{% endraw %}')"
+if ! sqlite3 "$HS_DATA/db.sqlite" ".backup '$STAGING/headscale.sqlite'"; then
+    fail "снимок базы headscale не удался"
+fi
+# Ключи узлов и DERP: без них восстановленный headscale не узнает
+# собственные узлы, и всем придётся регистрироваться заново.
+cp -a "$HS_DATA"/*.key "$STAGING/" 2>/dev/null || true
+{% endif %}
+
+{% if backup_grafana_enabled %}
+GF_DATA="$(docker volume inspect {{ backup_grafana_volume }} \
+    --format '{% raw %}{{ .Mountpoint }}{% endraw %}')"
+if [ -f "$GF_DATA/grafana.db" ]; then
+    if ! sqlite3 "$GF_DATA/grafana.db" ".backup '$STAGING/grafana.sqlite'"; then
+        fail "снимок базы grafana не удался"
+    fi
+fi
+{% endif %}
+
+if [ -z "$(ls -A "$STAGING" 2>/dev/null)" ]; then
+    fail "staging пуст — отправлять нечего"
+    exit 1
+fi
+
+if ! restic backup --tag automated \
+        "$STAGING"{% for path in backup_extra_paths %} "{{ path }}"{% endfor %}; then
+    fail "restic backup завершился с ошибкой"
+    exit 1
+fi
+
+if ! restic forget --tag automated --prune \
+        --keep-daily {{ backup_keep_daily }} \
+        --keep-weekly {{ backup_keep_weekly }} \
+        --keep-monthly {{ backup_keep_monthly }}; then
+    fail "ротация снапшотов не удалась"
+fi
+
+{% if backup_check_enabled %}
+# Проверяем не каждый день: check читает репозиторий целиком.
+if [ "$(date +%a)" = "{{ backup_check_weekday }}" ]; then
+    if ! restic check --read-data-subset=5%; then
+        fail "проверка целостности репозитория не прошла"
+    fi
+fi
+{% endif %}
+
+if [ -n "$FAILED" ]; then
+    exit 1
+fi
+
+{% if backup_telegram_notify_success %}
+SNAPSHOTS="$(restic snapshots --json | grep -c '"time"' || echo '?')"
+notify "✅ Бэкап {{ inventory_hostname }} готов, снапшотов: $SNAPSHOTS"
+{% endif %}
+logger -t backup "бэкап завершён успешно"

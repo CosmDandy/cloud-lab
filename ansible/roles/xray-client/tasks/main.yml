@@ -1,0 +1,154 @@
+---
+- name: Validate required variables
+  ansible.builtin.assert:
+    that:
+      - xray_server_address | length > 0
+      - xray_user_id | length > 0
+      - xray_reality_public_key | length > 0
+      - xray_xhttp_path | length > 0
+    fail_msg: >-
+      Нужны адрес ноды, uuid клиента, публичный ключ reality и путь xhttp.
+      Всё это, кроме адреса, — секреты и живут в SOPS.
+
+- name: Install unzip
+  ansible.builtin.apt:
+    name: unzip
+    state: present
+    update_cache: true
+
+- name: Create directories
+  ansible.builtin.file:
+    path: "{{ item }}"
+    state: directory
+    owner: root
+    group: root
+    mode: "0755"
+  loop:
+    - "{{ xray_dir }}"
+    - "{{ xray_asset_dir }}"
+
+# check_mode: false обязателен: иначе в --check задача пропускается,
+# xray_installed остаётся пустым и весь блок установки показывает
+# скачивание заново на хосте, где нужная версия уже стоит.
+- name: Check installed version
+  ansible.builtin.command:
+    cmd: "{{ xray_bin }} version"
+  register: xray_installed
+  changed_when: false
+  failed_when: false
+  check_mode: false
+
+- name: Check geo assets
+  ansible.builtin.stat:
+    path: "{{ xray_asset_dir }}/{{ item }}"
+  register: xray_assets
+  loop:
+    - geoip.dat
+    - geosite.dat
+
+# Установка нужна, если версия не та ИЛИ ассетов нет. Только по версии
+# судить нельзя: прерванный прогон оставляет бинарь без geo-файлов, и
+# следующий запуск честно скипает распаковку, а xray падает на geoip.
+- name: Decide whether install is needed
+  ansible.builtin.set_fact:
+    xray_needs_install: >-
+      {{ (xray_version | default('') | string)
+           not in (xray_installed.stdout | default('') | string)
+         or not (xray_assets.results | map(attribute='stat.exists') | min) }}
+
+- name: Download release
+  ansible.builtin.get_url:
+    url: "{{ xray_release_url }}"
+    dest: /tmp/xray-{{ xray_version }}.zip
+    checksum: >-
+      {{ ('sha256:' + xray_release_sha256)
+         if xray_release_sha256 | length > 0 else omit }}
+    mode: "0600"
+  when: xray_needs_install | bool
+
+# Распаковываем только нужное: в архиве лежат ещё README и лицензии.
+# Бинарь и ассеты идут в разные места, поэтому два вызова.
+- name: Unpack binary
+  ansible.builtin.unarchive:
+    src: /tmp/xray-{{ xray_version }}.zip
+    dest: "{{ xray_bin | dirname }}"
+    remote_src: true
+    include:
+      - xray
+    owner: root
+    group: root
+    mode: "0755"
+  when: xray_needs_install | bool
+  notify: Restart xray
+
+- name: Unpack geo files
+  ansible.builtin.unarchive:
+    src: /tmp/xray-{{ xray_version }}.zip
+    dest: "{{ xray_asset_dir }}"
+    remote_src: true
+    include:
+      - geoip.dat
+      - geosite.dat
+    owner: root
+    group: root
+    mode: "0644"
+  when: xray_needs_install | bool
+  notify: Restart xray
+
+- name: Remove downloaded archive
+  ansible.builtin.file:
+    path: /tmp/xray-{{ xray_version }}.zip
+    state: absent
+
+# diff вместо no_log: содержимое не печатается даже под --diff (в нём uuid
+# и ключи), но причина отказа валидатора остаётся видна. С no_log ошибка
+# конфига выглядит как «failed to validate» без единой подробности.
+- name: Render client config
+  ansible.builtin.template:
+    src: config.json.j2
+    dest: "{{ xray_dir }}/config.json"
+    owner: root
+    group: "{{ xray_run_group }}"
+    mode: "0640"
+    validate: "{{ xray_bin }} run -test -config %s"
+  diff: false
+  environment:
+    XRAY_LOCATION_ASSET: "{{ xray_asset_dir }}"
+  notify: Restart xray
+
+- name: Install iptables scripts
+  ansible.builtin.template:
+    src: "{{ item }}.j2"
+    dest: "/usr/local/bin/{{ item }}"
+    owner: root
+    group: root
+    mode: "0755"
+  loop:
+    - xray-iptables-add.sh
+    - xray-iptables-del.sh
+  notify: Restart xray
+
+- name: Install systemd unit
+  ansible.builtin.template:
+    src: xray.service.j2
+    dest: /etc/systemd/system/xray.service
+    owner: root
+    group: root
+    mode: "0644"
+  notify:
+    - Reload systemd
+    - Restart xray
+
+- name: Apply pending systemd reload
+  ansible.builtin.meta: flush_handlers
+
+- name: Enable and start xray
+  ansible.builtin.systemd_service:
+    name: xray
+    enabled: true
+    state: started
+
+- name: Configure Docker daemon proxy
+  ansible.builtin.import_tasks: docker-proxy.yml
+  when: xray_docker_proxy | bool
+  tags: [docker-proxy]

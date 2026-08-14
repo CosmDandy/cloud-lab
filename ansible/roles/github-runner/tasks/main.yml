@@ -1,1 +1,97 @@
 ---
+- name: Validate required variables
+  ansible.builtin.assert:
+    that:
+      - github_runner_repository | length > 0
+      - github_runner_pat | length > 0
+    fail_msg: >-
+      Нужны github_runner_repository и github_runner_pat
+      (PAT берётся из ansible-vault).
+
+- name: Map architecture to runner arch
+  ansible.builtin.set_fact:
+    github_runner_arch: >-
+      {{ 'arm64' if ansible_facts['architecture'] == 'aarch64' else 'x64' }}
+
+- name: Ensure runner directory exists
+  ansible.builtin.file:
+    path: "{{ github_runner_dir }}"
+    state: directory
+    owner: "{{ github_runner_user }}"
+    group: "{{ github_runner_user }}"
+    mode: "0755"
+
+- name: Check whether runner is already configured
+  ansible.builtin.stat:
+    path: "{{ github_runner_dir }}/.runner"
+  register: github_runner_configured
+
+- name: Build runner download URL
+  ansible.builtin.set_fact:
+    github_runner_url: >-
+      https://github.com/actions/runner/releases/download/v{{ github_runner_version }}/actions-runner-linux-{{
+      github_runner_arch }}-{{ github_runner_version }}.tar.gz
+
+- name: Download runner package
+  ansible.builtin.get_url:
+    url: "{{ github_runner_url }}"
+    dest: "/tmp/actions-runner-{{ github_runner_version }}.tar.gz"
+    owner: "{{ github_runner_user }}"
+    group: "{{ github_runner_user }}"
+    mode: "0644"
+  when: not github_runner_configured.stat.exists
+
+- name: Unpack runner
+  ansible.builtin.unarchive:
+    src: "/tmp/actions-runner-{{ github_runner_version }}.tar.gz"
+    dest: "{{ github_runner_dir }}"
+    remote_src: true
+    owner: "{{ github_runner_user }}"
+    group: "{{ github_runner_user }}"
+    creates: "{{ github_runner_dir }}/config.sh"
+  when: not github_runner_configured.stat.exists
+
+# Registration-token живёт час и одноразовый, поэтому запрашивается
+# только когда раннер действительно предстоит регистрировать.
+- name: Request registration token
+  ansible.builtin.uri:
+    url: >-
+      https://api.github.com/repos/{{ github_runner_repository }}/actions/runners/registration-token
+    method: POST
+    headers:
+      Authorization: "Bearer {{ github_runner_pat }}"
+      Accept: application/vnd.github+json
+      X-GitHub-Api-Version: "2022-11-28"
+    status_code: 201
+  register: github_runner_token
+  no_log: true
+  when: not github_runner_configured.stat.exists
+
+- name: Configure runner
+  ansible.builtin.command:
+    cmd: >-
+      ./config.sh --unattended --replace
+      --url https://github.com/{{ github_runner_repository }}
+      --token {{ github_runner_token.json.token }}
+      --name {{ github_runner_name }}
+      --labels {{ github_runner_labels }}
+      --work _work
+    chdir: "{{ github_runner_dir }}"
+  become_user: "{{ github_runner_user }}"
+  become: true
+  no_log: true
+  when: not github_runner_configured.stat.exists
+  changed_when: true
+
+- name: Install runner service
+  ansible.builtin.command:
+    cmd: "./svc.sh install {{ github_runner_user }}"
+    chdir: "{{ github_runner_dir }}"
+    creates: "/etc/systemd/system/actions.runner.{{ github_runner_repository | replace('/', '-') }}.{{ github_runner_name }}.service"
+
+- name: Start runner service
+  ansible.builtin.command:
+    cmd: ./svc.sh start
+    chdir: "{{ github_runner_dir }}"
+  register: github_runner_svc
+  changed_when: "'started' in github_runner_svc.stdout | lower"

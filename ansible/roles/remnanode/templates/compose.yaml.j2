@@ -1,0 +1,19 @@
+# managed-by:ansible role remnanode — правки руками затрёт следующий прогон
+services:
+  remnanode:
+    container_name: remnanode
+    hostname: remnanode
+    image: {{ remnanode_image }}
+    network_mode: host
+    restart: always
+    # Xray сам правит маршрутизацию и создаёт tun-устройства.
+    cap_add:
+      - NET_ADMIN
+    ulimits:
+      nofile:
+        soft: {{ remnanode_nofile }}
+        hard: {{ remnanode_nofile }}
+    env_file:
+      - .env
+    volumes:
+      - {{ remnanode_tls_dir }}:{{ remnanode_tls_dir }}:ro

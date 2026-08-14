@@ -1,0 +1,25 @@
+# Managed by ansible (roles/panel). Правки на хосте будут перезаписаны.
+APP_PORT=3000
+METRICS_PORT=3001
+API_INSTANCES={{ panel_api_instances }}
+
+DATABASE_URL=postgresql://{{ panel_postgres_user }}:{{ panel_postgres_password }}@postgres:5432/{{ panel_postgres_db }}
+REDIS_HOST=redis
+REDIS_PORT=6379
+
+# 3.0 свела обе JWT-соли в одну переменную: без APP_SECRET панель не
+# стартует вовсе, а падает в цикл перезапусков с ошибкой валидации env.
+APP_SECRET={{ panel_app_secret }}
+
+IS_TELEGRAM_NOTIFICATIONS_ENABLED={{ panel_telegram_notifications_enabled | lower }}
+
+PANEL_DOMAIN={{ panel_domain }}
+FRONT_END_DOMAIN={{ panel_domain }}
+SUB_PUBLIC_DOMAIN={{ panel_sub_domain }}
+
+IS_DOCS_ENABLED={{ panel_docs_enabled | lower }}
+
+METRICS_USER={{ panel_metrics_user }}
+METRICS_PASS={{ panel_metrics_password }}
+
+WEBHOOK_ENABLED={{ panel_webhook_enabled | lower }}

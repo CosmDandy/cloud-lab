@@ -1,0 +1,23 @@
+#!/usr/sbin/nft -f
+# managed-by:ansible role remnanode — правки руками затрёт следующий прогон
+#
+# Отдельная таблица, а не правило в существующей: ip nat принадлежит docker,
+# он её переписывает при каждом старте. Своя таблица переживает это и
+# удаляется целиком одной командой.
+#
+# Пара «создать пустую, удалить, создать заново» — идиома идемпотентности
+# nftables: без первой строки delete падает, когда таблицы ещё нет.
+table ip hyhop
+delete table ip hyhop
+
+table ip hyhop {
+  chain prerouting {
+    # Тот же хук и приоритет, что у docker: nftables выполняет обе цепочки,
+    # они не конфликтуют, пока таблицы разные.
+    type nat hook prerouting priority dstnat; policy accept;
+    # counter — единственный способ снаружи убедиться, что hopping
+    # используется: слушающий порт виден в ss, а работающий redirect нет.
+    # `nft list table ip hyhop` покажет счётчик пакетов.
+    udp dport {{ remnanode_porthop_range }} counter redirect to :{{ remnanode_porthop_target }}
+  }
+}

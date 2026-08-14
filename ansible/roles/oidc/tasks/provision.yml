@@ -1,0 +1,412 @@
+---
+# Приведение объектов Pocket ID к описанию из инвентаря: группы,
+# кастомные claim-ы и OIDC-клиенты. Всё через его REST API — конфигурации
+# на диске у Pocket ID нет, состояние живёт в SQLite.
+#
+# Каждый шаг сначала читает состояние, потом пишет только при расхождении:
+# второй прогон обязан дать changed=0.
+#
+# no_log стоит на всех запросах, а не только на «секретных»: ключ API едет
+# в заголовке каждого из них и иначе попал бы в вывод при -vvv.
+#
+# changed_when: true на пишущих задачах не декорация: uri сам по себе
+# всегда рапортует changed=false, и без этого запись в Pocket ID не попала
+# бы в итоговый recap — критерий «второй прогон даёт changed=0» перестал бы
+# что-либо проверять. Отвечает за корректность здесь when: задача
+# выполняется только при расхождении.
+
+- name: Validate provisioning variables
+  ansible.builtin.assert:
+    that:
+      - oidc_api_url | length > 0
+      - oidc_clients | map(attribute='id') | list | length
+        == oidc_clients | map(attribute='id') | list | unique | length
+      - oidc_user_groups | map(attribute='name') | list | length
+        == oidc_user_groups | map(attribute='name') | list | unique | length
+    fail_msg: >-
+      Нужен oidc_api_url; id клиентов и name групп должны быть уникальны —
+      совпадение означало бы, что два описания правят один объект.
+
+- name: Check that referenced user groups are declared
+  ansible.builtin.assert:
+    that:
+      - item.1 in (oidc_user_groups | map(attribute='name') | list)
+    fail_msg: >-
+      Клиент {{ item.0.name }} ссылается на группу {{ item.1 }},
+      которой нет в oidc_user_groups.
+  loop: "{{ oidc_clients | subelements('allowed_user_groups', skip_missing=True) }}"
+  loop_control:
+    label: "{{ item.0.name }} -> {{ item.1 }}"
+
+- name: Build Pocket ID API headers
+  ansible.builtin.set_fact:
+    oidc_api_headers:
+      X-API-KEY: "{{ oidc_api_key }}"
+      Accept: application/json
+  no_log: true
+
+# Стек поднят предыдущей задачей роли, но контейнер успевает ответить
+# не сразу; без ожидания первый же GET падает на connection refused.
+- name: Wait for the Pocket ID API
+  ansible.builtin.uri:
+    url: "{{ oidc_api_url }}/api/user-groups?pagination%5Blimit%5D=100"
+    headers: "{{ oidc_api_headers }}"
+    validate_certs: "{{ oidc_api_validate_certs }}"
+    status_code: [200]
+  register: oidc_api_probe
+  retries: "{{ oidc_api_retries }}"
+  delay: "{{ oidc_api_delay }}"
+  until: oidc_api_probe is not failed
+  changed_when: false
+  check_mode: false
+  no_log: true
+
+# --- Группы пользователей ---------------------------------------------------
+
+- name: Create missing user groups
+  ansible.builtin.uri:
+    url: "{{ oidc_api_url }}/api/user-groups"
+    method: POST
+    headers: "{{ oidc_api_headers }}"
+    validate_certs: "{{ oidc_api_validate_certs }}"
+    body_format: json
+    body:
+      name: "{{ item.name }}"
+      friendlyName: "{{ item.friendly_name | default(item.name) }}"
+    status_code: [200, 201]
+  loop: "{{ oidc_user_groups }}"
+  loop_control:
+    label: "{{ item.name }}"
+  when: item.name not in (oidc_api_probe.json.data | map(attribute='name') | list)
+  changed_when: true
+  no_log: true
+
+# Перечитываем: нужны id — и созданных только что, и заведённых руками.
+- name: Read user groups
+  ansible.builtin.uri:
+    url: "{{ oidc_api_url }}/api/user-groups?pagination%5Blimit%5D=100"
+    headers: "{{ oidc_api_headers }}"
+    validate_certs: "{{ oidc_api_validate_certs }}"
+  register: oidc_groups_state
+  changed_when: false
+  check_mode: false
+  no_log: true
+
+- name: Map user group names to ids
+  ansible.builtin.set_fact:
+    oidc_group_ids: >-
+      {{ dict(oidc_groups_state.json.data | map(attribute='name')
+              | zip(oidc_groups_state.json.data | map(attribute='id'))) }}
+
+# PUT заменяет набор claim-ов целиком, поэтому сравниваем множества,
+# а не отдельные ключи: иначе удаление ключа из инвентаря ничего не сделает.
+- name: Update custom claims of user groups
+  ansible.builtin.uri:
+    url: "{{ oidc_api_url }}/api/custom-claims/user-group/{{ oidc_group_ids[item.name] }}"
+    method: PUT
+    headers: "{{ oidc_api_headers }}"
+    validate_certs: "{{ oidc_api_validate_certs }}"
+    body_format: json
+    body: "{{ item.custom_claims | default({}) | dict2items(key_name='key', value_name='value') }}"
+    status_code: [200, 201]
+  loop: "{{ oidc_user_groups }}"
+  loop_control:
+    label: "{{ item.name }}"
+  when: >-
+    (oidc_groups_state.json.data | selectattr('name', 'equalto', item.name)
+     | first).customClaims | items2dict(key_name='key', value_name='value')
+    != (item.custom_claims | default({}))
+  changed_when: true
+  no_log: true
+
+# --- Состав групп -----------------------------------------------------------
+# Управляется только у тех групп, где members задан явно. Ключ опущен —
+# роль не трогает состав вовсе: PUT заменяет список целиком, и включённое
+# по умолчанию управление вычищало бы всех, кого завели через UI.
+
+- name: Read users
+  ansible.builtin.uri:
+    url: "{{ oidc_api_url }}/api/users?pagination%5Blimit%5D=100"
+    headers: "{{ oidc_api_headers }}"
+    validate_certs: "{{ oidc_api_validate_certs }}"
+  register: oidc_users_state
+  changed_when: false
+  check_mode: false
+  no_log: true
+  when: oidc_user_groups | selectattr('members', 'defined') | list | length > 0
+
+- name: Map usernames to ids
+  ansible.builtin.set_fact:
+    oidc_user_ids: >-
+      {{ dict(oidc_users_state.json.data | map(attribute='username')
+              | zip(oidc_users_state.json.data | map(attribute='id'))) }}
+  when: oidc_users_state.skipped is not defined
+
+# Пользователь заводится первым входом, а не заранее: до него username
+# в Pocket ID не существует. Падать на этом нельзя — сначала прогон,
+# потом вход, потом состав групп.
+- name: Warn about declared members that do not exist yet
+  ansible.builtin.debug:
+    msg: >-
+      Пользователя {{ item.1 }} нет в Pocket ID — в группу {{ item.0.name }}
+      он не попадёт. Пользователь заводится первым входом; после него
+      прогоните роль ещё раз.
+  loop: "{{ oidc_user_groups | selectattr('members', 'defined') | subelements('members') }}"
+  loop_control:
+    label: "{{ item.0.name }} -> {{ item.1 }}"
+  when:
+    - oidc_users_state.skipped is not defined
+    - item.1 not in oidc_user_ids
+
+- name: Read current membership of managed groups
+  ansible.builtin.uri:
+    url: "{{ oidc_api_url }}/api/user-groups/{{ oidc_group_ids[item.name] }}"
+    headers: "{{ oidc_api_headers }}"
+    validate_certs: "{{ oidc_api_validate_certs }}"
+  loop: "{{ oidc_user_groups | selectattr('members', 'defined') | list }}"
+  loop_control:
+    label: "{{ item.name }}"
+  register: oidc_group_members_state
+  changed_when: false
+  check_mode: false
+  no_log: true
+
+- name: Update membership of managed groups
+  ansible.builtin.uri:
+    url: "{{ oidc_api_url }}/api/user-groups/{{ oidc_group_ids[item.0.name] }}/users"
+    method: PUT
+    headers: "{{ oidc_api_headers }}"
+    validate_certs: "{{ oidc_api_validate_certs }}"
+    body_format: json
+    # Несуществующие отброшены: иначе Pocket ID отвечает 404 на весь запрос
+    # и группа осталась бы без единого участника.
+    body:
+      userIds: >-
+        {{ item.0.members | select('in', oidc_user_ids)
+           | map('extract', oidc_user_ids) | list }}
+    status_code: [200, 201]
+  loop: >-
+    {{ (oidc_user_groups | selectattr('members', 'defined') | list)
+       | zip(oidc_group_members_state.results | default([])) | list }}
+  loop_control:
+    label: "{{ item.0.name }}"
+  when: >-
+    (item.1.json.users | default([]) | map(attribute='id') | sort)
+    != (item.0.members | select('in', oidc_user_ids)
+        | map('extract', oidc_user_ids) | sort)
+  changed_when: true
+  no_log: true
+
+# --- OIDC-клиенты -----------------------------------------------------------
+
+# Инициализация отдельной задачей, а не default([]) внутри накопления:
+# при пустом oidc_clients цикл ниже не выполняется ни разу, и факт
+# остался бы неопределённым — дальше всё падало бы на loop.
+- name: Initialise resolved client list
+  ansible.builtin.set_fact:
+    oidc_clients_resolved: []
+
+- name: Resolve client definitions against defaults
+  ansible.builtin.set_fact:
+    oidc_clients_resolved: "{{ oidc_clients_resolved + [oidc_client_defaults | combine(item)] }}"
+  loop: "{{ oidc_clients }}"
+  loop_control:
+    label: "{{ item.name }}"
+
+- name: Read existing OIDC clients
+  ansible.builtin.uri:
+    url: "{{ oidc_api_url }}/api/oidc/clients?pagination%5Blimit%5D=100"
+    headers: "{{ oidc_api_headers }}"
+    validate_certs: "{{ oidc_api_validate_certs }}"
+  register: oidc_clients_before
+  changed_when: false
+  check_mode: false
+  no_log: true
+
+# id уходит в теле запроса: Pocket ID принимает заданный client_id, и это
+# единственный способ описать клиента данными — иначе идентификатор
+# рождается на сервере и его пришлось бы вписывать в инвентарь руками.
+- name: Create missing OIDC clients
+  ansible.builtin.uri:
+    url: "{{ oidc_api_url }}/api/oidc/clients"
+    method: POST
+    headers: "{{ oidc_api_headers }}"
+    validate_certs: "{{ oidc_api_validate_certs }}"
+    body_format: json
+    body:
+      id: "{{ item.id }}"
+      name: "{{ item.name }}"
+      description: "{{ item.description }}"
+      callbackURLs: "{{ item.callback_urls }}"
+      logoutCallbackURLs: "{{ item.logout_callback_urls }}"
+      isPublic: "{{ item.is_public | bool }}"
+      pkceEnabled: "{{ item.pkce_enabled | bool }}"
+      requiresPushedAuthorizationRequests: "{{ item.requires_par | bool }}"
+      skipConsent: "{{ item.skip_consent | bool }}"
+      requiresReauthentication: "{{ item.requires_reauthentication | bool }}"
+      isGroupRestricted: "{{ item.group_restricted | bool }}"
+    status_code: [200, 201]
+  loop: "{{ oidc_clients_resolved }}"
+  loop_control:
+    label: "{{ item.name }}"
+  when: item.id not in (oidc_clients_before.json.data | map(attribute='id') | list)
+  register: oidc_clients_created
+  changed_when: true
+  no_log: true
+
+# Только для созданных в этом прогоне. Существующим секрет не трогается:
+# POST на /secret не «читает», а выпускает новый и обнуляет старый —
+# один лишний вызов разлогинивает всё, что этим клиентом пользуется.
+- name: Issue secrets for newly created clients
+  ansible.builtin.uri:
+    url: "{{ oidc_api_url }}/api/oidc/clients/{{ item.item.id }}/secret"
+    method: POST
+    headers: "{{ oidc_api_headers }}"
+    validate_certs: "{{ oidc_api_validate_certs }}"
+    status_code: [200, 201]
+  loop: "{{ oidc_clients_created.results | default([]) | rejectattr('skipped', 'defined') | list }}"
+  loop_control:
+    label: "{{ item.item.name }}"
+  register: oidc_secrets_issued
+  changed_when: true
+  no_log: true
+
+# Единственное место, где секрет намеренно печатается. v2.11.0 генерирует
+# его сама и готовый не принимает, так что другого способа донести значение
+# до инвентаря нет. Срабатывает только в прогон создания клиента.
+- name: Show secrets of newly created clients
+  ansible.builtin.debug:
+    msg: >-
+      Выпущен client_secret для {{ item.item.item.name }}
+      (client_id {{ item.item.item.id }}): {{ item.json.secret }}
+      — положите в инвентарь и прогоните плейбук ещё раз.
+  loop: "{{ oidc_secrets_issued.results | default([]) | rejectattr('skipped', 'defined') | list }}"
+  loop_control:
+    label: "{{ item.item.item.name }}"
+
+- name: Read state of declared OIDC clients
+  ansible.builtin.uri:
+    url: "{{ oidc_api_url }}/api/oidc/clients/{{ item.id }}"
+    headers: "{{ oidc_api_headers }}"
+    validate_certs: "{{ oidc_api_validate_certs }}"
+  loop: "{{ oidc_clients_resolved }}"
+  loop_control:
+    label: "{{ item.name }}"
+  register: oidc_clients_state
+  changed_when: false
+  check_mode: false
+  no_log: true
+
+# PUT на клиента правит только метаданные — секрет он не трогает,
+# он живёт за отдельным эндпоинтом. Поэтому вход эта задача не ломает.
+- name: Update drifted OIDC clients
+  ansible.builtin.uri:
+    url: "{{ oidc_api_url }}/api/oidc/clients/{{ item.0.id }}"
+    method: PUT
+    headers: "{{ oidc_api_headers }}"
+    validate_certs: "{{ oidc_api_validate_certs }}"
+    body_format: json
+    body:
+      name: "{{ item.0.name }}"
+      description: "{{ item.0.description }}"
+      callbackURLs: "{{ item.0.callback_urls }}"
+      logoutCallbackURLs: "{{ item.0.logout_callback_urls }}"
+      isPublic: "{{ item.0.is_public | bool }}"
+      pkceEnabled: "{{ item.0.pkce_enabled | bool }}"
+      requiresPushedAuthorizationRequests: "{{ item.0.requires_par | bool }}"
+      skipConsent: "{{ item.0.skip_consent | bool }}"
+      requiresReauthentication: "{{ item.0.requires_reauthentication | bool }}"
+      isGroupRestricted: "{{ item.0.group_restricted | bool }}"
+    status_code: [200, 201]
+  loop: "{{ oidc_clients_resolved | zip(oidc_clients_state.results) | list }}"
+  loop_control:
+    label: "{{ item.0.name }}"
+  when: >-
+    item.1.json.name != item.0.name
+    or (item.1.json.description | default('')) != item.0.description
+    or (item.1.json.callbackURLs | default([]) | sort) != (item.0.callback_urls | sort)
+    or (item.1.json.logoutCallbackURLs | default([]) | sort) != (item.0.logout_callback_urls | sort)
+    or item.1.json.isPublic != (item.0.is_public | bool)
+    or item.1.json.pkceEnabled != (item.0.pkce_enabled | bool)
+    or item.1.json.requiresPushedAuthorizationRequests != (item.0.requires_par | bool)
+    or item.1.json.skipConsent != (item.0.skip_consent | bool)
+    or item.1.json.requiresReauthentication != (item.0.requires_reauthentication | bool)
+    or item.1.json.isGroupRestricted != (item.0.group_restricted | bool)
+  changed_when: true
+  no_log: true
+
+# Состояние перечитывается, а не берётся из oidc_clients_state: PUT выше
+# сбрасывает привязку клиента к группам в пустую. Молча — в теле запроса
+# такого поля вообще нет, и по ответу этого не видно. Без повторного чтения
+# правка любого поля клиента снимала бы с него ограничение по группам,
+# а плейбук возвращал бы его только следующим прогоном.
+- name: Re-read state of declared OIDC clients
+  ansible.builtin.uri:
+    url: "{{ oidc_api_url }}/api/oidc/clients/{{ item.id }}"
+    headers: "{{ oidc_api_headers }}"
+    validate_certs: "{{ oidc_api_validate_certs }}"
+  loop: "{{ oidc_clients_resolved }}"
+  loop_control:
+    label: "{{ item.name }}"
+  register: oidc_clients_state_after
+  changed_when: false
+  check_mode: false
+  no_log: true
+
+# Отдельный эндпоинт не по прихоти API: обычный PUT на клиента поле
+# allowedUserGroups игнорирует молча, и ограничение просто не применяется.
+- name: Update allowed user groups of OIDC clients
+  ansible.builtin.uri:
+    url: "{{ oidc_api_url }}/api/oidc/clients/{{ item.0.id }}/allowed-user-groups"
+    method: PUT
+    headers: "{{ oidc_api_headers }}"
+    validate_certs: "{{ oidc_api_validate_certs }}"
+    body_format: json
+    body:
+      userGroupIds: "{{ item.0.allowed_user_groups | map('extract', oidc_group_ids) | list }}"
+    status_code: [200, 201]
+  loop: "{{ oidc_clients_resolved | zip(oidc_clients_state_after.results) | list }}"
+  loop_control:
+    label: "{{ item.0.name }}"
+  when: >-
+    (item.1.json.allowedUserGroups | default([]) | map(attribute='id') | sort)
+    != (item.0.allowed_user_groups | map('extract', oidc_group_ids) | sort)
+  changed_when: true
+  no_log: true
+
+# Настройки приложения (время сессии, имя, UI) живут там же, в БД.
+# PUT заменяет набор целиком и требует все обязательные поля, поэтому
+# читаем текущее состояние и накладываем на него только описанное.
+- name: Read current application configuration
+  ansible.builtin.uri:
+    url: "{{ oidc_api_url }}/api/application-configuration/all"
+    method: GET
+    headers: "{{ oidc_api_headers }}"
+    validate_certs: "{{ oidc_api_validate_certs }}"
+  register: oidc_app_config_state
+  changed_when: false
+  check_mode: false
+  no_log: true
+
+- name: Compute desired application configuration
+  ansible.builtin.set_fact:
+    oidc_app_config_current: >-
+      {{ oidc_app_config_state.json
+         | items2dict(key_name='key', value_name='value') }}
+  no_log: true
+
+- name: Apply application configuration
+  ansible.builtin.uri:
+    url: "{{ oidc_api_url }}/api/application-configuration"
+    method: PUT
+    headers: "{{ oidc_api_headers }}"
+    validate_certs: "{{ oidc_api_validate_certs }}"
+    body_format: json
+    body: "{{ oidc_app_config_current | combine(oidc_app_settings) }}"
+    status_code: [200, 201]
+  when: >-
+    oidc_app_settings | length > 0
+    and oidc_app_config_current | combine(oidc_app_settings)
+        != oidc_app_config_current
+  changed_when: true
+  no_log: true

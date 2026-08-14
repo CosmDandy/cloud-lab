@@ -1,0 +1,12 @@
+[Unit]
+Description=Ежедневное резервное копирование control-plane
+
+[Timer]
+OnCalendar={{ backup_schedule }}
+RandomizedDelaySec={{ backup_randomized_delay }}
+# Если хост был выключен в момент срабатывания — запустить при старте,
+# а не ждать следующих суток.
+Persistent=true
+
+[Install]
+WantedBy=timers.target

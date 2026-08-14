@@ -1,0 +1,5 @@
+---
+- name: Restart mesh stack
+  community.docker.docker_compose_v2:
+    project_src: "{{ mesh_dir }}"
+    state: restarted

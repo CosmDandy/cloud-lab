@@ -1,0 +1,436 @@
+---
+# БОЕВОЙ control-plane, hhh-sto-02 (HostHatch Стокгольм). Здесь только
+# несекретная часть — домены, идентификаторы клиентов и описания сервисов.
+# Пароли, токены и client_secret лежат рядом в secrets.sops.yaml под
+# шифрованием.
+#
+# Файл пришёл со стенда htz-hel-test без единой правки доменов: имена там
+# были боевые с самого начала, ровно чтобы redirect URI OIDC-клиентов не
+# пришлось заводить дважды.
+#
+# Файл описывает ЦЕЛЕВОЕ состояние: OIDC включён везде. Проход 1 из
+# docs/control-plane-bootstrap.md выключает его не правкой этого файла, а
+# extra-vars при запуске — у них высший приоритет, и репозиторий не ездит
+# туда-сюда двумя взаимно отменяющими коммитами.
+#
+# Клиентские секреты и оба API-ключа в secrets.sops.yaml сейчас ПУСТЫЕ, и
+# это не временное состояние, а факт: они принадлежали Pocket ID и headscale
+# уничтоженного стенда. Заполняются выводом прохода 2. Пока пусты, обычный
+# прогон честно падает на ассертах ролей — так и задумано.
+#
+# Секреты панели, наоборот, боевые: перенесены из host_vars/htz-hel-01
+# один в один. На этом держится бесшовность — те же JWT-соли означают, что
+# сессии и выданные API-токены переживут перенос.
+#
+# Внутренние комментарии secrets.sops.yaml всё ещё ссылаются на htz-hel-test:
+# менять их означало бы перешифровать файл целиком и получить диff, в котором
+# изменилось каждое значение. Оставлено намеренно.
+#
+# client_id не секрет по спецификации OAuth2: он уходит в браузер при
+# каждом редиректе на провайдера. Держим его открытым, чтобы списки
+# клиентов ниже читались без расшифровки.
+
+# --- edge (traefik) ---------------------------------------------------------
+edge_acme_email: admin@cosmdandy.dev
+
+# Пусто — боевой letsencrypt. Пока домены стенда не были заведены в DNS,
+# здесь стоял staging: иначе неудачные попытки выжгли бы боевой лимит.
+edge_acme_ca_server: ""
+
+# HTTP/3 выключен: QUIC ходит по UDP, а он у российских провайдеров
+# режется охотнее TCP — браузер получает alt-svc, уходит на UDP 443
+# и виснет. curl этого не делает, поэтому из консоли всё выглядело живым.
+edge_http3_enabled: false
+
+edge_dashboard_domain: traefik.cosmdandy.dev
+edge_oidc_issuer: https://oidc.cosmdandy.dev
+# Заводится в Pocket ID: Settings → OIDC Clients → Add.
+# Callback URL: https://traefik.cosmdandy.dev/oauth2/callback
+edge_oidc_client_id: 098f02a7-3b37-4aec-b7e3-25dadb4f608b
+
+# --- mesh (headscale + headplane) -------------------------------------------
+mesh_domain: mesh.cosmdandy.dev
+
+# Машина в Стокгольме, и метка встроенного DERP должна это отражать: код и
+# имя видны клиентам в `tailscale netcheck`. В дефолтах роли стоит hel от
+# прежнего стенда в Хельсинки — с ней netcheck показывал «Nearest DERP:
+# Helsinki» для реле, физически стоящего в Швеции.
+mesh_derp_region_code: sto
+mesh_derp_region_name: Stockholm
+
+# Внешний DERP-релей на HostHatch (Стокгольм), region_id 901: 900 занят
+# встроенным, публичные регионы tailscale двузначные. Добавляется рядом со
+# встроенным, а не вместо — клиент выбирает быстрейший сам.
+#
+# Выключен: релей поднимался на чужой рабочей ноде под замер 2026-07-28 и
+# снят вместе с ней. Раздавать клиентам регион, за которым никого нет,
+# нельзя — они будут ходить в него по netcheck и получать таймауты.
+# Чтобы вернуть: поднять derper (--tags derper --limit hhh-sto-01) и
+# раскомментировать блок.
+# mesh_derp_regions:
+#   - region_id: 901
+#     region_code: sto
+#     region_name: Stockholm
+#     nodes:
+#       - name: derp-sto
+#         hostname: derp-sto.cosmdandy.dev
+#         ipv4: 167.104.104.131
+#         derpport: 443
+#         stunport: 3478
+
+mesh_oidc_enabled: true
+mesh_oidc_issuer: https://oidc.cosmdandy.dev
+# Callback URL: https://mesh.cosmdandy.dev/admin/oidc/callback
+mesh_oidc_client_id: d891c5c1-94a1-4cc3-bb68-204c33e14f96
+
+# Вход узлов в tailnet. Клиент отдельный от headplane.
+# Callback URL: https://mesh.cosmdandy.dev/oidc/callback
+mesh_headscale_oidc_enabled: true
+mesh_headscale_oidc_issuer: https://oidc.cosmdandy.dev
+mesh_headscale_oidc_client_id: b154ef42-8655-4730-8ab7-971a28a80ec6
+
+# --- oidc (Pocket ID) -------------------------------------------------------
+oidc_domain: oidc.cosmdandy.dev
+
+# Группы и клиенты, которые роль oidc держит в описанном виде.
+# Всё, что заведено в Pocket ID помимо этих списков, роль не трогает.
+oidc_user_groups:
+  - name: admins
+    friendly_name: Admins
+    # Список задан — роль приводит состав группы ровно к нему. Убрать
+    # ключ целиком, если членством управляют через UI.
+    members: [cosmdandy]
+    custom_claims:
+      # Remnawave проверяет его после успешного входа: без claim-а
+      # аутентификация проходит, а панель отвечает Forbidden.
+      remnawaveAccess: "true"
+
+oidc_clients:
+  # id берутся из переменных выше — один источник правды на клиента.
+  - id: "{{ mesh_oidc_client_id }}"
+    name: headplane
+    callback_urls:
+      - "https://{{ mesh_domain }}/admin/oidc/callback"
+    group_restricted: true
+    allowed_user_groups: [admins]
+
+  - id: "{{ mesh_headscale_oidc_client_id }}"
+    name: headscale
+    callback_urls:
+      - "https://{{ mesh_domain }}/oidc/callback"
+
+  - id: "{{ edge_oidc_client_id }}"
+    name: traefik-dashboard
+    callback_urls:
+      - "https://{{ edge_dashboard_domain }}/oauth2/callback"
+    group_restricted: true
+    allowed_user_groups: [admins]
+
+  - id: "{{ observability_oidc_client_id }}"
+    name: grafana
+    callback_urls:
+      - "https://{{ observability_domain }}/login/generic_oauth"
+
+  # Отсутствовал в списке: на прошлом стенде клиент был заведён руками, и
+  # это вскрылось только на чистом Pocket ID — вход в статус-страницу отдавал
+  # «The requested OAuth 2.0 Client does not exist».
+  - id: "{{ gatus_oidc_client_id }}"
+    name: gatus
+    callback_urls:
+      - "https://{{ gatus_domain }}/authorization-code/callback"
+    # У gatus в конфигурации есть только issuer, client_id, client_secret,
+    # redirect-url и scopes — code_verifier он не шлёт. С обязательным PKCE
+    # клиент создался бы, а вход всё равно падал бы, только по другой причине.
+    pkce_enabled: false
+
+  # Вход в веб-интерфейс кластера Proxmox pve-kvt-l. Redirect URI Proxmox не
+  # настраивается — он собирает его из адреса, по которому пришёл браузер,
+  # поэтому перечислены все три ноды в обоих видах: по IP и по имени .local
+  # из их же сертификата. Заходите с четвёртой ноды или через новое имя —
+  # адрес нужно добавить сюда, иначе Pocket ID отвергнет redirect.
+  - id: "{{ proxmox_oidc_client_id }}"
+    name: proxmox
+    callback_urls:
+      - "https://192.168.20.151:8006"
+      - "https://192.168.20.152:8006"
+      - "https://192.168.20.153:8006"
+      - "https://pve-kvt-l-01.local:8006"
+      - "https://pve-kvt-l-02.local:8006"
+      - "https://pve-kvt-l-03.local:8006"
+    group_restricted: true
+    allowed_user_groups: [admins]
+
+  # Вход в панель. Клиент описан здесь, а НЕ заводится руками в UI, хотя
+  # runbook раньше советовал именно так: клиент gatus был заведён руками, в
+  # коде его не было, и это вскрылось только на чистом Pocket ID ошибкой
+  # «The requested OAuth 2.0 Client does not exist». Второй раз на те же
+  # грабли не наступаем.
+  - id: "{{ panel_oidc_client_id }}"
+    name: remnawave-generic
+    callback_urls:
+      - "https://{{ panel_domain }}/oauth2/callback/generic"
+    group_restricted: true
+    allowed_user_groups: [admins]
+    # PKCE выключен по той же причине, что записана в дефолтах роли:
+    # Remnawave его не шлёт. У панели есть флажок withPkce — если однажды
+    # он заработает, включать надо СРАЗУ с обеих сторон, иначе вход упадёт
+    # на «the code_challenge parameter is missing».
+    pkce_enabled: false
+
+# Сами настройки OAuth2 живут в БД панели (remnawave_settings.oauth2_settings)
+# и наружу не вынесены — их придётся ввести руками в UI, ролью это не
+# описывается. Провайдер выбирать Generic, а НЕ «Pocket ID»: в режиме
+# pocketid панель шлёт redirect_uri=null, и сертифицированный провайдер
+# такой запрос отвергает.
+#
+# До 30.07.2026 вход в панель шёл по паролю, все шесть провайдеров oauth2
+# были выключены — см. docs/panel-snapshot-2026-07-30.md.
+
+# --- panel (Remnawave) ------------------------------------------------------
+# Проксируемые через Cloudflare имена — в отличие от остальных, они не
+# раскрывают адрес машины. Пользователи ходят только сюда; сам VPN-трафик
+# идёт мимо, прямо на ноды HostHatch.
+panel_domain: vpn.cosmdandy.dev
+panel_sub_domain: sub.cosmdandy.dev
+
+# Вход в панель через Pocket ID. Callback взят не из документации, а из
+# самого фронтенда панели: в бандле маршрут объявлен как
+# /oauth2/callback/:provider, и для провайдера Generic это
+# /oauth2/callback/generic.
+panel_oidc_client_id: 01cf34f5-dab9-4d7a-bf52-6771264069a8
+
+# Вход в Proxmox. Машины кластера живут в домашней сети и ролями не
+# управляются — здесь только клиент Pocket ID; сам realm заводится на
+# кластере командой pveum, см. docs/proxmox-sso.md.
+proxmox_oidc_client_id: 4d41a3ad-ff75-4167-aba6-76684b3c8982
+
+# Корень домена подписок сам по себе ничего не отдаёт: страница обслуживает
+# только пути вида /<short_uuid>, а на / и /robots.txt закрывает соединение,
+# и traefik превращает это в 502. На старой машине поверх стоял отдельный
+# роутер с redirectregex на контакт поддержки — при переезде он потерялся,
+# потому что переменная осталась пустой. Восстановлено по меткам traefik,
+# снятым с htz-hel-01.
+panel_sub_root_redirect: https://t.me/CosmDandy
+
+# --- observability ----------------------------------------------------------
+observability_domain: grafana.cosmdandy.dev
+
+# Включено обратно: панель здесь есть, и её /metrics закрыт basic-auth,
+# из-под которого скрейпит vmagent (panel_metrics_user/password).
+observability_panel_metrics_enabled: true
+
+observability_oidc_enabled: true
+observability_oidc_issuer: https://oidc.cosmdandy.dev
+# Callback URL: https://grafana.cosmdandy.dev/login/generic_oauth
+observability_oidc_client_id: 6ece9d45-1960-41d7-8b7c-be9035159169
+
+# --- gatus (статус-страница) ------------------------------------------------
+gatus_domain: status.cosmdandy.dev
+gatus_ui_title: cosmdandy.dev
+gatus_ui_header: Инфраструктура
+
+gatus_telegram_enabled: true
+
+gatus_oidc_enabled: true
+gatus_oidc_issuer: https://oidc.cosmdandy.dev
+gatus_oidc_client_id: 92ba05d1-584e-452b-a5f1-18dc197d0e75
+
+# Проверки бьют по публичным адресам: смысл в том, чтобы видеть сервис
+# глазами пользователя — вместе с traefik, сертификатом и DNS.
+gatus_endpoints:
+  - name: headscale
+    group: mesh
+    url: https://mesh.cosmdandy.dev/health
+  - name: headplane
+    group: mesh
+    url: https://mesh.cosmdandy.dev/admin
+  - name: pocket-id
+    group: sso
+    url: https://oidc.cosmdandy.dev/
+  - name: discovery
+    group: sso
+    url: https://oidc.cosmdandy.dev/.well-known/openid-configuration
+    conditions:
+      - "[STATUS] == 200"
+      - "[BODY].issuer == https://oidc.cosmdandy.dev"
+  - name: grafana
+    group: observability
+    url: https://grafana.cosmdandy.dev/api/health
+  - name: traefik-dashboard
+    group: edge
+    url: https://traefik.cosmdandy.dev/
+
+  # Панель и подписки проксируются Cloudflare, поэтому проверка меряет весь
+  # путь пользователя целиком: Cloudflare, traefik, приложение.
+  - name: panel
+    group: vpn
+    url: https://vpn.cosmdandy.dev/
+  # Ждём 302, а не 200: страница подписок обслуживает только /<short_uuid>,
+  # а корень отдан редиректу на поддержку. Проверка всё равно меряет весь
+  # путь целиком — DNS, Cloudflare, traefik и правило роутера.
+  #
+  # ignore-redirect обязателен: по умолчанию gatus идёт по редиректу, и
+  # итоговым кодом оказывается ответ t.me, а не наш 302. Условие при этом
+  # не срабатывает никогда, а в логе видно success=false при errors=0 —
+  # то есть ответ получен, просто не тот, которого ждали.
+  #
+  # Ключ называется именно так. Написал сначала follow-redirects: false —
+  # gatus такой ключ молча проигнорировал, конфиг принял, поведение не
+  # изменилось. Неизвестные ключи он не отвергает, так что опечатку здесь
+  # видно только по результату проверки.
+  #
+  # Условия заданы явно, поэтому дефолтные сюда не подставляются: проверку
+  # срока сертификата приходится повторять руками, иначе она потеряется.
+  - name: subscription
+    group: vpn
+    url: https://sub.cosmdandy.dev/
+    client:
+      ignore-redirect: true
+    conditions:
+      - "[STATUS] == 302"
+      - "[CERTIFICATE_EXPIRATION] > 240h"
+
+  # Отдельная проверка самого API. Нужна, чтобы отличить протухший токен от
+  # упавших нод: при 401 покраснели бы разом все три проверки ниже, и вывод
+  # «ноды легли» был бы неверным — TCP-проверки в этот момент остаются
+  # зелёными. Здесь же в уведомление придёт имя panel-api.
+  - name: panel-api
+    group: vpn
+    url: https://vpn.cosmdandy.dev/api/nodes
+    headers:
+      Authorization: "Bearer {{ gatus_panel_api_token }}"
+    conditions:
+      - "[STATUS] == 200"
+
+  # Ноды. Каждая проверяется тремя способами, и слить их в одну проверку
+  # нельзя: эндпоинт в gatus — это один запрос по одному протоколу, а
+  # условия относятся к ответу на него. Да и не нужно — смысл именно в
+  # различении, одна общая проверка сказала бы «сломалось», не сказав что.
+  #
+  #   -tcp    порт 443 принимает соединение: машина жива и Xray держит
+  #           инбаунд. HTTP-запросом Reality не проверить — он для того и
+  #           сделан, чтобы отвечать чужому неотличимо от обычного сайта.
+  #           443, а не порт агента 2222: это путь, которым ходят
+  #           пользователи, и он же ломается первым при блокировке.
+  #   -icmp   машина отвечает на ping. Живой icmp при мёртвом tcp — упал
+  #           Xray; оба мёртвые — машина или сеть провайдера.
+  #   -panel  isConnected из API панели: единственный ответ на вопрос,
+  #           обслуживает ли нода людей. Порт остаётся открытым и тогда,
+  #           когда нода уже потеряла связь с панелью.
+  #
+  # По эндпоинту на ноду, а не разбор массива из /api/nodes: порядок в
+  # ответе не гарантирован, а так у каждой свой uptime и своё уведомление.
+  - name: hhh-sto-01-tcp
+    group: vpn nodes
+    url: "tcp://hhh-sto-01.vpn.cosmdandy.dev:443"
+    conditions:
+      - "[CONNECTED] == true"
+  - name: hhh-sto-01-icmp
+    group: vpn nodes
+    url: "icmp://hhh-sto-01.vpn.cosmdandy.dev"
+    conditions:
+      - "[CONNECTED] == true"
+  - name: hhh-sto-01-panel
+    group: vpn nodes
+    url: https://vpn.cosmdandy.dev/api/nodes/98895b84-da4f-4fde-9111-e7970c93410f
+    headers:
+      Authorization: "Bearer {{ gatus_panel_api_token }}"
+    conditions:
+      - "[STATUS] == 200"
+      - "[BODY].response.isConnected == true"
+
+  - name: hhh-ams-01-tcp
+    group: vpn nodes
+    url: "tcp://hhh-ams-01.vpn.cosmdandy.dev:443"
+    conditions:
+      - "[CONNECTED] == true"
+  - name: hhh-ams-01-icmp
+    group: vpn nodes
+    url: "icmp://hhh-ams-01.vpn.cosmdandy.dev"
+    conditions:
+      - "[CONNECTED] == true"
+  - name: hhh-ams-01-panel
+    group: vpn nodes
+    url: https://vpn.cosmdandy.dev/api/nodes/43cb4483-02c1-4c81-904a-82442c0691aa
+    headers:
+      Authorization: "Bearer {{ gatus_panel_api_token }}"
+    conditions:
+      - "[STATUS] == 200"
+      - "[BODY].response.isConnected == true"
+
+  - name: hhh-osl-01-tcp
+    group: vpn nodes
+    url: "tcp://hhh-osl-01.vpn.cosmdandy.dev:443"
+    conditions:
+      - "[CONNECTED] == true"
+  - name: hhh-osl-01-icmp
+    group: vpn nodes
+    url: "icmp://hhh-osl-01.vpn.cosmdandy.dev"
+    conditions:
+      - "[CONNECTED] == true"
+  - name: hhh-osl-01-panel
+    group: vpn nodes
+    url: https://vpn.cosmdandy.dev/api/nodes/48b8e924-ac49-4a65-a57e-02cd2282f28f
+    headers:
+      Authorization: "Bearer {{ gatus_panel_api_token }}"
+    conditions:
+      - "[STATUS] == 200"
+      - "[BODY].response.isConnected == true"
+
+# --- gatus-public (публичная статус-страница) --------------------------------
+# Отдельный экземпляр той же роли, переопределяется в site.yml. Отвечает на
+# единственный вопрос пользователя: «это у меня или у них». Поэтому здесь
+# нет ни внутренних сервисов, ни адресов узлов — только страны и результат.
+#
+# Запись A на этот домен обязана быть непроксируемой: сквозь оранжевое
+# облако страница не откроется как раз в России, ради которой она и нужна.
+gatus_public_domain: status.vpn.cosmdandy.dev
+gatus_public_ui_title: cosmdandy VPN
+gatus_public_ui_header: Состояние сервиса
+
+# Проверяется isConnected, а не TCP-порт: открытый порт сохраняется и у
+# ноды, потерявшей связь с панелью, — для витрины это была бы ложь в
+# зелёную сторону. Токен тот же read-only, что у внутреннего экземпляра.
+gatus_public_endpoints:
+  - name: Швеция
+    group: Узлы
+    url: https://vpn.cosmdandy.dev/api/nodes/98895b84-da4f-4fde-9111-e7970c93410f
+    headers:
+      Authorization: "Bearer {{ gatus_panel_api_token }}"
+    conditions:
+      - "[STATUS] == 200"
+      - "[BODY].response.isConnected == true"
+  - name: Нидерланды
+    group: Узлы
+    url: https://vpn.cosmdandy.dev/api/nodes/43cb4483-02c1-4c81-904a-82442c0691aa
+    headers:
+      Authorization: "Bearer {{ gatus_panel_api_token }}"
+    conditions:
+      - "[STATUS] == 200"
+      - "[BODY].response.isConnected == true"
+  - name: Норвегия
+    group: Узлы
+    url: https://vpn.cosmdandy.dev/api/nodes/48b8e924-ac49-4a65-a57e-02cd2282f28f
+    headers:
+      Authorization: "Bearer {{ gatus_panel_api_token }}"
+    conditions:
+      - "[STATUS] == 200"
+      - "[BODY].response.isConnected == true"
+
+  # Без страницы подписок клиент не обновит конфиг, даже когда все узлы
+  # живы, — для пользователя это тоже «не работает».
+  - name: Подписки
+    group: Сервис
+    url: https://sub.cosmdandy.dev/
+    client:
+      ignore-redirect: true
+    conditions:
+      - "[STATUS] == 302"
+
+# --- atuin (синхронизация истории shell) ------------------------------------
+atuin_domain: atuin.cosmdandy.dev
+
+# Регистрация закрыта. Чтобы завести аккаунт: поставить true, прогнать роль,
+# выполнить `atuin register` с клиента, вернуть false и прогнать ещё раз.
+# Пароль и ключ шифрования — единственная защита: SSO у atuin нет и не будет.
+atuin_open_registration: false

@@ -1,0 +1,9 @@
+# Managed by ansible (roles/panel). Правки на хосте будут перезаписаны.
+PORT=3010
+REMNAWAVE_PANEL_URL=http://panel:3000
+REMNAWAVE_API_TOKEN={{ panel_subscription_api_token }}
+# Именно число, а не true: Express трактует строку "true" как список
+# доверенных адресов, доверие не срабатывает, req.secure остаётся false,
+# и ProxyCheckMiddleware рвёт соединение — снаружи это выглядит как 502.
+# 1 = доверять одному хопу, то есть traefik перед приложением.
+TRUST_PROXY=1

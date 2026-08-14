@@ -1,6 +1,6 @@
 ---
 # Sysctl-параметры для VPN-нод (RemnaWave + Xray).
-# Значения выровнены под рекомендации из docs/dpi-report-22-06-26.md (Phase 1).
+# Значения — из docs/dpi/report-2026-06-22.md (Phase 1).
 # Override через group_vars/host_vars при необходимости.
 
 vpn_tuning_sysctl_file: /etc/sysctl.d/99-vpn-tuning.conf
@@ -23,12 +23,19 @@ vpn_tuning_sysctl:
   net.ipv4.tcp_slow_start_after_idle: "0"
   net.ipv4.tcp_notsent_lowat: "131072"
   net.ipv4.tcp_fastopen: "3"
+  # Чёрные дыры PMTU: у HostHatch на ams и osl MTU интерфейса 1450, и если по
+  # пути гасят ICMP «Fragmentation needed», соединение с большим MSS зависает
+  # молча. С probing ядро само нащупает рабочий размер.
+  net.ipv4.tcp_mtu_probing: "1"
 
   # Concurrency / backlog
   net.core.somaxconn: "65535"
   net.ipv4.tcp_max_syn_backlog: "65535"
   net.core.netdev_max_backlog: "32768"
-  net.ipv4.ip_local_port_range: "1024 65535"
+  # Нижняя граница выше всех портов ноды (22, 2054, 2084, 2222, 2444, 2446):
+  # с диапазона от 1024 исходящее соединение может занять порт инбаунда, и
+  # после перезапуска xray не сможет забиндиться.
+  net.ipv4.ip_local_port_range: "10240 65535"
   net.ipv4.tcp_fin_timeout: "15"
   net.ipv4.tcp_tw_reuse: "1"
 

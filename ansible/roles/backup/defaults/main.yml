@@ -1,0 +1,82 @@
+---
+backup_dir: /opt/backup
+# Сюда складываются выгрузки перед отправкой. Каталог вычищается после
+# каждого прогона: дампы содержат всё то же, что и сами базы.
+backup_staging: /var/lib/backup/staging
+
+backup_packages:
+  - restic
+  # Для консистентного снимка sqlite: копировать файл на живой базе нельзя,
+  # нужен .backup, который умеет договориться с WAL.
+  - sqlite3
+
+# --- репозиторий restic -----------------------------------------------------
+# Hetzner Object Storage говорит по протоколу S3.
+# Endpoint вида fsn1.your-objectstorage.com — регион там, где создан бакет.
+backup_s3_endpoint: ""
+backup_s3_bucket: ""
+# Префикс внутри бакета: в одном бакете могут жить несколько хостов.
+backup_s3_prefix: "{{ inventory_hostname }}"
+backup_s3_access_key: ""
+backup_s3_secret_key: ""
+
+# Пароль репозитория. Потеря = потеря всех бэкапов: restic шифрует на
+# стороне клиента, и расшифровать архив больше нечем.
+backup_restic_password: ""
+
+backup_restic_repository: >-
+  s3:https://{{ backup_s3_endpoint }}/{{ backup_s3_bucket }}/{{ backup_s3_prefix }}
+
+# Окружение для вызовов restic из плейбука; в systemd оно едет
+# через backup.env.
+backup_restic_env:
+  RESTIC_REPOSITORY: "{{ backup_restic_repository }}"
+  RESTIC_PASSWORD: "{{ backup_restic_password }}"
+  AWS_ACCESS_KEY_ID: "{{ backup_s3_access_key }}"
+  AWS_SECRET_ACCESS_KEY: "{{ backup_s3_secret_key }}"
+
+# --- что снимаем ------------------------------------------------------------
+backup_pocket_id_enabled: true
+backup_pocket_id_container: pocket-id
+
+backup_postgres_enabled: true
+backup_postgres_container: remnawave-postgres
+backup_postgres_user: remnawave
+backup_postgres_db: remnawave
+
+# Помимо базы в томе лежат noise_private.key и ключ DERP. Без них узлы
+# после восстановления получат "chacha20poly1305: message authentication
+# failed" и потребуют перерегистрации.
+backup_headscale_enabled: true
+backup_headscale_volume: mesh_headscale_data
+
+backup_grafana_enabled: true
+backup_grafana_volume: observability_grafana_data
+
+# Произвольные пути на хосте, которые тоже нужно забрать.
+backup_extra_paths: []
+
+# --- расписание и ротация ---------------------------------------------------
+backup_schedule: "*-*-* 03:30:00"
+# Разброс запуска, чтобы одновременные бэкапы с разных хостов не били
+# в хранилище одной пачкой.
+backup_randomized_delay: 30m
+
+backup_keep_daily: 7
+backup_keep_weekly: 4
+backup_keep_monthly: 6
+
+# Полная проверка целостности репозитория. Дорого по трафику, поэтому
+# отдельным флагом: раз в неделю достаточно.
+backup_check_enabled: true
+backup_check_weekday: Sun
+
+# --- уведомления ------------------------------------------------------------
+# Молчащий бэкап хуже отсутствующего: об ошибке нужно узнавать сразу,
+# а не в момент восстановления.
+backup_telegram_enabled: false
+backup_telegram_token: ""
+backup_telegram_id: ""
+# Сообщать и об успешных прогонах. По умолчанию нет — иначе уведомления
+# превращаются в фон, который перестают читать.
+backup_telegram_notify_success: false

@@ -1,7 +1,9 @@
-- name: daemon_reload
-  ansible.builtin.systemd:
+---
+- name: Reload systemd
+  ansible.builtin.systemd_service:
     daemon_reload: true
-- name: restart_tailscaled
-  ansible.builtin.systemd:
+
+- name: Restart tailscaled
+  ansible.builtin.systemd_service:
     name: tailscaled
     state: restarted

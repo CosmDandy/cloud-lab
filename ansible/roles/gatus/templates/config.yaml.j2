@@ -1,0 +1,86 @@
+# Managed by ansible (roles/gatus). Правки на хосте будут перезаписаны.
+web:
+  port: {{ gatus_port }}
+
+{% if gatus_metrics_enabled %}
+# /metrics в формате prometheus на том же порту. Скрейпит vmagent изнутри
+# docker-сети, минуя traefik: наружу эндпоинт не выставлен.
+metrics: true
+{% endif %}
+
+storage:
+  # sqlite, а не память: иначе история проверок обнуляется при каждом
+  # рестарте, и увидеть «сколько раз за неделю падало» невозможно.
+  type: sqlite
+  path: /data/data.db
+
+ui:
+  title: {{ gatus_ui_title }}
+  header: {{ gatus_ui_header }}
+{% if gatus_telegram_enabled %}
+
+alerting:
+  telegram:
+    token: "{{ gatus_telegram_token }}"
+    id: "{{ gatus_telegram_id }}"
+    default-alert:
+      failure-threshold: {{ gatus_alert_failure_threshold }}
+      success-threshold: {{ gatus_alert_success_threshold }}
+      send-on-resolved: true
+{% endif %}
+{% if gatus_oidc_enabled %}
+
+security:
+  oidc:
+    issuer-url: "{{ gatus_oidc_issuer }}"
+    client-id: "{{ gatus_oidc_client_id }}"
+    client-secret: "{{ gatus_oidc_client_secret }}"
+    redirect-url: "https://{{ gatus_domain }}/authorization-code/callback"
+    scopes:
+{% for scope in gatus_oidc_scopes %}
+      - {{ scope }}
+{% endfor %}
+{% endif %}
+
+endpoints:
+{% for ep in gatus_endpoints %}
+  - name: {{ ep.name }}
+{% if ep.group is defined %}
+    group: {{ ep.group }}
+{% endif %}
+    url: "{{ ep.url }}"
+{% if gatus_hide_endpoint_details %}
+    ui:
+      hide-hostname: true
+      hide-url: true
+      hide-conditions: true
+{% endif %}
+{% if ep.headers is defined %}
+    headers:
+{% for key, value in ep.headers.items() %}
+      {{ key }}: "{{ value }}"
+{% endfor %}
+{% endif %}
+{% if ep.client is defined %}
+    client:
+{% for key, value in ep.client.items() %}
+      # to_json, а не сырое значение: иначе питоновские True/False
+      # уезжают в конфиг с заглавной буквы.
+      {{ key }}: {{ value | to_json }}
+{% endfor %}
+{% endif %}
+{% if ep.dns is defined %}
+    dns:
+      query-name: "{{ ep.dns['query-name'] }}"
+      query-type: {{ ep.dns['query-type'] }}
+{% endif %}
+    interval: {{ ep.interval | default(gatus_default_interval) }}
+    conditions:
+{% for condition in ep.conditions | default(gatus_default_conditions) %}
+      - "{{ condition }}"
+{% endfor %}
+{% if gatus_telegram_enabled %}
+    alerts:
+      - type: telegram
+{% endif %}
+{% endfor %}

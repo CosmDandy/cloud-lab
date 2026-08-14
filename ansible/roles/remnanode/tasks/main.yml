@@ -1,0 +1,145 @@
+---
+- name: Validate required variables
+  ansible.builtin.assert:
+    that:
+      - remnanode_secret_key | length > 0
+      - remnanode_image.split(':') | length == 2
+      - remnanode_image.split(':') | last != 'latest'
+    fail_msg: >-
+      Нужен remnanode_secret_key из SOPS и образ с явным тегом версии.
+      latest запрещён: он разрешается в digest один раз, при pull, и
+      дальше показывает не то, что на самом деле запущено.
+
+- name: Create stack directory
+  ansible.builtin.file:
+    path: "{{ remnanode_dir }}"
+    state: directory
+    owner: "{{ remnanode_owner }}"
+    group: "{{ remnanode_owner }}"
+    mode: "0750"
+
+- name: Render environment file
+  ansible.builtin.template:
+    src: env.j2
+    dest: "{{ remnanode_dir }}/.env"
+    owner: "{{ remnanode_owner }}"
+    group: "{{ remnanode_owner }}"
+    mode: "0600"
+  no_log: true
+
+- name: Render compose file
+  ansible.builtin.template:
+    src: compose.yaml.j2
+    dest: "{{ remnanode_dir }}/compose.yaml"
+    owner: "{{ remnanode_owner }}"
+    group: "{{ remnanode_owner }}"
+    mode: "0640"
+
+# Образ тянется до остановки старого контейнера, а не после: между stop и up
+# нода не обслуживает никого, и загрузка нескольких сотен мегабайт внутри
+# этого окна растянула бы простой с секунд до минуты.
+- name: Pre-pull the node image
+  community.docker.docker_image_pull:
+    name: "{{ remnanode_image.split(':') | first }}"
+    tag: "{{ remnanode_image.split(':') | last }}"
+
+# Переезд с ручного стека. Нода развёрнута из /root/compose.yaml — это
+# отдельный compose-проект с именем root. Пока он жив, оба проекта claim'ят
+# одно имя контейнера и один host-порт, и наш просто не поднимется.
+- name: Detect the legacy stack
+  ansible.builtin.stat:
+    path: /root/compose.yaml
+  register: remnanode_legacy
+
+- name: Stop the legacy stack
+  community.docker.docker_compose_v2:
+    project_src: /root
+    state: absent
+  when: remnanode_legacy.stat.exists
+
+# Копия сохраняется: в ней лежит SECRET_KEY, выданный панелью, и это
+# единственный экземпляр на случай, если в SOPS уехало не то значение.
+- name: Archive the legacy compose file
+  ansible.builtin.copy:
+    src: /root/compose.yaml
+    dest: /root/compose.yaml.migrated
+    remote_src: true
+    owner: root
+    group: root
+    mode: "0600"
+  when: remnanode_legacy.stat.exists
+
+- name: Remove the legacy compose file
+  ansible.builtin.file:
+    path: /root/compose.yaml
+    state: absent
+
+# docker compose up сам пересоздаёт контейнер при смене образа или
+# окружения — он сверяет config-hash в метке контейнера с текущим файлом.
+# Поэтому отдельный recreate не нужен, а restart был бы вреден: docker не
+# перечитывает image у уже существующего контейнера.
+#
+# NOTE: на машине, где роль ещё не отрабатывала, --check обрывается здесь
+# с «/opt/remnanode is not a directory»: в dry-run каталог и compose-файл
+# не создаются, а модулю нужен готовый проект. Это ожидаемо и не дефект —
+# после первого реального прогона --check проходит целиком.
+- name: Deploy the node stack
+  community.docker.docker_compose_v2:
+    project_src: "{{ remnanode_dir }}"
+    state: present
+    pull: missing
+    remove_orphans: true
+
+# Без ожидания serial отпускает хост раньше, чем агент поднялся, и
+# следующая нода начинает рестарт при ещё не вернувшейся предыдущей.
+- name: Wait for the node agent to listen
+  ansible.builtin.wait_for:
+    host: 127.0.0.1
+    port: "{{ remnanode_port }}"
+    timeout: 90
+
+# Port hopping ставится после контейнера: заворачивать диапазон на порт,
+# который ещё никто не слушает, значит несколько секунд отбивать клиентов
+# ICMP port unreachable вместо тишины.
+- name: Create nftables rules directory
+  ansible.builtin.file:
+    path: "{{ remnanode_porthop_rules | dirname }}"
+    state: directory
+    owner: root
+    group: root
+    mode: "0755"
+
+- name: Render port hopping rules
+  ansible.builtin.template:
+    src: hyhop.nft.j2
+    dest: "{{ remnanode_porthop_rules }}"
+    owner: root
+    group: root
+    mode: "0644"
+  notify: Restart port hopping
+
+- name: Install port hopping unit
+  ansible.builtin.template:
+    src: hysteria-porthop.service.j2
+    dest: /etc/systemd/system/hysteria-porthop.service
+    owner: root
+    group: root
+    mode: "0644"
+  notify: Restart port hopping
+
+- name: Enable port hopping
+  ansible.builtin.systemd_service:
+    name: hysteria-porthop
+    enabled: true
+    state: started
+    daemon_reload: true
+
+# Юнит типа oneshot рапортует об успехе, даже если nft отверг правило по
+# синтаксису: systemd видит нулевой код возврата от уже отработавшего
+# процесса. Проверяется поэтому сама таблица, а не состояние сервиса.
+- name: Verify the redirect is in place
+  ansible.builtin.command:
+    cmd: /usr/sbin/nft list table ip hyhop
+  register: remnanode_hyhop
+  changed_when: false
+  failed_when: remnanode_porthop_range not in remnanode_hyhop.stdout

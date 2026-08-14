@@ -1,0 +1,78 @@
+---
+- name: Validate required variables
+  ansible.builtin.assert:
+    that:
+      - edge_acme_email | length > 0
+    fail_msg: >-
+      Нужен edge_acme_email — на него letsencrypt шлёт уведомления
+      об истечении сертификатов.
+
+- name: Validate dashboard OIDC variables
+  ansible.builtin.assert:
+    that:
+      - edge_oidc_issuer | length > 0
+      - edge_oidc_client_id | length > 0
+      - edge_oidc_client_secret | length > 0
+      - edge_oidc_cookie_secret | length > 0
+    fail_msg: >-
+      Дашборд traefik публикуется только за oauth2-proxy: нужны issuer,
+      client_id, client_secret и cookie_secret. Иначе оставьте
+      edge_dashboard_domain пустым.
+  when: edge_dashboard_domain | length > 0
+
+- name: Create stack directories
+  ansible.builtin.file:
+    path: "{{ edge_dir }}/{{ item }}"
+    state: directory
+    owner: "{{ edge_owner }}"
+    group: "{{ edge_owner }}"
+    mode: "0750"
+  loop:
+    - ""
+    - traefik
+    - traefik/dynamic
+    - oauth2-proxy
+
+- name: Render traefik static config
+  ansible.builtin.template:
+    src: traefik.yaml.j2
+    dest: "{{ edge_dir }}/traefik/traefik.yaml"
+    owner: "{{ edge_owner }}"
+    group: "{{ edge_owner }}"
+    mode: "0640"
+  notify: Restart edge stack
+
+- name: Render traefik security config
+  ansible.builtin.template:
+    src: traefik-dynamic-security.yaml.j2
+    dest: "{{ edge_dir }}/traefik/dynamic/security.yaml"
+    owner: "{{ edge_owner }}"
+    group: "{{ edge_owner }}"
+    mode: "0640"
+
+- name: Render oauth2-proxy environment file
+  ansible.builtin.template:
+    src: oauth2-proxy-env.j2
+    dest: "{{ edge_dir }}/oauth2-proxy/.env"
+    owner: "{{ edge_owner }}"
+    group: "{{ edge_owner }}"
+    mode: "0600"
+  no_log: true
+  when: edge_dashboard_domain | length > 0
+  notify: Restart edge stack
+
+- name: Render compose file
+  ansible.builtin.template:
+    src: docker-compose.yaml.j2
+    dest: "{{ edge_dir }}/docker-compose.yaml"
+    owner: "{{ edge_owner }}"
+    group: "{{ edge_owner }}"
+    mode: "0640"
+  notify: Restart edge stack
+
+- name: Deploy stack
+  community.docker.docker_compose_v2:
+    project_src: "{{ edge_dir }}"
+    state: present
+    pull: missing
+    remove_orphans: true

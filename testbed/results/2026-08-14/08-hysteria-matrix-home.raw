@@ -1,0 +1,7 @@
+########## МАТРИЦА С ДОМАШНЕГО КАНАЛА (малина → ams-01 → Hetzner) ##########
+1. базовый (parroting вкл) OK   2 МБ, 0.0 МБ/с
+2. parroting выключен      OK   2 МБ, 0.0 МБ/с
+3. brutal (up/down заданы)   OK   2 МБ, 0.0 МБ/с
+4. salamander obfs                 OK   2 МБ, 0.0 МБ/с
+5. masquerade-сервер         OK   2 МБ, 0.0 МБ/с
+6. port hopping 40000-40010        OK   2 МБ, 0.0 МБ/с

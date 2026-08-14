@@ -1,0 +1,83 @@
+{
+  "log": {
+    "loglevel": "warning"
+  },
+  "inbounds": [
+    {
+      "tag": "hy2-plain",
+      "listen": "0.0.0.0",
+      "port": 39601,
+      "protocol": "hysteria",
+      "settings": {
+        "version": 2,
+        "clients": [
+          {
+            "auth": "ЗАМЕНИТЬ",
+            "email": "b@t"
+          }
+        ]
+      },
+      "streamSettings": {
+        "network": "hysteria",
+        "security": "tls",
+        "tlsSettings": {
+          "alpn": [
+            "h3"
+          ],
+          "certificates": [
+            {
+              "certificateFile": "/etc/hysteria/cert.pem",
+              "keyFile": "/etc/hysteria/key.pem"
+            }
+          ]
+        },
+        "hysteriaSettings": {
+          "version": 2
+        }
+      }
+    },
+    {
+      "tag": "hy2-salamander",
+      "listen": "0.0.0.0",
+      "port": 39602,
+      "protocol": "hysteria",
+      "settings": {
+        "version": 2,
+        "clients": [
+          {
+            "auth": "ЗАМЕНИТЬ",
+            "email": "b@t"
+          }
+        ]
+      },
+      "streamSettings": {
+        "network": "hysteria",
+        "security": "tls",
+        "tlsSettings": {
+          "alpn": [
+            "h3"
+          ],
+          "certificates": [
+            {
+              "certificateFile": "/etc/hysteria/cert.pem",
+              "keyFile": "/etc/hysteria/key.pem"
+            }
+          ]
+        },
+        "hysteriaSettings": {
+          "version": 2
+        },
+        "finalMask": {
+          "salamander": {
+            "password": "ЗАМЕНИТЬ"
+          }
+        }
+      }
+    }
+  ],
+  "outbounds": [
+    {
+      "protocol": "freedom"
+    }
+  ]
+}

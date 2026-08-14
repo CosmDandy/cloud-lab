@@ -1,4 +1,6 @@
 ---
+# Именно reexec, а не reload: правки в limits.conf systemd подхватывает
+# только при перезапуске самого PID 1.
 - name: Reexec systemd
-  ansible.builtin.command: systemctl daemon-reexec
-  changed_when: true
+  ansible.builtin.systemd_service:
+    daemon_reexec: true

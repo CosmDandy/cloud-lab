@@ -10,11 +10,20 @@ stacks/vpn-legacy/sing-box/tls/
 stacks/vpn-legacy/sing-box/client-*.json.tpl
 
 # Terraform
-terraform/.terraform/
-terraform/*.tfstate
-terraform/*.tfstate.backup
-terraform/tfplan
+# Без привязки к каталогу: root-модулей теперь несколько (terraform/ и
+# terraform/live/*), и путевые правила накрывали только верхний.
+.terraform/
+*.tfstate
+*.tfstate.backup
+tfplan
 terraform/secrets.auto.tfvars
 
 # Backups (contain sensitive data)
 backups/
+
+# Секреты попадают в git только зашифрованными. Файл с именем secrets,
+# но без .sops — это забытое шифрование, а не новая схема хранения.
+**/secrets*.yml
+**/secrets*.yaml
+!**/secrets.sops.yaml
+!**/secrets.sops.yml

@@ -1,0 +1,65 @@
+---
+- name: Validate required variables
+  ansible.builtin.assert:
+    that:
+      - oidc_domain | length > 0
+      - oidc_encryption_key | length > 0
+    fail_msg: >-
+      Нужны oidc_domain и oidc_encryption_key. Ключ генерируется один раз
+      (openssl rand -base64 32) и хранится в SOPS: подмена ключа делает
+      уже зарегистрированные passkey нечитаемыми.
+
+- name: Create stack directory
+  ansible.builtin.file:
+    path: "{{ oidc_dir }}"
+    state: directory
+    owner: "{{ oidc_owner }}"
+    group: "{{ oidc_owner }}"
+    mode: "0750"
+
+- name: Render environment file
+  ansible.builtin.template:
+    src: env.j2
+    dest: "{{ oidc_dir }}/.env"
+    owner: "{{ oidc_owner }}"
+    group: "{{ oidc_owner }}"
+    mode: "0600"
+  no_log: true
+  notify: Restart oidc stack
+
+- name: Render compose file
+  ansible.builtin.template:
+    src: docker-compose.yaml.j2
+    dest: "{{ oidc_dir }}/docker-compose.yaml"
+    owner: "{{ oidc_owner }}"
+    group: "{{ oidc_owner }}"
+    mode: "0640"
+  notify: Restart oidc stack
+
+- name: Deploy stack
+  community.docker.docker_compose_v2:
+    project_src: "{{ oidc_dir }}"
+    state: present
+    pull: missing
+    remove_orphans: true
+
+# Хендлер рестарта стоит в очереди до конца роли, а провижининг ходит в API
+# уже поднятого Pocket ID: без принудительного flush он бил бы по контейнеру,
+# который вот-вот перезапустится.
+- name: Apply pending restarts before provisioning
+  ansible.builtin.meta: flush_handlers
+
+# Клиенты, группы и claim-ы живут только в БД Pocket ID: на диске у него
+# конфигурации нет. Приводим их к описанию из инвентаря через API.
+- name: Provision Pocket ID objects
+  ansible.builtin.include_tasks: provision.yml
+  when: oidc_api_key | length > 0
+  tags: [oidc_provision]
+
+- name: Warn about missing Pocket ID API key
+  ansible.builtin.debug:
+    msg: >-
+      oidc_api_key пуст — клиенты, группы и claim-ы Pocket ID не проверяются.
+      Ключ выпускается руками в UI после регистрации первого админа,
+      порядок описан в docs/control-plane-bootstrap.md.
+  when: oidc_api_key | length == 0

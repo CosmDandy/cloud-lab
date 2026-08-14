@@ -1,0 +1,39 @@
+# Managed by ansible (roles/oidc). Правки на хосте будут перезаписаны.
+name: oidc
+
+services:
+  pocket-id:
+    image: {{ oidc_image }}
+    container_name: pocket-id
+    restart: unless-stopped
+    env_file:
+      - ./.env
+    volumes:
+      # Именованный том, а не bind: образ работает не от root и сам
+      # выставляет права на каталог данных.
+      - pocket_id_data:/app/data
+    expose:
+      - "{{ oidc_port }}"
+    healthcheck:
+      test: ["CMD", "/app/pocket-id", "healthcheck"]
+      interval: 90s
+      timeout: 5s
+      retries: 2
+      start_period: 10s
+    networks:
+      - edge
+    labels:
+      traefik.enable: "true"
+      traefik.http.routers.oidc.rule: "Host(`{{ oidc_domain }}`)"
+      traefik.http.routers.oidc.entrypoints: websecure
+      traefik.http.routers.oidc.tls.certresolver: letsencrypt
+      traefik.http.services.oidc.loadbalancer.server.port: "{{ oidc_port }}"
+
+networks:
+  edge:
+    name: {{ oidc_edge_network }}
+    external: true
+
+volumes:
+  pocket_id_data:
+    name: oidc_pocket_id_data

@@ -1,0 +1,88 @@
+---
+- name: Validate required variables
+  ansible.builtin.assert:
+    that:
+      - mesh_domain | length > 0
+      - mesh_cookie_secret | length == 32
+    fail_msg: >-
+      Нужны mesh_domain и mesh_cookie_secret ровно в 32 символа
+      (headplane отвергает другую длину).
+
+- name: Create stack directories
+  ansible.builtin.file:
+    path: "{{ mesh_dir }}/{{ item }}"
+    state: directory
+    owner: "{{ mesh_owner }}"
+    group: "{{ mesh_owner }}"
+    mode: "0750"
+  loop:
+    - ""
+    - headscale
+    - headplane
+
+- name: Render compose file
+  ansible.builtin.template:
+    src: docker-compose.yaml.j2
+    dest: "{{ mesh_dir }}/docker-compose.yaml"
+    owner: "{{ mesh_owner }}"
+    group: "{{ mesh_owner }}"
+    mode: "0640"
+  notify: Restart mesh stack
+
+# headscale общается с клиентами по HTTP/1.1; без принудительного alpn
+# traefik согласует h2 и подключение узлов ломается. Файл кладётся в
+# dynamic-каталог роли edge — traefik подхватывает его без рестарта.
+- name: Install traefik TLS options for headscale
+  ansible.builtin.copy:
+    src: traefik-dynamic-headscale.yaml
+    dest: "{{ mesh_traefik_dynamic_dir }}/headscale.yaml"
+    owner: "{{ mesh_owner }}"
+    group: "{{ mesh_owner }}"
+    mode: "0640"
+
+- name: Render headscale config
+  ansible.builtin.template:
+    src: headscale-config.yaml.j2
+    dest: "{{ mesh_dir }}/headscale/config.yaml"
+    owner: "{{ mesh_owner }}"
+    group: "{{ mesh_owner }}"
+    mode: "0640"
+  notify: Restart mesh stack
+
+- name: Render external derp map
+  ansible.builtin.template:
+    src: derp-external.yaml.j2
+    dest: "{{ mesh_dir }}/headscale/derp-external.yaml"
+    owner: "{{ mesh_owner }}"
+    group: "{{ mesh_owner }}"
+    mode: "0640"
+  when: mesh_derp_regions | length > 0
+  notify: Restart mesh stack
+
+# randomizeClientPort живёт только здесь: в 0.29 ключ убран из config.yaml,
+# и headscale отказывается стартовать, если он там остался.
+- name: Render headscale policy
+  ansible.builtin.template:
+    src: headscale-policy.json.j2
+    dest: "{{ mesh_dir }}/headscale/policy.json"
+    owner: "{{ mesh_owner }}"
+    group: "{{ mesh_owner }}"
+    mode: "0640"
+  notify: Restart mesh stack
+
+- name: Render headplane config
+  ansible.builtin.template:
+    src: headplane-config.yaml.j2
+    dest: "{{ mesh_dir }}/headplane/config.yaml"
+    owner: "{{ mesh_owner }}"
+    group: "{{ mesh_owner }}"
+    mode: "0600"
+  no_log: true
+  notify: Restart mesh stack
+
+- name: Deploy stack
+  community.docker.docker_compose_v2:
+    project_src: "{{ mesh_dir }}"
+    state: present
+    pull: missing
+    remove_orphans: true

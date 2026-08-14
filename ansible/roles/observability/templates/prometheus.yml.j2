@@ -1,0 +1,48 @@
+# Managed by ansible (roles/observability). Правки на хосте будут перезаписаны.
+global:
+  scrape_interval: 15s
+
+scrape_configs:
+  - job_name: victoriametrics
+    static_configs:
+      - targets: ["victoriametrics:8428"]
+
+  - job_name: node-exporter
+    static_configs:
+      - targets: ["host.docker.internal:9100"]
+        labels:
+          instance: {{ inventory_hostname }}
+
+  - job_name: cadvisor
+    static_configs:
+      - targets: ["cadvisor:8080"]
+
+  - job_name: vmalert
+    static_configs:
+      - targets: ["vmalert:8880"]
+
+  # Скрейп идёт по имени контейнера через сеть edge, минуя traefik: снаружи
+  # gatus закрыт OIDC, а /metrics он отдаёт без авторизации — но только
+  # изнутри.
+  - job_name: gatus
+    static_configs:
+      - targets: ["gatus:8080"]
+{% if observability_remote_targets | length > 0 %}
+
+  - job_name: remote-nodes
+    static_configs:
+{% for target in observability_remote_targets %}
+      - targets: ["{{ target.address }}"]
+        labels:
+          instance: {{ target.instance }}
+{% endfor %}
+{% endif %}
+{% if observability_panel_metrics_enabled %}
+
+  - job_name: remnawave-panel
+    basic_auth:
+      username: {{ observability_panel_metrics_user }}
+      password: {{ observability_panel_metrics_password }}
+    static_configs:
+      - targets: ["remnawave-panel:3001"]
+{% endif %}

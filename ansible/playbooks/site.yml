@@ -1,0 +1,151 @@
+---
+# Полная раскатка с нуля. Критерий готовности: на чистой VM отрабатывает
+# без ручных шагов, второй прогон подряд даёт changed=0.
+#
+# Что ставится на машину, решает список host_services в её host_vars, а не
+# группа инвентаря. Группы остались за связностью — ansible_user и то, чья
+# это машина; набор сервисов от неё не зависит и у разных провайдеров
+# складывается по-разному.
+#
+# Порядок игр значим и совпадает с порядком раскатки: edge поднимает сеть,
+# к которой присоединяются остальные стеки, поэтому идёт первой из стековых.
+# Ради этого здесь group_by и отдельная игра на роль, а не include_role с
+# when внутри одной игры: так сохраняются roles: с их дефолтами, хендлерами
+# и --tags, а порядок виден глазами.
+
+- name: Expand host_services into groups
+  hosts: all
+  gather_facts: false
+  # Раскладка идёт на контроллере: в инвентаре есть машины, до которых в
+  # момент прогона может не быть связи, а недоступный хост, не попавший в
+  # svc_*, молча выпал бы из всех последующих игр вместо явной ошибки.
+  connection: local
+
+  tasks:
+    - name: Build svc_* groups
+      ansible.builtin.group_by:
+        key: "svc_{{ item }}"
+      loop: "{{ host_services | default([]) }}"
+      changed_when: false
+      # Без always любой запуск с --tags пропускает эту задачу, группы не
+      # создаются, и все последующие игры не находят ни одного хоста —
+      # прогон завершается успехом, не сделав ничего.
+      tags: always
+
+- name: Base
+  hosts: svc_base
+  become: true
+
+  roles:
+    # base_stack_dirs здесь намеренно пуст: каталоги под стеки создают
+    # сами стековые роли, своим владельцем. Дублирование давало вечный
+    # changed — две роли переставляли owner друг за другом каждый прогон.
+    - role: base
+      tags: [base]
+
+- name: Docker
+  hosts: svc_docker
+  become: true
+
+  roles:
+    - role: docker
+      tags: [docker]
+      vars:
+        docker_users:
+          - "{{ base_deploy_user | default('github-runner') }}"
+
+- name: VPN tuning
+  hosts: svc_vpn_tuning
+  become: true
+
+  roles:
+    - role: vpn_tuning
+      tags: [vpn_tuning]
+
+- name: Edge
+  hosts: svc_edge
+  become: true
+
+  roles:
+    - role: edge
+      tags: [edge]
+
+- name: Mesh
+  hosts: svc_mesh
+  become: true
+
+  roles:
+    - role: mesh
+      tags: [mesh]
+
+- name: OIDC
+  hosts: svc_oidc
+  become: true
+
+  roles:
+    - role: oidc
+      tags: [oidc]
+
+- name: Panel
+  hosts: svc_panel
+  become: true
+
+  roles:
+    - role: panel
+      tags: [panel]
+
+- name: Observability
+  hosts: svc_observability
+  become: true
+
+  roles:
+    - role: observability
+      tags: [observability]
+
+- name: Gatus
+  hosts: svc_gatus
+  become: true
+
+  roles:
+    - role: gatus
+      tags: [gatus]
+
+# Второй экземпляр той же роли — публичная витрина. Переменные приходят с
+# префиксом gatus_public_ и переопределяются здесь: host_vars общие для
+# хоста, и без префикса домен, набор проверок и заголовки столкнулись бы с
+# настройками внутреннего экземпляра.
+- name: Gatus public
+  hosts: svc_gatus_public
+  become: true
+
+  roles:
+    - role: gatus
+      vars:
+        gatus_instance: gatus-public
+        gatus_domain: "{{ gatus_public_domain }}"
+        gatus_endpoints: "{{ gatus_public_endpoints }}"
+        gatus_ui_title: "{{ gatus_public_ui_title }}"
+        gatus_ui_header: "{{ gatus_public_ui_header }}"
+        # Витрина: без входа, без адресов, без алертов и метрик — они уже
+        # есть у внутреннего экземпляра, дублировать нечего.
+        gatus_oidc_enabled: false
+        gatus_telegram_enabled: false
+        gatus_metrics_enabled: false
+        gatus_hide_endpoint_details: true
+      tags: [gatus-public]
+
+- name: Atuin
+  hosts: svc_atuin
+  become: true
+
+  roles:
+    - role: atuin
+      tags: [atuin]
+
+- name: Derper
+  hosts: svc_derper
+  become: true
+
+  roles:
+    - role: derper
+      tags: [derper]

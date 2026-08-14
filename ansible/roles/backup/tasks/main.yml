@@ -1,0 +1,87 @@
+---
+- name: Validate required variables
+  ansible.builtin.assert:
+    that:
+      - backup_s3_endpoint | length > 0
+      - backup_s3_bucket | length > 0
+      - backup_s3_access_key | length > 0
+      - backup_s3_secret_key | length > 0
+      - backup_restic_password | length > 0
+    fail_msg: >-
+      Нужны endpoint, бакет, ключи доступа и пароль репозитория.
+      Пароль restic хранить наравне с бэкапами бессмысленно: он шифрует
+      их на этой стороне, и без него архивы нечем расшифровать.
+
+- name: Install backup packages
+  ansible.builtin.apt:
+    name: "{{ backup_packages }}"
+    state: present
+    update_cache: true
+
+- name: Create directories
+  ansible.builtin.file:
+    path: "{{ item }}"
+    state: directory
+    owner: root
+    group: root
+    mode: "0700"
+  loop:
+    - "{{ backup_dir }}"
+    - "{{ backup_staging }}"
+
+- name: Render environment file
+  ansible.builtin.template:
+    src: backup.env.j2
+    dest: "{{ backup_dir }}/backup.env"
+    owner: root
+    group: root
+    mode: "0600"
+  no_log: true
+
+- name: Install backup script
+  ansible.builtin.template:
+    src: backup.sh.j2
+    dest: "{{ backup_dir }}/backup.sh"
+    owner: root
+    group: root
+    mode: "0700"
+
+- name: Install systemd units
+  ansible.builtin.template:
+    src: "{{ item }}.j2"
+    dest: "/etc/systemd/system/{{ item }}"
+    owner: root
+    group: root
+    mode: "0644"
+  loop:
+    - backup.service
+    - backup.timer
+  notify: Reload systemd
+
+- name: Apply pending systemd reload
+  ansible.builtin.meta: flush_handlers
+
+# Пустой репозиторий restic не создаёт сам: первый backup упал бы с
+# "repository does not exist". Поэтому сначала проверяем, есть ли он.
+- name: Check restic repository
+  ansible.builtin.command:
+    cmd: restic cat config
+  environment: "{{ backup_restic_env }}"
+  register: backup_repo_check
+  changed_when: false
+  failed_when: false
+  no_log: true
+
+- name: Initialise restic repository
+  ansible.builtin.command:
+    cmd: restic init
+  environment: "{{ backup_restic_env }}"
+  when: backup_repo_check.rc != 0
+  changed_when: true
+  no_log: true
+
+- name: Enable backup timer
+  ansible.builtin.systemd_service:
+    name: backup.timer
+    enabled: true
+    state: started

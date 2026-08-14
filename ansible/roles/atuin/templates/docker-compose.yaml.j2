@@ -1,0 +1,38 @@
+# Managed by ansible (roles/atuin). Правки на хосте будут перезаписаны.
+name: atuin
+
+services:
+  atuin:
+    image: {{ atuin_image }}
+    container_name: atuin
+    restart: unless-stopped
+    # Именно start, без server: entrypoint образа — уже atuin-server,
+    # и «server start» он не понимает («unrecognized subcommand 'server'»).
+    command: start
+    environment:
+      ATUIN_HOST: "0.0.0.0"
+      ATUIN_PORT: "{{ atuin_port }}"
+      ATUIN_OPEN_REGISTRATION: "{{ atuin_open_registration | lower }}"
+      ATUIN_DB_URI: "{{ atuin_db_uri }}"
+      RUST_LOG: "{{ atuin_log_level }}"
+    volumes:
+      - atuin_data:/config
+    expose:
+      - "{{ atuin_port }}"
+    networks:
+      - edge
+    labels:
+      traefik.enable: "true"
+      traefik.http.routers.atuin.rule: "Host(`{{ atuin_domain }}`)"
+      traefik.http.routers.atuin.entrypoints: websecure
+      traefik.http.routers.atuin.tls.certresolver: letsencrypt
+      traefik.http.services.atuin.loadbalancer.server.port: "{{ atuin_port }}"
+
+networks:
+  edge:
+    name: {{ atuin_edge_network }}
+    external: true
+
+volumes:
+  atuin_data:
+    name: atuin_data

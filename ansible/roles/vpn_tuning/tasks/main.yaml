@@ -1,6 +1,12 @@
 ---
 - name: Apply sysctl tuning
   ansible.builtin.import_tasks: sysctl.yaml
+  tags: [sysctl]
 
+# Отдельным тегом, потому что эта половина дёргает PID 1 через daemon-reexec.
+# На боевой ноде она к тому же может быть не нужна вовсе: xray живёт в
+# контейнере, и его nofile задаёт docker, а не pam_limits с DefaultLimitNOFILE.
+# Проверять до прогона: grep 'Max open files' /proc/$(pgrep -x rw-core)/limits
 - name: Apply file-descriptor limits
   ansible.builtin.import_tasks: limits.yaml
+  tags: [limits]

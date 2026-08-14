@@ -1,0 +1,15 @@
+# Managed by ansible (roles/mesh).
+#
+# headscale общается с клиентами по HTTP/1.1 (Noise-апгрейд соединения).
+# Без принудительного alpn traefik согласует h2, и подключение узлов ломается.
+# Опция именованная, а не default: остальным стекам на этом хосте HTTP/2
+# отбирать незачем.
+tls:
+  options:
+    headscale:
+      alpnProtocols:
+        - http/1.1
+      # Именованная опция не наследует default из роли edge — минимальную
+      # версию и требование SNI приходится повторять здесь.
+      minVersion: VersionTLS12
+      sniStrict: true

@@ -1,0 +1,104 @@
+# Managed by ansible (roles/panel). Правки на хосте будут перезаписаны.
+#
+# Всё состояние панели — узлы, пользователи, ключи, настройки — живёт
+# в postgres_data и больше нигде. Роль его не воспроизводит: повторный
+# прогон на пустом томе даёт чистую установку, а не прежнюю панель.
+name: panel
+
+services:
+  panel:
+    image: {{ panel_backend_image }}
+    container_name: remnawave-panel
+    restart: unless-stopped
+    env_file:
+      - ./panel/.env
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    networks:
+      - edge
+      - internal
+    labels:
+      traefik.enable: "true"
+      traefik.http.routers.panel.rule: "Host(`{{ panel_domain }}`)"
+      traefik.http.routers.panel.entrypoints: websecure
+      traefik.http.routers.panel.tls.certresolver: letsencrypt
+      traefik.http.services.panel.loadbalancer.server.port: "3000"
+
+  postgres:
+    image: {{ panel_postgres_image }}
+    container_name: remnawave-postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: {{ panel_postgres_db }}
+      POSTGRES_USER: {{ panel_postgres_user }}
+      POSTGRES_PASSWORD: {{ panel_postgres_password }}
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U {{ panel_postgres_user }}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      - internal
+
+  redis:
+    image: {{ panel_redis_image }}
+    container_name: remnawave-redis
+    restart: unless-stopped
+    volumes:
+      - redis_data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      - internal
+
+  subscription-page:
+    image: {{ panel_subscription_image }}
+    container_name: remnawave-subscription-page
+    restart: unless-stopped
+    env_file:
+      - ./subscription/.env
+    depends_on:
+      - panel
+    networks:
+      - edge
+      - internal
+    labels:
+      traefik.enable: "true"
+      traefik.http.routers.subscription.rule: "Host(`{{ panel_sub_domain }}`)"
+      traefik.http.routers.subscription.entrypoints: websecure
+      traefik.http.routers.subscription.tls.certresolver: letsencrypt
+      traefik.http.routers.subscription.middlewares: sub-https-headers
+      traefik.http.services.subscription.loadbalancer.server.port: "3010"
+      traefik.http.middlewares.sub-https-headers.headers.customrequestheaders.X-Forwarded-Proto: https
+{% if panel_sub_root_redirect | length > 0 %}
+      traefik.http.routers.subscription-root.rule: "Host(`{{ panel_sub_domain }}`) && Path(`/`)"
+      traefik.http.routers.subscription-root.entrypoints: websecure
+      traefik.http.routers.subscription-root.tls.certresolver: letsencrypt
+      traefik.http.routers.subscription-root.service: noop@internal
+      traefik.http.routers.subscription-root.middlewares: sub-root-redirect
+      traefik.http.middlewares.sub-root-redirect.redirectregex.regex: ".*"
+      traefik.http.middlewares.sub-root-redirect.redirectregex.replacement: "{{ panel_sub_root_redirect }}"
+{% endif %}
+
+networks:
+  edge:
+    name: {{ panel_edge_network }}
+    external: true
+  # postgres и redis наружу не публикуются и в edge не входят.
+  internal:
+    name: panel_internal
+    driver: bridge
+
+volumes:
+  postgres_data:
+    name: panel_postgres_data
+  redis_data:
+    name: panel_redis_data

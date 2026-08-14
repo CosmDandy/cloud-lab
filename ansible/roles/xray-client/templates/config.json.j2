@@ -1,0 +1,88 @@
+{
+  "log": {
+    "loglevel": "{{ xray_log_level }}"
+  },
+  "inbounds": [
+    {
+      "port": {{ xray_http_port }},
+      "listen": "{{ xray_listen }}",
+      "protocol": "http",
+      "tag": "http-in"
+    },
+    {
+      "port": {{ xray_redirect_port }},
+      "listen": "{{ xray_listen }}",
+      "protocol": "dokodemo-door",
+      "tag": "redirect-in",
+      "settings": {
+        "network": "tcp",
+        "followRedirect": true
+      },
+      "streamSettings": {
+        "sockopt": {
+          "tproxy": "redirect"
+        }
+      }
+    }
+  ],
+  "outbounds": [
+    {
+      "protocol": "vless",
+      "tag": "proxy",
+      "settings": {
+        "vnext": [
+          {
+            "address": "{{ xray_server_address }}",
+            "port": {{ xray_server_port }},
+            "users": [
+              {
+                "id": "{{ xray_user_id }}",
+                "encryption": "{{ xray_user_encryption }}",
+                "flow": "{{ xray_user_flow }}"
+              }
+            ]
+          }
+        ]
+      },
+      "streamSettings": {
+        "network": "xhttp",
+        "security": "reality",
+        "realitySettings": {
+          "serverName": "{{ xray_reality_server_name }}",
+          "fingerprint": "{{ xray_reality_fingerprint }}",
+          "publicKey": "{{ xray_reality_public_key }}",
+          "shortId": "{{ xray_reality_short_id }}"{% if xray_reality_mldsa65_verify | length > 0 %},
+          "mldsa65Verify": "{{ xray_reality_mldsa65_verify }}"{% endif %}
+
+        },
+        "xhttpSettings": {
+          "host": "{{ xray_xhttp_host }}",
+          "path": "{{ xray_xhttp_path }}",
+          "mode": "{{ xray_xhttp_mode }}",
+          "extra": {{ xray_xhttp_extra | to_nice_json(indent=2) | indent(10) }}
+        }
+      }
+    },
+    {
+      "protocol": "freedom",
+      "tag": "direct"
+    }
+  ],
+  "routing": {
+    "domainStrategy": "IPIfNonMatch",
+    "rules": [
+{% if xray_direct_ips | length > 0 %}
+      {
+        "type": "field",
+        "ip": {{ xray_direct_ips | to_json }},
+        "outboundTag": "direct"
+      },
+{% endif %}
+      {
+        "type": "field",
+        "ip": {{ xray_routing_direct | to_json }},
+        "outboundTag": "direct"
+      }
+    ]
+  }
+}

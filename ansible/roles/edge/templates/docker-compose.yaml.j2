@@ -1,0 +1,66 @@
+# Managed by ansible (roles/edge). Правки на хосте будут перезаписаны.
+name: edge
+
+services:
+  traefik:
+    image: {{ edge_traefik_image }}
+    container_name: traefik
+    restart: unless-stopped
+    ports:
+      - "80:80"
+      - "443:443"
+{% if edge_http3_enabled %}
+      # QUIC ходит по UDP на том же порту, что и TLS.
+      - "443:443/udp"
+{% endif %}
+    volumes:
+      - ./traefik/traefik.yaml:/etc/traefik/traefik.yaml:ro
+      - ./traefik/dynamic:/etc/traefik/dynamic:ro
+      - letsencrypt:/letsencrypt
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+    healthcheck:
+      test: ["CMD", "traefik", "healthcheck", "--ping"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 10s
+    networks:
+      - edge
+
+{% if edge_dashboard_domain | length > 0 %}
+  # Дашборд traefik публикуется не напрямую, а через oauth2-proxy:
+  # у traefik нет собственной аутентификации, только basic auth в middleware.
+  oauth2-proxy:
+    image: {{ edge_oauth2_proxy_image }}
+    container_name: oauth2-proxy
+    restart: unless-stopped
+    env_file:
+      - ./oauth2-proxy/.env
+{% if edge_extra_hosts | length > 0 %}
+    extra_hosts:
+{% for entry in edge_extra_hosts %}
+      - "{{ entry }}"
+{% endfor %}
+{% endif %}
+    depends_on:
+      - traefik
+    expose:
+      - "4180"
+    networks:
+      - edge
+    labels:
+      traefik.enable: "true"
+      traefik.http.routers.dashboard.rule: "Host(`{{ edge_dashboard_domain }}`)"
+      traefik.http.routers.dashboard.entrypoints: websecure
+      traefik.http.routers.dashboard.tls.certresolver: letsencrypt
+      traefik.http.services.dashboard.loadbalancer.server.port: "4180"
+{% endif %}
+
+networks:
+  edge:
+    name: {{ edge_network }}
+    driver: bridge
+
+volumes:
+  letsencrypt:
+    name: edge_letsencrypt

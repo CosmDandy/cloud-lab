@@ -1,0 +1,9 @@
+#!/bin/bash
+# Managed by ansible (roles/xray-client). Правки на хосте будут перезаписаны.
+set -u
+
+{% for src in xray_redirect_sources %}
+iptables -t nat -D PREROUTING -s {{ src }} -j XRAY_REDIRECT 2>/dev/null
+{% endfor %}
+iptables -t nat -F XRAY_REDIRECT 2>/dev/null
+iptables -t nat -X XRAY_REDIRECT 2>/dev/null

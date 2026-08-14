@@ -1,0 +1,111 @@
+---
+oidc_dir: /opt/oidc
+oidc_owner: root
+
+# 2.12.0 нёс security-фиксы и объявлен обязательным к установке, поэтому
+# через него перепрыгнули сразу на 2.13.0. Схема SQLite мигрирует при старте
+# сама; бэкап тома снимать ОСТАНОВЛЕННЫМ контейнером — иначе WAL не слит и
+# копия неконсистентна.
+oidc_image: ghcr.io/pocket-id/pocket-id:v2.13.0
+
+# Домен, на котором отвечает Pocket ID; задаётся в инвентаре.
+oidc_domain: ""
+
+oidc_edge_network: "{{ edge_network | default('edge') }}"
+oidc_port: 1411
+
+# Шифрует приватные данные в БД, включая регистрации passkey.
+# Потеря ключа = потеря входа для всех: openssl rand -base64 32.
+oidc_encryption_key: ""
+
+# SQLite: вся база — один файл в томе, бэкап сводится к его копированию.
+# Для postgres сюда кладётся DSN.
+oidc_db_connection_string: "data/pocket-id.db"
+
+# Pocket ID стоит за traefik и должен доверять его X-Forwarded-*.
+# Диапазон docker-сетей, а не конкретный адрес: bridge-адрес плавает.
+oidc_trust_proxy: "172.16.0.0/12"
+
+oidc_analytics_disabled: true
+
+# --- Провижининг объектов Pocket ID через его API ----------------------------
+# Всё, что ниже, включается только непустым oidc_api_key. Ключ выпускается
+# руками в UI (Settings → API keys) после регистрации первого админа —
+# автоматизировать этот шаг нечем, см. docs/control-plane-bootstrap.md.
+# На проде ключ приезжает из SOPS, на стенде лежит в host_vars открытым текстом.
+oidc_api_key: ""
+
+# Отдельная переменная, а не «https://{{ oidc_domain }}» по месту: когда
+# домена ещё нет в DNS, сюда подставляется http://127.0.0.1:1411 с хоста.
+oidc_api_url: "https://{{ oidc_domain }}"
+oidc_api_validate_certs: true
+
+# Сколько ждать, пока Pocket ID ответит после подъёма стека.
+oidc_api_retries: 30
+oidc_api_delay: 5
+
+# Группы пользователей. custom_claims попадают в id_token всех участников
+# группы; PUT заменяет набор целиком, поэтому здесь он описан полностью.
+#
+# members опционален: без него роль состав группы не трогает вовсе.
+# С ним — приводит к списку точно, то есть выкидывает всех остальных.
+# Имена, которых ещё нет в Pocket ID, пропускаются с предупреждением:
+# пользователь появляется только после первого входа.
+#
+# oidc_user_groups:
+#   - name: admins
+#     friendly_name: Admins
+#     members: [cosmdandy]
+#     custom_claims:
+#       # Без него Remnawave отвечает Forbidden уже после успешного входа.
+#       remnawaveAccess: "true"
+oidc_user_groups: []
+
+# OIDC-клиенты. id задаётся здесь и уходит в POST как есть: Pocket ID
+# принимает свой client_id при создании, поэтому идентификатор — это данные
+# инвентаря, а не то, что вернул сервер.
+#
+# Роль сводит к описанному только перечисленных клиентов. Всё, что заведено
+# в Pocket ID помимо списка, она не трогает и не удаляет: удаление клиента
+# по расхождению списка стоило бы входа при первой же опечатке.
+#
+# client_secret здесь не описывается: v2.11.0 генерирует его сама и не
+# принимает готовый. Роль выпускает секрет ровно один раз — в тот прогон,
+# когда клиент создан, — и печатает его. Повторный выпуск ротирует секрет
+# и ломает вход, поэтому существующим клиентам он не трогается никогда.
+#
+# oidc_clients:
+#   - id: "{{ mesh_oidc_client_id }}"
+#     name: headplane
+#     callback_urls:
+#       - "https://{{ mesh_domain }}/admin/oidc/callback"
+#     pkce_enabled: true
+#     group_restricted: true
+#     allowed_user_groups: [admins]
+oidc_clients: []
+
+# Значения по умолчанию для полей клиента, не указанных явно.
+oidc_client_defaults:
+  description: ""
+  callback_urls: []
+  logout_callback_urls: []
+  is_public: false
+  # Pocket ID сертифицирован и на PKCE настаивает; выключается только там,
+  # где клиент его не умеет (Remnawave).
+  pkce_enabled: true
+  requires_par: false
+  # Согласие бессмысленно, когда провайдер и приложение — одна инсталляция.
+  skip_consent: true
+  requires_reauthentication: false
+  # Флаг ограничения по группам отдельный от самого списка групп: список
+  # можно заполнить, оставив ограничение выключенным.
+  group_restricted: false
+  allowed_user_groups: []
+
+# Настройки самого Pocket ID: только те ключи, которые мы задаём осознанно,
+# остальное остаётся как есть. Полный список — GET /api/application-configuration/all.
+#
+# sessionDuration в минутах. Штатные 60 означают, что раз в час SSO снова
+# спрашивает passkey, и сквозной вход между сервисами перестаёт ощущаться.
+oidc_app_settings:
+  sessionDuration: "43200"

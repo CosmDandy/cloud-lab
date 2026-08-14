@@ -1,6 +1,0 @@
----
-singbox_version: "1.13.3"
-singbox_listen_port: 7890
-singbox_redirect_port: 7891
-singbox_config_src: ""
-singbox_docker_proxy: true
