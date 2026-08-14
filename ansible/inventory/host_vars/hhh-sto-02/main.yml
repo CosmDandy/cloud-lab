@@ -326,6 +326,26 @@ gatus_endpoints:
     conditions:
       - "[CONNECTED] == true"
 
+  # ICMP отвечает на другой вопрос, чем TCP: жива ли машина, когда порт
+  # молчит. Живой ICMP при мёртвом TCP — упал Xray; оба мёртвые — машина
+  # или сеть провайдера. По отдельности ни одна проверка этого не
+  # различает, поэтому они и держатся парой.
+  - name: hhh-sto-01-icmp
+    group: vpn nodes
+    url: "icmp://hhh-sto-01.vpn.cosmdandy.dev"
+    conditions:
+      - "[CONNECTED] == true"
+  - name: hhh-ams-01-icmp
+    group: vpn nodes
+    url: "icmp://hhh-ams-01.vpn.cosmdandy.dev"
+    conditions:
+      - "[CONNECTED] == true"
+  - name: hhh-osl-01-icmp
+    group: vpn nodes
+    url: "icmp://hhh-osl-01.vpn.cosmdandy.dev"
+    conditions:
+      - "[CONNECTED] == true"
+
   # Нода глазами панели — единственный ответ на вопрос «обслуживает ли она
   # людей». TCP-порт остаётся открытым, пока жив процесс Xray, даже когда
   # нода потеряла связь с панелью и не получает ни конфига, ни списка
