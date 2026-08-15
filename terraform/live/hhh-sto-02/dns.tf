@@ -28,8 +28,13 @@ module "dns" {
     # обязательна по другой причине: её открывают из России, а адреса
     # Cloudflare оттуда недоступны. Проксировать её значит спрятать ответ
     # ровно от тех, кому он адресован.
+    #
+    # vm — приёмник метрик с нод. Наружу открыт единственный путь
+    # /api/v1/write под basic auth; имя нужно ровно затем, чтобы traefik мог
+    # получить на него сертификат: пароль уходит с каждой отправкой, и по
+    # обычному http он ходил бы почти открытым текстом.
     {
-      for name in ["mesh", "oidc", "grafana", "status", "status.vpn", "traefik"] :
+      for name in ["mesh", "oidc", "grafana", "status", "status.vpn", "traefik", "vm"] :
       name => {
         target  = "${var.server_name}.${var.domain}"
         proxied = false

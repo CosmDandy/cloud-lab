@@ -1,0 +1,27 @@
+---
+node_metrics_dir: /opt/node-metrics
+node_metrics_owner: root
+
+node_metrics_node_exporter_image: prom/node-exporter:v1.12.1
+node_metrics_vmagent_image: victoriametrics/vmagent:v1.148.0
+
+# Куда отправлять. Нода инициирует соединение сама — наружу на ней не
+# открывается ни одного порта, в отличие от pull-модели, где пришлось бы
+# выставить node-exporter в интернет.
+node_metrics_remote_write_url: ""
+node_metrics_remote_write_user: metrics-push
+node_metrics_remote_write_password: ""
+
+# Лейбл, по которому метрики разных нод различаются в базе. Без него три
+# сервера сольются в один ряд и графики станут бессмысленными.
+node_metrics_instance: "{{ inventory_hostname }}"
+
+# node-exporter слушает только петлю: скрейпит его vmagent из host-сети,
+# снаружи он не нужен никому.
+node_metrics_exporter_listen: "127.0.0.1:9100"
+node_metrics_scrape_interval: 30s
+
+# Буфер на диске, из которого vmagent досылает данные после обрыва связи.
+# Инцидент 14.08 в Осло длился десять минут — при pull это была бы дыра
+# в графиках, здесь метрики догонятся.
+node_metrics_max_disk_usage: 512MB

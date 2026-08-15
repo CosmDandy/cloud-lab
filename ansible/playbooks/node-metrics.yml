@@ -1,0 +1,10 @@
+---
+- name: Collect metrics from VPN nodes
+  hosts: vpn_nodes
+  become: true
+
+  # Без serial: роль не трогает ни remnanode, ни сеть — разворачивает два
+  # отдельных контейнера. Даже если упадёт на всех сразу, VPN не заметит.
+  roles:
+    - role: node_metrics
+      tags: [node-metrics]

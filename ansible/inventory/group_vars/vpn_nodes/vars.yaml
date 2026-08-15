@@ -1,0 +1,4 @@
+---
+# Метрики уходят push-моделью на control-plane. Наружу на нодах при этом не
+# открывается ничего: соединение инициирует vmagent.
+node_metrics_remote_write_url: https://vm.cosmdandy.dev/api/v1/write

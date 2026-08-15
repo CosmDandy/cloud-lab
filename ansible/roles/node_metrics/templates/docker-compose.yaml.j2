@@ -1,0 +1,47 @@
+# Managed by ansible (roles/node_metrics). Правки на хосте будут перезаписаны.
+name: node-metrics
+
+services:
+  node-exporter:
+    image: {{ node_metrics_node_exporter_image }}
+    container_name: node-exporter
+    restart: unless-stopped
+    # host-сеть нужна, чтобы видеть настоящие интерфейсы и их счётчики;
+    # pid: host — чтобы различать процессы хоста, а не только свои.
+    network_mode: host
+    pid: host
+    volumes:
+      - /proc:/host/proc:ro
+      - /sys:/host/sys:ro
+      - /:/rootfs:ro
+    command:
+      - "--web.listen-address={{ node_metrics_exporter_listen }}"
+      - "--path.procfs=/host/proc"
+      - "--path.sysfs=/host/sys"
+      - "--path.rootfs=/rootfs"
+      - "--collector.filesystem.mount-points-exclude=^/(sys|proc|dev|host|etc)($$|/)"
+
+  vmagent:
+    image: {{ node_metrics_vmagent_image }}
+    container_name: vmagent
+    restart: unless-stopped
+    # Тоже host-сеть: иначе 127.0.0.1 в конфиге скрейпа указывал бы внутрь
+    # самого контейнера, где node-exporter не слушает.
+    network_mode: host
+    volumes:
+      - ./scrape.yml:/etc/vmagent/scrape.yml:ro
+      - ./remote-write-password:/etc/vmagent/password:ro
+      - vmagent_data:/vmagent-data
+    command:
+      - "-promscrape.config=/etc/vmagent/scrape.yml"
+      - "-remoteWrite.url={{ node_metrics_remote_write_url }}"
+      - "-remoteWrite.basicAuth.username={{ node_metrics_remote_write_user }}"
+      # Пароль файлом, а не аргументом: аргументы видны в ps любому
+      # пользователю машины.
+      - "-remoteWrite.basicAuth.passwordFile=/etc/vmagent/password"
+      - "-remoteWrite.tmpDataPath=/vmagent-data"
+      - "-remoteWrite.maxDiskUsagePerURL={{ node_metrics_max_disk_usage }}"
+
+volumes:
+  vmagent_data:
+    name: node_metrics_vmagent_data

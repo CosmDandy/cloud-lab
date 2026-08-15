@@ -32,6 +32,19 @@ observability_metrics_retention: 30d
 # [{address: "10.0.0.2:9100", instance: "miv-chi-01"}]
 observability_remote_targets: []
 
+# Приём метрик с нод по push-модели. Наружу открывается единственный путь
+# /api/v1/write под basic auth: victoriametrics не проверяет авторизацию
+# сама, и открытый порт отдал бы вместе с записью ещё чтение и
+# /api/v1/admin/tsdb/delete_series.
+observability_remote_write_enabled: false
+observability_vm_domain: ""
+observability_remote_write_user: metrics-push
+# Пароль отдаётся нодам, хеш — traefik. Хранятся оба: сгенерировать хеш из
+# пароля на лету нельзя, password_hash даёт разный результат при каждом
+# прогоне и роль перестаёт быть идемпотентной.
+observability_remote_write_password: ""
+observability_remote_write_htpasswd: ""
+
 # Скрейп панели Remnawave: /metrics закрыт basic auth.
 observability_panel_metrics_enabled: false
 observability_panel_metrics_user: metrics

@@ -1,0 +1,75 @@
+---
+- name: Validate required variables
+  ansible.builtin.assert:
+    that:
+      - node_metrics_remote_write_url | length > 0
+      - node_metrics_remote_write_password | length > 0
+      - node_metrics_instance | length > 0
+    fail_msg: >-
+      Нужны node_metrics_remote_write_url, пароль из SOPS и instance.
+      Без instance метрики трёх нод сольются в один ряд.
+
+- name: Create stack directory
+  ansible.builtin.file:
+    path: "{{ node_metrics_dir }}"
+    state: directory
+    owner: "{{ node_metrics_owner }}"
+    group: "{{ node_metrics_owner }}"
+    mode: "0750"
+
+# Отдельным файлом, а не аргументом командной строки: аргументы контейнера
+# видны в ps и в docker inspect любому, кто имеет доступ к машине.
+- name: Write remote write password
+  ansible.builtin.copy:
+    content: "{{ node_metrics_remote_write_password }}"
+    dest: "{{ node_metrics_dir }}/remote-write-password"
+    owner: "{{ node_metrics_owner }}"
+    group: "{{ node_metrics_owner }}"
+    mode: "0600"
+  no_log: true
+  notify: Restart node metrics
+
+- name: Render scrape config
+  ansible.builtin.template:
+    src: scrape.yml.j2
+    dest: "{{ node_metrics_dir }}/scrape.yml"
+    owner: "{{ node_metrics_owner }}"
+    group: "{{ node_metrics_owner }}"
+    mode: "0644"
+  notify: Restart node metrics
+
+- name: Render compose file
+  ansible.builtin.template:
+    src: docker-compose.yaml.j2
+    dest: "{{ node_metrics_dir }}/docker-compose.yaml"
+    owner: "{{ node_metrics_owner }}"
+    group: "{{ node_metrics_owner }}"
+    mode: "0640"
+  notify: Restart node metrics
+
+- name: Deploy stack
+  community.docker.docker_compose_v2:
+    project_src: "{{ node_metrics_dir }}"
+    state: present
+    pull: missing
+    remove_orphans: true
+
+- name: Wait for node exporter
+  ansible.builtin.wait_for:
+    host: "{{ node_metrics_exporter_listen.split(':')[0] }}"
+    port: "{{ node_metrics_exporter_listen.split(':')[1] }}"
+    timeout: 60
+
+# Проверяется доставка, а не запуск: vmagent поднимается и при неверном
+# пароле, просто копит данные в буфере и молчит в логах на уровне info.
+- name: Verify metrics are accepted by the receiver
+  ansible.builtin.command:
+    cmd: >-
+      docker exec vmagent wget -qO- --timeout=10
+      http://127.0.0.1:8429/metrics
+  register: node_metrics_vmagent_self
+  changed_when: false
+  retries: 6
+  delay: 10
+  until: >-
+    'vmagent_remotewrite_requests_total' in node_metrics_vmagent_self.stdout

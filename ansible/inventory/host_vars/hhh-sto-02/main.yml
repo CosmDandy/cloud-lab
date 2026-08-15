@@ -215,6 +215,13 @@ panel_sub_root_redirect: https://t.me/CosmDandy
 # --- observability ----------------------------------------------------------
 observability_domain: grafana.cosmdandy.dev
 
+# Приём метрик с нод: они пушат сюда, а не скрейпятся отсюда. Так на нодах
+# наружу не открывается ни одного порта, а vmagent на них буферизует данные
+# при обрыве и досылает — при pull десятиминутная недоступность оставила бы
+# дыру в графиках.
+observability_remote_write_enabled: true
+observability_vm_domain: vm.cosmdandy.dev
+
 # Включено обратно: панель здесь есть, и её /metrics закрыт basic-auth,
 # из-под которого скрейпит vmagent (panel_metrics_user/password).
 observability_panel_metrics_enabled: true

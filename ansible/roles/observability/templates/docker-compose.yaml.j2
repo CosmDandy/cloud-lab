@@ -19,8 +19,23 @@ services:
     # изнутри нечем. Состояние видно по /-/healthy снаружи.
     networks:
       - monitoring
-{% if observability_panel_metrics_enabled %}
+{% if observability_panel_metrics_enabled or observability_remote_write_enabled %}
       - edge
+{% endif %}
+{% if observability_remote_write_enabled %}
+    labels:
+      traefik.enable: "true"
+      # Path, а не PathPrefix: наружу открыт ровно приём записи. Запросы и
+      # /api/v1/admin/tsdb/delete_series остаются недоступными снаружи, при
+      # том что сама victoriametrics их обслуживает без авторизации.
+      traefik.http.routers.vmwrite.rule: "Host(`{{ observability_vm_domain }}`) && Path(`/api/v1/write`)"
+      traefik.http.routers.vmwrite.entrypoints: websecure
+      traefik.http.routers.vmwrite.tls.certresolver: letsencrypt
+      traefik.http.routers.vmwrite.middlewares: vm-write-auth
+      # Удвоение $ обязательно: compose иначе принимает $apr1$ за подстановку
+      # переменной и молча передаёт traefik обрезанный хеш.
+      traefik.http.middlewares.vm-write-auth.basicauth.users: "{{ observability_remote_write_user }}:{{ observability_remote_write_htpasswd | replace('$', '$$') }}"
+      traefik.http.services.vmwrite.loadbalancer.server.port: "8428"
 {% endif %}
 
   vmalert:
