@@ -10,7 +10,12 @@ observability_grafana_image: grafana/grafana:13.1.1
 observability_loki_image: grafana/loki:3.5.0
 observability_promtail_image: grafana/promtail:3.5.0
 observability_node_exporter_image: prom/node-exporter:v1.12.1
-observability_cadvisor_image: gcr.io/cadvisor/cadvisor:v0.52.1
+# v0.52 не договаривается с docker 29.x (API 1.55): фабрика docker
+# регистрируется, но DockerVersion в логе пуст, и метрики приходят без
+# лейблов name и image — контейнер по ним не опознать.
+# ghcr, а не gcr: свежие сборки публикуются только туда, в gcr.io
+# последняя — v0.52.x, и запрос v0.60.5 там отдаёт not found.
+observability_cadvisor_image: ghcr.io/google/cadvisor:v0.60.5
 
 observability_domain: ""
 observability_edge_network: "{{ edge_network | default('edge') }}"

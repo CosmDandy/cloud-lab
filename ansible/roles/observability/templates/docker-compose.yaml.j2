@@ -87,10 +87,34 @@ services:
     image: {{ observability_cadvisor_image }}
     container_name: cadvisor
     restart: unless-stopped
+    # Набор ниже — не перестраховка. Без него cadvisor видит только cgroup
+    # системы и пишет "Failed to create existing container" на каждый
+    # docker-*.scope: метрики собираются, но без лейблов name и image, то
+    # есть контейнер по ним не опознать, а дашборды остаются пустыми.
+    # На cgroup v2 (Ubuntu 24.04+) без privileged и /dev/kmsg не обойтись.
+    privileged: true
+    # На cgroup v2 docker кладёт каждый контейнер в собственный cgroup
+    # namespace, и cadvisor из своего видит только себя — отсюда
+    # "Failed to create existing container" на каждый docker-*.scope при
+    # полном наборе прав. Хостовый namespace возвращает ему остальные.
+    cgroup: host
+    devices:
+      - /dev/kmsg
     volumes:
-      - /var/run/docker.sock:/var/run/docker.sock:ro
+      - /:/rootfs:ro
+      - /var/run:/var/run:ro
       - /sys:/sys:ro
       - /var/lib/docker:/var/lib/docker:ro
+      - /dev/disk:/dev/disk:ro
+    # Без урезания ответ v0.60 весит 23 МБ и не пролезает в лимит скрейпа
+    # victoriametrics (16 МБ): cadvisor прикладывает к каждой метрике все
+    # docker-лейблы контейнера. Оставляем два, по которым дашборды группируют,
+    # и отключаем метрики, которых здесь никто не читает.
+    command:
+      - "--store_container_labels=false"
+      - "--whitelisted_container_labels=com.docker.compose.project,com.docker.compose.service"
+      - "--disable_metrics=percpu,sched,tcp,udp,advtcp,process,hugetlb,referenced_memory,cpu_topology,resctrl"
+      - "--docker_only=true"
     networks:
       - monitoring
 
