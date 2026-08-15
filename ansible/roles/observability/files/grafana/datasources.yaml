@@ -1,13 +1,28 @@
 apiVersion: 1
 
+# Датасорсы удаляются перед созданием: задать uid уже существующему
+# grafana не даёт — при старте она ищет источник по новому uid, не находит
+# и падает в цикл перезапусков с "data source not found". Данные при этом
+# не теряются, датасорс хранит только параметры подключения.
+deleteDatasources:
+  - name: VictoriaMetrics
+    orgId: 1
+  - name: Loki
+    orgId: 1
+
 datasources:
   - name: VictoriaMetrics
+    # uid задан явно: без него grafana генерирует его сама при первом
+    # запуске, и дашборды, ссылающиеся на датасорс, ломаются при любом
+    # пересоздании. Имя в ссылке не работает вовсе — резолвится только uid.
+    uid: victoriametrics
     type: prometheus
     access: proxy
     url: http://victoriametrics:8428
     isDefault: true
 
   - name: Loki
+    uid: loki
     type: loki
     access: proxy
     url: http://loki:3100

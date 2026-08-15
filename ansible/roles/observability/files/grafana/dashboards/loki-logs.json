@@ -47,7 +47,10 @@
       "bars": true,
       "dashLength": 10,
       "dashes": false,
-      "datasource": "Loki",
+      "datasource": {
+        "type": "loki",
+        "uid": "loki"
+      },
       "fieldConfig": {
         "defaults": {
           "custom": {},
@@ -137,7 +140,10 @@
       }
     },
     {
-      "datasource": "Loki",
+      "datasource": {
+        "type": "loki",
+        "uid": "loki"
+      },
       "fieldConfig": {
         "defaults": {
           "custom": {}
@@ -182,15 +188,18 @@
       {
         "allValue": null,
         "current": {},
-        "datasource": "Loki",
-        "definition": "label_values(job)",
+        "datasource": {
+          "type": "loki",
+          "uid": "loki"
+        },
+        "definition": "label_values(container)",
         "hide": 0,
         "includeAll": false,
         "label": "App",
         "multi": false,
         "name": "app",
         "options": [],
-        "query": "label_values(job)",
+        "query": "label_values(container)",
         "refresh": 1,
         "regex": "",
         "skipUrlSync": false,

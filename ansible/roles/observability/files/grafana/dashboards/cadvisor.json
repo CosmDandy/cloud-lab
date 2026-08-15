@@ -21,7 +21,10 @@
   "panels": [
     {
       "collapsed": false,
-      "datasource": "VictoriaMetrics",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "victoriametrics"
+      },
       "gridPos": {
         "h": 1,
         "w": 24,
@@ -38,7 +41,10 @@
       "bars": false,
       "dashLength": 10,
       "dashes": false,
-      "datasource": "VictoriaMetrics",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "victoriametrics"
+      },
       "fieldConfig": {
         "defaults": {
           "custom": {}
@@ -135,7 +141,10 @@
     },
     {
       "collapsed": false,
-      "datasource": "VictoriaMetrics",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "victoriametrics"
+      },
       "gridPos": {
         "h": 1,
         "w": 24,
@@ -152,7 +161,10 @@
       "bars": false,
       "dashLength": 10,
       "dashes": false,
-      "datasource": "VictoriaMetrics",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "victoriametrics"
+      },
       "fieldConfig": {
         "defaults": {
           "custom": {}
@@ -252,7 +264,10 @@
       "bars": false,
       "dashLength": 10,
       "dashes": false,
-      "datasource": "VictoriaMetrics",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "victoriametrics"
+      },
       "fieldConfig": {
         "defaults": {
           "custom": {}
@@ -349,7 +364,10 @@
     },
     {
       "collapsed": false,
-      "datasource": "VictoriaMetrics",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "victoriametrics"
+      },
       "gridPos": {
         "h": 1,
         "w": 24,
@@ -366,7 +384,10 @@
       "bars": false,
       "dashLength": 10,
       "dashes": false,
-      "datasource": "VictoriaMetrics",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "victoriametrics"
+      },
       "fieldConfig": {
         "defaults": {
           "custom": {}
@@ -469,7 +490,10 @@
       "bars": false,
       "dashLength": 10,
       "dashes": false,
-      "datasource": "VictoriaMetrics",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "victoriametrics"
+      },
       "fieldConfig": {
         "defaults": {
           "custom": {}
@@ -565,7 +589,10 @@
     },
     {
       "collapsed": false,
-      "datasource": "VictoriaMetrics",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "victoriametrics"
+      },
       "gridPos": {
         "h": 1,
         "w": 24,
@@ -578,7 +605,10 @@
       "type": "row"
     },
     {
-      "datasource": "VictoriaMetrics",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "victoriametrics"
+      },
       "fieldConfig": {
         "defaults": {
           "custom": {
@@ -715,7 +745,10 @@
       {
         "allValue": ".*",
         "current": {},
-        "datasource": "VictoriaMetrics",
+        "datasource": {
+          "type": "prometheus",
+          "uid": "victoriametrics"
+        },
         "definition": "label_values({__name__=~\"container.*\"},instance)",
         "description": null,
         "error": null,
@@ -742,7 +775,10 @@
       {
         "allValue": ".*",
         "current": {},
-        "datasource": "VictoriaMetrics",
+        "datasource": {
+          "type": "prometheus",
+          "uid": "victoriametrics"
+        },
         "definition": "label_values({__name__=~\"container.*\", instance=~\"$host\"},name)",
         "description": null,
         "error": null,
