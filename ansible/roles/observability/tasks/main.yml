@@ -37,6 +37,18 @@
     - vmalert/alerts.yaml
   notify: Restart observability stack
 
+# Каталогом, а не через loop: дашборды добавляются и удаляются, и держать
+# их список в двух местах — гарантированное расхождение. Слеш в конце src
+# означает «содержимое каталога», без него создался бы вложенный dashboards/.
+- name: Install grafana dashboards
+  ansible.builtin.copy:
+    src: grafana/dashboards/
+    dest: "{{ observability_dir }}/grafana/dashboards/"
+    owner: "{{ observability_owner }}"
+    group: "{{ observability_owner }}"
+    mode: "0644"
+  notify: Restart observability stack
+
 - name: Render scrape config
   ansible.builtin.template:
     src: prometheus.yml.j2

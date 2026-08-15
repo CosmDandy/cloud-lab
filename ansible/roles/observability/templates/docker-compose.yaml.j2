@@ -104,6 +104,10 @@ services:
       - grafana_data:/var/lib/grafana
       - ./grafana/datasources.yaml:/etc/grafana/provisioning/datasources/datasources.yaml:ro
       - ./grafana/dashboards.yaml:/etc/grafana/provisioning/dashboards/dashboards.yaml:ro
+      # Каталог, на который смотрит провайдер из dashboards.yaml. Без него
+      # провижининг молча находит пустоту: grafana поднимется, датасорсы
+      # будут на месте, а список дашбордов останется пустым.
+      - ./grafana/dashboards:/var/lib/grafana/dashboards:ro
     depends_on:
       - victoriametrics
       - loki
