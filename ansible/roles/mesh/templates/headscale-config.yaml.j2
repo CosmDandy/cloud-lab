@@ -93,10 +93,15 @@ dns:
 
 {% if mesh_headscale_oidc_enabled %}
 oidc:
-  # false намеренно: провайдер стоит на этом же хосте за тем же traefik.
-  # При true холодный старт превращается в гонку — headscale отказывается
-  # подниматься, пока не ответит pocket-id, который ещё не запущен.
-  only_start_if_oidc_is_available: false
+  # true обязателен, хотя провайдер стоит на этом же хосте за тем же traefik.
+  # Описание провайдера headscale запрашивает ровно один раз, при старте, и
+  # при неудаче молча уходит в CLI-регистрацию до следующего перезапуска:
+  # сеть работает, панель открывается, а вход через pocket-id пропадает без
+  # единого упавшего healthcheck. Так и случилось 14.08.2026 — traefik ещё
+  # не завёл маршрут на pocket-id, и вход был потерян на сутки.
+  # При true тот же холодный старт даёт несколько перезапусков контейнера
+  # (restart: unless-stopped) и правильный результат вместо тихой поломки.
+  only_start_if_oidc_is_available: true
   issuer: "{{ mesh_headscale_oidc_issuer }}"
   client_id: "{{ mesh_headscale_oidc_client_id }}"
   client_secret: "{{ mesh_headscale_oidc_client_secret }}"
