@@ -1,4 +1,8 @@
 ---
+- name: Configure swap file
+  ansible.builtin.import_tasks: swap.yml
+  tags: [swap]
+
 - name: Install base packages
   ansible.builtin.apt:
     name: "{{ base_packages }}"

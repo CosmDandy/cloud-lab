@@ -26,3 +26,14 @@ base_sshd_hardening:
   MaxAuthTries: "3"
   ClientAliveInterval: "300"
   ClientAliveCountMax: "2"
+
+# Swap-файл. Роль стоит на control-plane с 8 GB памяти и без подкачки:
+# ядру некуда вытеснить холодные страницы, и любой пик упирается сразу в
+# OOM-killer. Размер переопределяется в host_vars, если машина другая.
+base_swap_file: /swapfile
+base_swap_file_size: 4G
+
+# Swap здесь — аварийный запас, а не расширение памяти: 10 означает, что
+# ядро уходит на диск только под реальным давлением, а не ради кэша.
+base_swappiness: 10
+base_swap_sysctl_file: /etc/sysctl.d/99-swap.conf
