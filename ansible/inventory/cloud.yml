@@ -74,6 +74,7 @@ all:
             - gatus
             - gatus_public
             - atuin
+            - wallcal
 
         # Боевая машина. host_services пуст намеренно: она до сих пор
         # развёрнута схемой из docker-compose и ручных workflow (снесены

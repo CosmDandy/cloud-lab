@@ -1,0 +1,73 @@
+# Managed by ansible (roles/wallcal). Правки на хосте будут перезаписаны.
+name: wallcal
+
+services:
+  wallcal:
+    image: {{ wallcal_image }}
+    container_name: wallcal
+    restart: unless-stopped
+    environment:
+      # 127.0.0.1 в списке — не небрежность, а условие работоспособности
+      # встроенного HEALTHCHECK: он ходит на http://127.0.0.1:8000/healthz,
+      # то есть с Host: 127.0.0.1:8000, а TrustedHostMiddleware отрезает порт
+      # и сверяет имя целиком. С одним лишь публичным доменом проверка
+      # получает 400, контейнер становится unhealthy, и traefik выкидывает
+      # его из конфигурации — роутера нет, сертификат не выпускается, сервис
+      # недостижим. Проверено на этом хосте. Снаружи такой Host прислать
+      # некому: контейнер не публикует портов и виден только traefik.
+      WALLCAL_DOMAIN: "{{ wallcal_domain }},127.0.0.1"
+      WALLCAL_TZ: "{{ wallcal_tz }}"
+      # Порт передаётся, хотя в образе он и так 8000: без этого wallcal_port
+      # менял бы только expose и лейбл traefik, приложение осталось бы на
+      # 8000, и стек отвечал бы 502 — при зелёном healthcheck, который берёт
+      # WALLCAL_PORT из образа.
+      WALLCAL_PORT: "{{ wallcal_port }}"
+      WALLCAL_TRUSTED_PROXY: "{{ wallcal_trusted_proxy }}"
+    # Сервис не хранит ничего: ни базы, ни тома, ни секретов — вся
+    # конфигурация обоев лежит в URL. Отсюда и read_only: venv скомпилирован
+    # при сборке, PYTHONDONTWRITEBYTECODE выставлен в образе, так что
+    # неизменяемый корень не стоит ничего на старте. По той же причине этот
+    # стек не заводится в роль backup — восстанавливать нечего.
+    read_only: true
+    cap_drop:
+      - ALL
+    security_opt:
+      - no-new-privileges:true
+    # Те же 10m×3, что роль docker ставит демону глобально (daemon.json), —
+    # дублирование намеренное. Сервис пишет по JSON-строке на запрос и
+    # говорливее любого соседа по хосту, поэтому его предел не должен
+    # зависеть от чужой роли и от того, чем демон настроен на следующей
+    # машине. 30 МБ — несколько недель домашнего трафика.
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"
+    cpus: {{ wallcal_cpus }}
+    mem_limit: {{ wallcal_mem_limit }}
+    expose:
+      - "{{ wallcal_port }}"
+    networks:
+      - edge
+    # HEALTHCHECK уже есть в образе — он опрашивает сокет тем же
+    # интерпретатором, которым работает сервис, и читает WALLCAL_PORT
+    # в момент проверки. Свой здесь только затёр бы рабочий.
+    labels:
+      traefik.enable: "true"
+      traefik.http.routers.wallcal.rule: "Host(`{{ wallcal_domain }}`)"
+      traefik.http.routers.wallcal.entrypoints: websecure
+      traefik.http.routers.wallcal.tls.certresolver: letsencrypt
+      traefik.http.services.wallcal.loadbalancer.server.port: "{{ wallcal_port }}"
+      # Оба лимита считаются по адресу источника (у traefik это умолчание) и
+      # применяются до того, как запрос дойдёт до рендера. Заголовки и
+      # сжатие сюда не перечисляются: они висят на entryPoint websecure
+      # целиком, в роли edge, и этим списком не отменяются.
+      traefik.http.routers.wallcal.middlewares: wallcal-ratelimit,wallcal-inflight
+      traefik.http.middlewares.wallcal-ratelimit.ratelimit.average: "{{ wallcal_rate_average }}"
+      traefik.http.middlewares.wallcal-ratelimit.ratelimit.burst: "{{ wallcal_rate_burst }}"
+      traefik.http.middlewares.wallcal-inflight.inflightreq.amount: "{{ wallcal_inflight }}"
+
+networks:
+  edge:
+    name: {{ wallcal_edge_network }}
+    external: true

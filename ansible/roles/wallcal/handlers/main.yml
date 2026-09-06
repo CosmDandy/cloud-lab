@@ -1,0 +1,5 @@
+---
+- name: Restart wallcal stack
+  community.docker.docker_compose_v2:
+    project_src: "{{ wallcal_dir }}"
+    state: restarted

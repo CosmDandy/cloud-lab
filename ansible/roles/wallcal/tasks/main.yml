@@ -1,0 +1,30 @@
+---
+- name: Validate required variables
+  ansible.builtin.assert:
+    that:
+      - wallcal_domain | length > 0
+    fail_msg: Нужен wallcal_domain.
+
+- name: Create stack directory
+  ansible.builtin.file:
+    path: "{{ wallcal_dir }}"
+    state: directory
+    owner: "{{ wallcal_owner }}"
+    group: "{{ wallcal_owner }}"
+    mode: "0750"
+
+- name: Render compose file
+  ansible.builtin.template:
+    src: docker-compose.yaml.j2
+    dest: "{{ wallcal_dir }}/docker-compose.yaml"
+    owner: "{{ wallcal_owner }}"
+    group: "{{ wallcal_owner }}"
+    mode: "0640"
+  notify: Restart wallcal stack
+
+- name: Deploy stack
+  community.docker.docker_compose_v2:
+    project_src: "{{ wallcal_dir }}"
+    state: present
+    pull: missing
+    remove_orphans: true
