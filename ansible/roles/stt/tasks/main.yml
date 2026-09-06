@@ -1,0 +1,37 @@
+---
+- name: Validate required variables
+  ansible.builtin.assert:
+    that:
+      - stt_domain | length > 0
+      - stt_soniox_api_key | length > 0
+      - stt_auth_token | length > 0
+    fail_msg: >-
+      Нужны stt_domain, stt_soniox_api_key и stt_auth_token. Без токена
+      сервис отдаёт распознавание на нашем ключе Soniox кому угодно.
+
+- name: Create stack directory
+  ansible.builtin.file:
+    path: "{{ stt_dir }}"
+    state: directory
+    owner: "{{ stt_owner }}"
+    group: "{{ stt_owner }}"
+    mode: "0750"
+
+- name: Render compose file
+  ansible.builtin.template:
+    src: docker-compose.yaml.j2
+    dest: "{{ stt_dir }}/docker-compose.yaml"
+    owner: "{{ stt_owner }}"
+    group: "{{ stt_owner }}"
+    mode: "0640"
+  # В шаблон уходят ключ Soniox и токен клиентов: с --diff они иначе
+  # оказались бы в выводе прогона целиком.
+  no_log: true
+  notify: Restart stt stack
+
+- name: Deploy stack
+  community.docker.docker_compose_v2:
+    project_src: "{{ stt_dir }}"
+    state: present
+    pull: missing
+    remove_orphans: true

@@ -275,6 +275,14 @@ gatus_endpoints:
     group: apps
     url: https://wallcal.cosmdandy.dev/w/month.png
 
+  # /health открыт намеренно: его дёргает и healthcheck контейнера, и проба
+  # провайдера у клиента диктовки. Всё остальное у сервиса за токеном, и
+  # проверять это с токеном в конфиге gatus значило бы держать секрет в двух
+  # местах ради одной строки статуса.
+  - name: stt
+    group: apps
+    url: https://stt.cosmdandy.dev/health
+
   # Панель и подписки проксируются Cloudflare, поэтому проверка меряет весь
   # путь пользователя целиком: Cloudflare, traefik, приложение.
   - name: panel
@@ -455,3 +463,16 @@ atuin_open_registration: false
 # лежит в самой ссылке, которую Shortcut на телефоне дёргает раз в сутки.
 # Поэтому здесь только домен: остальное — дефолты роли.
 wallcal_domain: wallcal.cosmdandy.dev
+
+# --- stt (soniox-openai-shim) -----------------------------------------------
+# OpenAI-совместимый /v1/audio/transcriptions поверх Soniox: клиент диктовки
+# на ноутбуке и телефоне шлёт сюда запись и получает текст. Ключ Soniox и
+# токен, которым сервис отделяет своих от чужих, — в secrets.sops.yaml.
+stt_domain: stt.cosmdandy.dev
+
+# В клиенте (Spokenly) в поле адреса нужен ПОЛНЫЙ путь эндпоинта:
+#   https://stt.cosmdandy.dev/v1/audio/transcriptions
+# Базовый https://stt.cosmdandy.dev/v1 там не работает, и выглядит это
+# обманчиво: пробу провайдера клиент делает, дописывая /models, и она
+# проходит, а саму диктовку шлёт ровно по указанному адресу, ничего не
+# добавляя, — в логе сервиса это POST /v1 с ответом 404.

@@ -1,0 +1,64 @@
+# Managed by ansible (roles/stt). Правки на хосте будут перезаписаны.
+# Файл содержит ключ Soniox и токен клиентов — режим 0640, владелец root.
+name: soniox-openai-shim
+
+services:
+  soniox-openai-shim:
+    image: {{ stt_image }}
+    container_name: soniox-openai-shim
+    restart: unless-stopped
+    environment:
+      SONIOX_API_KEY: "{{ stt_soniox_api_key }}"
+      SHIM_AUTH_TOKEN: "{{ stt_auth_token }}"
+      SONIOX_BASE_URL: "{{ stt_base_url }}"
+      SONIOX_MODEL: "{{ stt_model }}"
+      SONIOX_LANGUAGE_HINTS: "{{ stt_language_hints }}"
+      SONIOX_CONTEXT_DOMAIN: "{{ stt_context_domain }}"
+      SONIOX_CONTEXT_TERMS: "{{ stt_context_terms }}"
+      SONIOX_POLL_INTERVAL: "{{ stt_poll_interval }}"
+      SONIOX_POLL_TIMEOUT: "{{ stt_poll_timeout }}"
+      SONIOX_PRICE_PER_HOUR: "{{ stt_price_per_hour }}"
+    # Процесс работает под uid 10001. Именованный том получает владельца от
+    # образа при первом монтировании, bind mount с хоста пришлось бы
+    # chown-ить руками — поэтому именно том.
+    volumes:
+      - usage:/data
+    # Привилегии не нужны никакие: сервис ходит наружу по https и пишет в
+    # свой том. read_only не ставится сознательно — загрузку больше порога
+    # starlette выкладывает во временный файл, а с неизменяемым корнем
+    # диктовка падала бы ровно на длинных записях, то есть изредка.
+    cap_drop:
+      - ALL
+    security_opt:
+      - no-new-privileges:true
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"
+    expose:
+      - "{{ stt_port }}"
+    networks:
+      - edge
+    # HEALTHCHECK уже зашит в образ (Dockerfile:23) и проверяет /health тем
+    # же интерпретатором, что и сервис; свой был бы его копией.
+    labels:
+      traefik.enable: "true"
+      traefik.http.routers.stt.rule: "Host(`{{ stt_domain }}`)"
+      traefik.http.routers.stt.entrypoints: websecure
+      traefik.http.routers.stt.tls.certresolver: letsencrypt
+      traefik.http.services.stt.loadbalancer.server.port: "{{ stt_port }}"
+      traefik.http.routers.stt.middlewares: stt-ratelimit,stt-bodylimit
+      traefik.http.middlewares.stt-ratelimit.ratelimit.average: "{{ stt_rate_average }}"
+      traefik.http.middlewares.stt-ratelimit.ratelimit.burst: "{{ stt_rate_burst }}"
+      traefik.http.middlewares.stt-bodylimit.buffering.maxRequestBodyBytes: "{{ stt_max_request_body_bytes }}"
+      traefik.http.middlewares.stt-bodylimit.buffering.memRequestBodyBytes: "{{ stt_mem_request_body_bytes }}"
+
+networks:
+  edge:
+    name: {{ stt_edge_network }}
+    external: true
+
+volumes:
+  usage:
+    name: stt_usage

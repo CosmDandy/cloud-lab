@@ -150,6 +150,14 @@
     - role: wallcal
       tags: [wallcal]
 
+- name: STT
+  hosts: svc_stt
+  become: true
+
+  roles:
+    - role: stt
+      tags: [stt]
+
 - name: Derper
   hosts: svc_derper
   become: true

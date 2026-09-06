@@ -1,0 +1,77 @@
+---
+# soniox-openai-shim: OpenAI-совместимый /v1/audio/transcriptions поверх
+# Soniox. Роль названа по функции, а не по продукту, — как mesh (headscale)
+# и panel (Remnawave): клиент диктовки ходит на stt.cosmdandy.dev.
+stt_dir: /opt/stt
+stt_owner: root
+
+# Версия закреплена релизным тегом. Не sha-29f9a24, хотя он и указывает на
+# тот же образ: этот тег в ghcr уже переписывали — 06.09.2026 он сменил
+# digest с sha256:40324f08613f… на sha256:8703a5d9e0b1… при пересборке того
+# же коммита. То есть «неподвижен» здесь только semver.
+stt_image: ghcr.io/cosmdandy/soniox-openai-shim:0.1.0
+
+# Домен; задаётся в инвентаре.
+stt_domain: ""
+stt_edge_network: "{{ edge_network | default('edge') }}"
+stt_port: 8756
+
+# Ключ Soniox и общий секрет для клиентов — оба из secrets.sops.yaml.
+# Токен обязателен: сервис публичный, а без токена он обслуживает любого,
+# кто до него дотянулся, на нашем ключе Soniox. Сгенерировать новый:
+#   openssl rand -base64 32
+stt_soniox_api_key: ""
+stt_auth_token: ""
+
+# Американский эндпоинт, хотя из Стокгольма европейский вдвое ближе
+# (0.13 с против 0.33 с на TLS): ключи привязаны к региону, и US-ключ
+# получает от api.eu.soniox.com честный 401. Переезд в EU — это ключ,
+# выпущенный в европейском проекте, и только вместе с ним.
+stt_base_url: https://api.soniox.com
+
+stt_model: stt-async-v5
+stt_language_hints: ru,en
+
+# Контекст распознавания. Домен задаёт тему, список терминов правит
+# написание имён собственных — по замерам автора именно он решает, вернётся
+# VictoriaMetrics или «Victory Matrix». Потолок ~10000 знаков, так что
+# список можно спокойно дополнять тем, что здесь произносят вслух.
+stt_context_domain: >-
+  DevOps and homelab infrastructure: Kubernetes, Proxmox, GitOps,
+  networking and server administration. Speech is Russian with English
+  technical terms mixed in.
+stt_context_terms: >-
+  Kubernetes, k8s, Talos, Proxmox, Cilium, Longhorn, MetalLB, ArgoCD,
+  GitOps, Helm, Traefik, cert-manager, external-dns, Sealed Secrets,
+  External Secrets, CloudNativePG, Velero, Renovate, metrics-server,
+  kube-prometheus-stack, Prometheus, Grafana, Grafana Alloy, Loki,
+  GitLab, GitLab CI, GitLab Runner, Nexus, PowerDNS, SeaweedFS, MinIO,
+  OpenSearch, VictoriaMetrics, Vector, Gatus, node-exporter,
+  postgres-exporter, PostgreSQL, Redis, Odoo, Nextcloud, Paperless-ngx,
+  Photoprism, Jellyfin, Atuin, Home Assistant, Homepage, Authentik,
+  Terraform, Ansible, Nomad, Docker, Docker Compose, OrbStack, Colima,
+  Lima, UTM, Devpod, sops, age, Nix, home-manager, tmux, zsh,
+  Claude Code, IPMI, BMC, Serial-over-LAN, PXE, TFTP, DHCP, VLAN,
+  nftables, tcpdump, MTU, kubectl, Ingress, Gateway API, PVC,
+  StorageClass, DaemonSet, StatefulSet, namespace, systemd, journalctl,
+  WireGuard, Tailscale, headscale, headplane, Remnawave, Pocket ID,
+  HostHatch, wallcal, Soniox, Spokenly
+
+# Задание опрашивается часто: клиент всё равно ждёт ответа синхронно.
+stt_poll_interval: "0.1"
+stt_poll_timeout: "300"
+
+# Только для /stats: цена часа асинхронного распознавания.
+stt_price_per_hour: "0.10"
+
+# Диктовка идёт всплесками, но редко; лимит обрезает только заклинивший
+# клиент, а не нормальную работу.
+stt_rate_average: 30
+stt_rate_burst: 10
+
+# Потолок на тело запроса. Он обязан стоять здесь, на границе: сам сервис
+# видит размер только после того, как принял тело, и клиенту, совравшему
+# в Content-Length, отказать уже нечем. 64 МиБ — около получаса того WAV,
+# что шлёт клиент диктовки.
+stt_max_request_body_bytes: 67108864
+stt_mem_request_body_bytes: 2097152
