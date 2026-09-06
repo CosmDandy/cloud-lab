@@ -31,6 +31,7 @@ services:
       - ALL
     security_opt:
       - no-new-privileges:true
+    mem_limit: {{ stt_mem_limit }}
     logging:
       driver: json-file
       options:
@@ -48,11 +49,12 @@ services:
       traefik.http.routers.stt.entrypoints: websecure
       traefik.http.routers.stt.tls.certresolver: letsencrypt
       traefik.http.services.stt.loadbalancer.server.port: "{{ stt_port }}"
-      traefik.http.routers.stt.middlewares: stt-ratelimit,stt-bodylimit
+      traefik.http.routers.stt.middlewares: stt-ratelimit,stt-inflight,stt-bodylimit
       traefik.http.middlewares.stt-ratelimit.ratelimit.average: "{{ stt_rate_average }}"
       traefik.http.middlewares.stt-ratelimit.ratelimit.burst: "{{ stt_rate_burst }}"
       traefik.http.middlewares.stt-bodylimit.buffering.maxRequestBodyBytes: "{{ stt_max_request_body_bytes }}"
       traefik.http.middlewares.stt-bodylimit.buffering.memRequestBodyBytes: "{{ stt_mem_request_body_bytes }}"
+      traefik.http.middlewares.stt-inflight.inflightreq.amount: "{{ stt_inflight }}"
 
 networks:
   edge:
