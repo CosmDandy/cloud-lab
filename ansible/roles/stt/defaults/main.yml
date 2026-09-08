@@ -9,7 +9,7 @@ stt_owner: root
 # тот же образ: этот тег в ghcr уже переписывали — 06.09.2026 он сменил
 # digest с sha256:40324f08613f… на sha256:8703a5d9e0b1… при пересборке того
 # же коммита. То есть «неподвижен» здесь только semver.
-stt_image: ghcr.io/cosmdandy/soniox-openai-shim:0.2.1
+stt_image: ghcr.io/cosmdandy/soniox-openai-shim:0.3.0
 
 # Домен; задаётся в инвентаре.
 stt_domain: ""
@@ -38,37 +38,15 @@ stt_base_url: https://api.soniox.com
 stt_model: stt-async-v5
 stt_language_hints: ru,en
 
-# Контекст распознавания. Домен задаёт тему, список терминов правит
-# написание имён собственных — по замерам автора именно он решает, вернётся
-# VictoriaMetrics или «Victory Matrix». Потолок ~10000 знаков, так что
-# список можно спокойно дополнять тем, что здесь произносят вслух.
-stt_context_domain: >-
-  DevOps and homelab infrastructure: Kubernetes, Proxmox, GitOps,
-  networking and server administration. Speech is Russian with English
-  technical terms mixed in.
-stt_context_terms: >-
-  Kubernetes, k8s, Talos, Proxmox, Cilium, Longhorn, MetalLB, ArgoCD,
-  GitOps, Helm, Traefik, cert-manager, external-dns, Sealed Secrets,
-  External Secrets, CloudNativePG, Velero, Renovate, metrics-server,
-  kube-prometheus-stack, Prometheus, Grafana, Grafana Alloy, Loki,
-  GitLab, GitLab CI, GitLab Runner, Nexus, PowerDNS, SeaweedFS, MinIO,
-  OpenSearch, VictoriaMetrics, Vector, Gatus, node-exporter,
-  postgres-exporter, PostgreSQL, Redis, Odoo, Nextcloud, Paperless-ngx,
-  Photoprism, Jellyfin, Atuin, Home Assistant, Homepage, Authentik,
-  Terraform, Ansible, Nomad, Docker, Docker Compose, OrbStack, Colima,
-  Lima, UTM, Devpod, sops, age, Nix, home-manager, tmux, zsh,
-  Claude Code, IPMI, BMC, Serial-over-LAN, PXE, TFTP, DHCP, VLAN,
-  nftables, tcpdump, MTU, kubectl, Ingress, Gateway API, PVC,
-  StorageClass, DaemonSet, StatefulSet, namespace, systemd, journalctl,
-  WireGuard, Tailscale, headscale, headplane, Remnawave, Pocket ID,
-  HostHatch, wallcal, Soniox, Spokenly
+# Словарь терминов не задаётся: Soniox тарифицирует его как входные
+# текстовые токены в каждом запросе (3.50 USD за 1M против 1.50 за аудио),
+# и на счёте за сентябрь это дало 72% суммы. По истории диктовок разницы
+# в распознавании тех же терминов не видно: 5.8 против 5.9 вхождения на
+# 10000 знаков. С версии 0.3.0 образ context вообще не отправляет.
 
 # Задание опрашивается часто: клиент всё равно ждёт ответа синхронно.
 stt_poll_interval: "0.1"
 stt_poll_timeout: "300"
-
-# Только для /stats: цена часа асинхронного распознавания.
-stt_price_per_hour: "0.10"
 
 # Диктовка идёт всплесками, но редко; лимит обрезает только заклинивший
 # клиент, а не нормальную работу.
@@ -92,7 +70,8 @@ stt_inflight: 4
 # Потолок оплачиваемого аудио за сутки UTC; 0 в образе означает «без
 # лимита». Включён намеренно: это единственное, что ограничивает не
 # вероятность утечки токена, а её цену — вор сожжёт максимум одни сутки
-# лимита, то есть около 0.40 USD по текущей stt_price_per_hour.
+# лимита. По фактическому счёту Soniox без словаря это ~0.11 USD за час
+# аудио, то есть около 0.45 USD за сутки на пределе.
 #
 # 240, а не 120: порог обязан лежать выше самого тяжёлого дня владельца,
 # иначе он режет работу, а не утечку. Проверено по /stats на этом же хосте

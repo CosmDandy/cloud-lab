@@ -13,11 +13,8 @@ services:
       SONIOX_BASE_URL: "{{ stt_base_url }}"
       SONIOX_MODEL: "{{ stt_model }}"
       SONIOX_LANGUAGE_HINTS: "{{ stt_language_hints }}"
-      SONIOX_CONTEXT_DOMAIN: "{{ stt_context_domain }}"
-      SONIOX_CONTEXT_TERMS: "{{ stt_context_terms }}"
       SONIOX_POLL_INTERVAL: "{{ stt_poll_interval }}"
       SONIOX_POLL_TIMEOUT: "{{ stt_poll_timeout }}"
-      SONIOX_PRICE_PER_HOUR: "{{ stt_price_per_hour }}"
       SHIM_DAILY_LIMIT_MINUTES: "{{ stt_daily_limit_minutes }}"
     # Процесс работает под uid 10001. Именованный том получает владельца от
     # образа при первом монтировании, bind mount с хоста пришлось бы
