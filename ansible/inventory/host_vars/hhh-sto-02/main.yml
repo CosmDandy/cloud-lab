@@ -154,9 +154,11 @@ oidc_clients:
       - "https://192.168.20.151:8006"
       - "https://192.168.20.152:8006"
       - "https://192.168.20.153:8006"
+      - "https://192.168.20.154:8006"
       - "https://pve-kvt-l-01.local:8006"
       - "https://pve-kvt-l-02.local:8006"
       - "https://pve-kvt-l-03.local:8006"
+      - "https://pve-local-l-02.local:8006"
     group_restricted: true
     allowed_user_groups: [admins]
 
