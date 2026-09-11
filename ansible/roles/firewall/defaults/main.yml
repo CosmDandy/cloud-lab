@@ -16,7 +16,7 @@ firewall_udp_ports: []
 firewall_restricted: []
 
 # ICMP оставлен открытым намеренно: им проверяет доступность gatus, и на нём
-# же держится PMTU discovery — при MTU 1450 на ams и osl блокировка ICMP
+# же держится PMTU discovery — при MTU 1450 на ams блокировка ICMP
 # означала бы молча зависающие соединения с большим MSS.
 firewall_allow_icmp: true
 

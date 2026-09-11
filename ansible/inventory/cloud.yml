@@ -24,14 +24,12 @@ all:
       vars:
         ansible_user: root
       hosts:
-        # Коды стран в кавычках не для красоты: NO без них YAML читает как
-        # булево false, и Осло получает country_code: False.
+        # Коды стран в кавычках не для красоты: NO без них YAML читает
+        # как булево false. Норвежской ноды больше нет, но грабля общая —
+        # следующий код страны заведут так же.
         hhh-ams-01:
           ansible_host: 85.155.190.66
           country_code: "NL"
-        hhh-osl-01:
-          ansible_host: 91.190.155.237
-          country_code: "NO"
         hhh-sto-01:
           ansible_host: 167.104.104.131
           country_code: "SE"

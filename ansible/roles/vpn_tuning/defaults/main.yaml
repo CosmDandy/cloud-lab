@@ -29,7 +29,7 @@ vpn_tuning_sysctl:
   net.ipv4.tcp_slow_start_after_idle: "0"
   net.ipv4.tcp_notsent_lowat: "131072"
   net.ipv4.tcp_fastopen: "3"
-  # Чёрные дыры PMTU: у HostHatch на ams и osl MTU интерфейса 1450, и если по
+  # Чёрные дыры PMTU: у HostHatch на ams MTU интерфейса 1450, и если по
   # пути гасят ICMP «Fragmentation needed», соединение с большим MSS зависает
   # молча. С probing ядро само нащупает рабочий размер.
   net.ipv4.tcp_mtu_probing: "1"
