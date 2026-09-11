@@ -26,18 +26,12 @@
     mode: "0440"
     validate: visudo -cf %s
 
+# Отдельным файлом, чтобы ноды могли взять только эту часть роли:
+# на них docker и sshd настраивались вне репозитория, и остальное из base
+# (swap, пакеты, deploy user) им не нужно.
 - name: Harden sshd
-  ansible.builtin.copy:
-    dest: /etc/ssh/sshd_config.d/99-hardening.conf
-    content: |
-      {% for key, value in base_sshd_hardening.items() %}
-      {{ key }} {{ value }}
-      {% endfor %}
-    owner: root
-    group: root
-    mode: "0644"
-    validate: sshd -t -f %s
-  notify: Restart sshd
+  ansible.builtin.import_tasks: sshd.yaml
+  tags: [sshd]
 
 - name: Create stack directories
   ansible.builtin.file:

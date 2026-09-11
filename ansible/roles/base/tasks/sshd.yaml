@@ -1,0 +1,26 @@
+---
+# Префикс 00, а не 99: sshd берёт ПЕРВОЕ вхождение параметра, а не последнее,
+# и файлы из sshd_config.d читаются по алфавиту. На hhh-ams-01 cloud-init
+# записал в 50-cloud-init.conf «PasswordAuthentication yes», и 99-hardening.conf
+# не значил ничего — нода собирала 24 531 неудачную попытку входа в сутки.
+# На control-plane то же самое работало лишь потому, что там cloud-init
+# записал «no»: результат зависел от везения, а не от роли.
+- name: Harden sshd
+  ansible.builtin.copy:
+    dest: /etc/ssh/sshd_config.d/00-hardening.conf
+    content: |
+      # Managed by ansible (roles/base). Правки на хосте будут перезаписаны.
+      {% for key, value in base_sshd_hardening.items() %}
+      {{ key }} {{ value }}
+      {% endfor %}
+    owner: root
+    group: root
+    mode: "0644"
+    validate: sshd -t -f %s
+  notify: Restart sshd
+
+- name: Remove superseded hardening drop-in
+  ansible.builtin.file:
+    path: /etc/ssh/sshd_config.d/99-hardening.conf
+    state: absent
+  notify: Restart sshd
