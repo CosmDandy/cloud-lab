@@ -127,6 +127,11 @@ def hysteria2_outbound(p: dict, salamander: str | None, hop_ports: str | None) -
         "tlsSettings": {"alpn": ["h3"], "serverName": q.get("sni", p["host"])},
         "hysteriaSettings": {"version": 2, "auth": p["user"]},
     }
+    # fm — как Remnawave отдаёт finalMask в ссылке: JSON целиком, в том же
+    # виде, что и в конфиге сервера. Разбирается первым, чтобы проверять
+    # ровно то, что получает живой клиент, а не собранное вручную.
+    if q.get("fm"):
+        ss["finalMask"] = json.loads(q["fm"])
     obfs = salamander or q.get("obfs-password")
     if obfs:
         ss["finalMask"] = {"salamander": {"password": obfs}}
