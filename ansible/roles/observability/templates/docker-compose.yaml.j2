@@ -47,13 +47,32 @@ services:
     command:
       - "-datasource.url=http://victoriametrics:8428"
       - "-rule=/etc/alerts/*.yaml"
+{% if observability_alerting_enabled %}
+      - "-notifier.url=http://alertmanager:9093"
+{% else %}
       - "-notifier.url=http://victoriametrics:8428"
+{% endif %}
       - "-remoteRead.url=http://victoriametrics:8428"
       - "-remoteWrite.url=http://victoriametrics:8428"
     depends_on:
       - victoriametrics
     networks:
       - monitoring
+
+{% if observability_alerting_enabled %}
+  alertmanager:
+    image: {{ observability_alertmanager_image }}
+    container_name: alertmanager
+    restart: unless-stopped
+    volumes:
+      - ./alertmanager.yml:/etc/alertmanager/alertmanager.yml:ro
+      - alertmanager_data:/alertmanager
+    command:
+      - "--config.file=/etc/alertmanager/alertmanager.yml"
+      - "--storage.path=/alertmanager"
+    networks:
+      - monitoring
+{% endif %}
 
   loki:
     image: {{ observability_loki_image }}
@@ -109,6 +128,12 @@ services:
       - /sys:/host/sys:ro
       - /:/rootfs:ro
     command:
+      # Без явного адреса node-exporter в host-сети слушает 0.0.0.0:9100, и
+      # его /metrics отвечал из интернета — полная карта хоста: версии,
+      # файловые системы, сеть. На петлю его повесить нельзя, скрейпит его
+      # victoriametrics из bridge, поэтому адрес docker-шлюза: изнутри
+      # достижим, снаружи нет.
+      - "--web.listen-address={{ observability_node_exporter_listen }}"
       - "--path.procfs=/host/proc"
       - "--path.sysfs=/host/sys"
       - "--path.rootfs=/rootfs"
@@ -199,3 +224,7 @@ volumes:
     name: observability_loki_data
   promtail_positions:
     name: observability_promtail_positions
+{% if observability_alerting_enabled %}
+  alertmanager_data:
+    name: observability_alertmanager_data
+{% endif %}

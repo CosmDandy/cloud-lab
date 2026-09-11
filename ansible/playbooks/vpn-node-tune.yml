@@ -31,3 +31,12 @@
       ansible.builtin.include_role:
         name: base
         tasks_from: sshd
+
+- name: Firewall on VPN nodes
+  hosts: vpn_nodes
+  become: true
+  gather_facts: false
+  tags: [firewall]
+
+  roles:
+    - role: firewall

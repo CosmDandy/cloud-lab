@@ -1,0 +1,9 @@
+---
+# restart, а не reload: юнит oneshot с RemainAfterExit, повторный start
+# ExecStart не выполнит, и новые правила доехали бы только до перезагрузки.
+- name: Reload firewall
+  ansible.builtin.systemd_service:
+    name: "{{ firewall_unit }}"
+    state: restarted
+    daemon_reload: true
+  when: not ansible_check_mode

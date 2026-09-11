@@ -1,0 +1,42 @@
+#!/usr/sbin/nft -f
+# Managed by ansible (roles/firewall). Правки на хосте будут перезаписаны.
+#
+# Никакого `flush ruleset`: рядом живут таблицы docker (nat) и hyhop
+# (redirect диапазона порт-хоппинга на инбаунд Hysteria2). Снести их —
+# оборвать всех пользователей разом.
+destroy table inet {{ firewall_table }}
+
+table inet {{ firewall_table }} {
+  chain input {
+    type filter hook input priority filter; policy drop;
+
+    # Ответы на исходящие соединения — первым правилом: через него проходит
+    # почти весь трафик, и дешевле проверить его до всех остальных.
+    ct state established,related accept
+    ct state invalid drop
+
+    iif lo accept
+{% if firewall_allow_icmp %}
+
+    icmp type { echo-request, destination-unreachable, time-exceeded, parameter-problem } accept
+    icmpv6 type { echo-request, destination-unreachable, packet-too-big, time-exceeded, parameter-problem, nd-neighbor-solicit, nd-neighbor-advert, nd-router-advert } accept
+{% endif %}
+{% if firewall_allow_dhcp_client %}
+
+    udp sport 67 udp dport 68 accept
+    udp sport 547 udp dport 546 accept
+{% endif %}
+{% if firewall_tcp_ports | length > 0 %}
+
+    tcp dport { {{ firewall_tcp_ports | join(', ') }} } accept
+{% endif %}
+{% if firewall_udp_ports | length > 0 %}
+
+    udp dport { {{ firewall_udp_ports | join(', ') }} } accept
+{% endif %}
+{% for rule in firewall_restricted %}
+
+    {{ rule.proto | default('tcp') }} dport {{ rule.port }} ip saddr { {{ rule.sources | join(', ') }} } accept
+{% endfor %}
+  }
+}

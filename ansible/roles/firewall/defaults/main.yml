@@ -1,0 +1,26 @@
+---
+# Собственная таблица nftables, а не /etc/nftables.conf: штатный файл Ubuntu
+# начинается с `flush ruleset`, и включение nftables.service снесло бы таблицы
+# docker и порт-хоппинга Hysteria2 вместе со всем трафиком пользователей.
+# Своя таблица живёт рядом с ними и трогает только цепочку input.
+firewall_table: vpnfw
+firewall_ruleset_file: /etc/nftables.d/vpn-firewall.nft
+firewall_unit: vpn-firewall.service
+
+# Порты, открытые всему миру.
+firewall_tcp_ports: []
+firewall_udp_ports: []
+
+# Порты, открытые только перечисленным адресам: [{port: 2222, sources: [ip]}].
+# Так панель достаёт ноду, а весь остальной интернет — нет.
+firewall_restricted: []
+
+# ICMP оставлен открытым намеренно: им проверяет доступность gatus, и на нём
+# же держится PMTU discovery — при MTU 1450 на ams и osl блокировка ICMP
+# означала бы молча зависающие соединения с большим MSS.
+firewall_allow_icmp: true
+
+# Клиент DHCP. Без этого правила нода теряет адрес при обновлении аренды —
+# не сразу, а через часы после применения, когда уже никто не свяжет одно с
+# другим.
+firewall_allow_dhcp_client: true

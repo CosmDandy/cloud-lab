@@ -1,0 +1,19 @@
+# Managed by ansible (roles/firewall). Правки на хосте будут перезаписаны.
+#
+# Не nftables.service: его /etc/nftables.conf начинается с `flush ruleset` и
+# снёс бы таблицы docker и порт-хоппинга. Этот юнит загружает одну свою
+# таблицу и ничего больше не трогает.
+[Unit]
+Description=Host firewall (nftables table inet {{ firewall_table }})
+After=network-online.target docker.service
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+RemainAfterExit=yes
+ExecStart=/usr/sbin/nft -f {{ firewall_ruleset_file }}
+# Снимаем только свою таблицу: остальное на месте.
+ExecStop=/usr/sbin/nft destroy table inet {{ firewall_table }}
+
+[Install]
+WantedBy=multi-user.target

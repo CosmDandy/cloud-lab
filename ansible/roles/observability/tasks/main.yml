@@ -58,6 +58,21 @@
     mode: "0644"
   notify: Restart observability stack
 
+# no_log: в конфиге лежит токен бота. Владелец — uid процесса в контейнере
+# (alertmanager работает от nobody), потому что 0644 сделал бы токен читаемым
+# любому пользователю хоста, а от 0640 root-овского файла контейнер получает
+# permission denied.
+- name: Render alertmanager config
+  ansible.builtin.template:
+    src: alertmanager.yml.j2
+    dest: "{{ observability_dir }}/alertmanager.yml"
+    owner: "{{ observability_alertmanager_uid }}"
+    group: "{{ observability_alertmanager_uid }}"
+    mode: "0640"
+  no_log: true
+  when: observability_alerting_enabled
+  notify: Restart observability stack
+
 - name: Render scrape config
   ansible.builtin.template:
     src: prometheus.yml.j2

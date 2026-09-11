@@ -232,6 +232,10 @@ observability_panel_metrics_enabled: true
 # та же push-учётка, traefik различает по пути /loki/api/v1/push.
 observability_logs_push_enabled: true
 
+# Алерты доезжают в тот же телеграм, что и оповещения gatus: правила есть с
+# 11.09.2026, а отправлять их до сих пор было некуда.
+observability_alerting_enabled: true
+
 
 observability_oidc_enabled: true
 observability_oidc_issuer: https://oidc.cosmdandy.dev
