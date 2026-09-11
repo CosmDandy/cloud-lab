@@ -59,15 +59,27 @@ groups:
           summary: "UDP receive buffer overflow on {{ $labels.instance }}"
           description: "{{ $value | printf \"%.0f\" }} datagrams dropped in 5m — QUIC and DNS suffer first"
 
+      # Пороги подобраны по факту за 7 дней, а не на глаз. Медиана доли
+      # ретрансмитов на нодах — 0.3-0.6 %, p90 — 1-5 %, p99 — 9-12 %,
+      # максимум — 35 %: у прокси на другом конце клиенты с мобильным
+      # интернетом и длинные маршруты, ретрансмиты там штатны.
+      #
+      # Первая версия (> 5 % за 15 минут) держалась бы выше порога 3-10 %
+      # времени, то есть орала бы по нескольку раз в день. Окно в час
+      # сглаживает всплески, порог в 10 % отсекает шум, а условие на объём
+      # обязательно: TCP-трафик ноды — медианные 10-15 сегментов в секунду,
+      # и на пустой ноде десяток ретрансмитов даёт «20 %» на ровном месте.
+      # С этими значениями за те же 7 дней вышел ровно один эпизод на ноду.
       - alert: HighTcpRetransmitRatio
         expr: >-
-          100 * rate(node_netstat_Tcp_RetransSegs[15m])
-          / rate(node_netstat_Tcp_OutSegs[15m]) > 5
-        for: 15m
+          (100 * rate(node_netstat_Tcp_RetransSegs[1h])
+           / rate(node_netstat_Tcp_OutSegs[1h]) > 10)
+          and (rate(node_netstat_Tcp_OutSegs[1h]) > 50)
+        for: 30m
         labels:
           severity: warning
         annotations:
-          summary: "TCP retransmit ratio above 5% on {{ $labels.instance }}"
+          summary: "TCP retransmit ratio above 10% on {{ $labels.instance }}"
           description: "Current: {{ $value | printf \"%.1f\" }}% of outgoing segments retransmitted"
 
       - alert: ConntrackNearLimit

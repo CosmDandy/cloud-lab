@@ -16,6 +16,9 @@ table inet {{ firewall_table }} {
     ct state invalid drop
 
     iif lo accept
+{% for iface in firewall_trusted_ifaces %}
+    iifname "{{ iface }}" accept
+{% endfor %}
 {% if firewall_allow_icmp %}
 
     icmp type { echo-request, destination-unreachable, time-exceeded, parameter-problem } accept

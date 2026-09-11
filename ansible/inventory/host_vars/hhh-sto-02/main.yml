@@ -496,3 +496,10 @@ firewall_tcp_ports:
   - 22
   - 80
   - 443
+
+# Стеки панели ходят к сервисам хоста через docker-бриджи: victoriametrics
+# скрейпит node-exporter по host.docker.internal, и с policy drop этот
+# трафик попадает в ту же цепочку input, что и внешний.
+firewall_trusted_ifaces:
+  - docker0
+  - "br-*"
