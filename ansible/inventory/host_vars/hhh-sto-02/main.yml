@@ -228,6 +228,11 @@ observability_vm_domain: vm.cosmdandy.dev
 # из-под которого скрейпит vmagent (panel_metrics_user/password).
 observability_panel_metrics_enabled: true
 
+# Логи нод приезжают сюда тем же путём, что их метрики: домен vm.cosmdandy.dev,
+# та же push-учётка, traefik различает по пути /loki/api/v1/push.
+observability_logs_push_enabled: true
+
+
 observability_oidc_enabled: true
 observability_oidc_issuer: https://oidc.cosmdandy.dev
 # Callback URL: https://grafana.cosmdandy.dev/login/generic_oauth

@@ -66,6 +66,22 @@ services:
     # Тот же случай, что и у victoriametrics: образ без shell.
     networks:
       - monitoring
+{% if observability_logs_push_enabled %}
+      - edge
+    labels:
+      traefik.enable: "true"
+      # Path, а не PathPrefix: наружу открыт ровно приём записи. /loki/api/v1/query
+      # и API удаления остаются недоступными снаружи, хотя loki их обслуживает
+      # без авторизации. Домен тот же, что у приёма метрик — различает путь.
+      traefik.http.routers.lokipush.rule: "Host(`{{ observability_vm_domain }}`) && Path(`/loki/api/v1/push`)"
+      traefik.http.routers.lokipush.entrypoints: websecure
+      traefik.http.routers.lokipush.tls.certresolver: letsencrypt
+      traefik.http.routers.lokipush.middlewares: logs-push-auth
+      # Удвоение $ обязательно: compose иначе принимает $apr1$ за подстановку
+      # переменной и молча передаёт traefik обрезанный хеш.
+      traefik.http.middlewares.logs-push-auth.basicauth.users: "{{ observability_remote_write_user }}:{{ observability_remote_write_htpasswd | replace('$', '$$') }}"
+      traefik.http.services.lokipush.loadbalancer.server.port: "3100"
+{% endif %}
 
   promtail:
     image: {{ observability_promtail_image }}

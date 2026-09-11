@@ -26,7 +26,15 @@ observability_edge_network: "{{ edge_network | default('edge') }}"
 
 observability_grafana_admin_password: ""
 
-observability_metrics_retention: 30d
+# Квартал: 332 МБ за 30 дней, то есть около гигабайта за 90 при 18 ГБ
+# свободных. Столько же держатся логи — чтобы инцидент и график, по которому
+# его нашли, кончались не в разное время.
+observability_metrics_retention: 90d
+# Логи дешевле метрик: неделя логов всей панели весит 31 МБ против 332 МБ
+# метрик за 30 дней. Квартал — тот же горизонт, что у метрик: инцидент
+# смотрится рядом с графиком, по которому его нашли, а не «логи кончились
+# раньше». 90 дней ≈ 1 ГБ сейчас и ≈ 2.4 ГБ, если поднять xray до info.
+observability_logs_retention: 2160h
 
 # Узлы, где крутится node-exporter, кроме локального.
 # [{address: "10.0.0.2:9100", instance: "miv-chi-01"}]
@@ -44,6 +52,12 @@ observability_remote_write_user: metrics-push
 # прогоне и роль перестаёт быть идемпотентной.
 observability_remote_write_password: ""
 observability_remote_write_htpasswd: ""
+
+# Приём логов с нод тем же путём и той же учёткой, что и метрики: отдельный
+# домен потребовал бы записи в DNS и второго сертификата ради одного
+# push-эндпоинта, а traefik различает их по пути. Включается вместе с
+# observability_remote_write_enabled.
+observability_logs_push_enabled: false
 
 # Скрейп панели Remnawave: /metrics закрыт basic auth.
 observability_panel_metrics_enabled: false

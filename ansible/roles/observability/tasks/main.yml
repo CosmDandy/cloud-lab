@@ -32,7 +32,6 @@
   loop:
     - grafana/datasources.yaml
     - grafana/dashboards.yaml
-    - loki/config.yaml
     - promtail/config.yaml
     - vmalert/alerts.yaml
   notify: Restart observability stack
@@ -44,6 +43,16 @@
   ansible.builtin.copy:
     src: grafana/dashboards/
     dest: "{{ observability_dir }}/grafana/dashboards/"
+    owner: "{{ observability_owner }}"
+    group: "{{ observability_owner }}"
+    mode: "0644"
+  notify: Restart observability stack
+
+# 0644 по той же причине, что и статические конфиги: loki работает не от root.
+- name: Render loki config
+  ansible.builtin.template:
+    src: loki-config.yaml.j2
+    dest: "{{ observability_dir }}/loki/config.yaml"
     owner: "{{ observability_owner }}"
     group: "{{ observability_owner }}"
     mode: "0644"
