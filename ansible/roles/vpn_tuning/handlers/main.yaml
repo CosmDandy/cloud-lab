@@ -4,3 +4,14 @@
 - name: Reexec systemd
   ansible.builtin.systemd_service:
     daemon_reexec: true
+
+# RemainAfterExit=yes означает, что "started" второй раз ExecStart не выполнит:
+# после правки юнита нужен именно restart, иначе новый qdisc доедет только до
+# следующей перезагрузки.
+- name: Restart qdisc unit
+  ansible.builtin.systemd_service:
+    name: "{{ vpn_tuning_qdisc_unit }}"
+    state: restarted
+    daemon_reload: true
+  # В check-режиме юнит на диск не попадает, и systemd про него не знает.
+  when: not ansible_check_mode

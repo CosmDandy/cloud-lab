@@ -39,22 +39,57 @@
     label: "{{ item.key }}"
 
 # net.core.default_qdisc действует только на интерфейсы, поднятые после его
-# установки. На живой машине корневой qdisc остаётся прежним — на боевых нодах
-# он месяц простоял pfifo_fast при выставленном fq, и BBR работал без pacing,
-# ради которого fq и ставится.
+# установки. На загрузке systemd-networkd поднимает интерфейс раньше, чем
+# systemd-sysctl читает /etc/sysctl.d, поэтому одним sysctl обойтись нельзя ни
+# на живой машине, ни после ребута: на боевых нодах eth0 месяц простоял на
+# pfifo_fast при выставленном fq, и BBR работал без pacing. Юнит закрывает
+# загрузку, задача ниже — текущее состояние.
+- name: Ensure tc binary exists at the path baked into the unit
+  ansible.builtin.stat:
+    path: "{{ vpn_tuning_tc_path }}"
+  register: vpn_tuning_tc_stat
+
+- name: Fail early when tc is missing
+  ansible.builtin.assert:
+    that: vpn_tuning_tc_stat.stat.exists
+    fail_msg: >-
+      {{ vpn_tuning_tc_path }} not found — установите iproute2 или переопределите
+      vpn_tuning_tc_path, иначе {{ vpn_tuning_qdisc_unit }} упадёт на загрузке.
+
+- name: Install qdisc unit that survives reboot
+  ansible.builtin.template:
+    src: vpn-tuning-qdisc.service.j2
+    dest: "/etc/systemd/system/{{ vpn_tuning_qdisc_unit }}"
+    owner: root
+    group: root
+    mode: "0644"
+  notify: Restart qdisc unit
+
+- name: Enable qdisc unit
+  ansible.builtin.systemd_service:
+    name: "{{ vpn_tuning_qdisc_unit }}"
+    enabled: true
+    state: started
+    daemon_reload: true
+  # В check-режиме предыдущая задача файл не пишет, и systemd про юнит ещё не
+  # знает — без этого dry-run падает на не существующем юните.
+  when: not ansible_check_mode
+
 - name: Read current root qdisc
   ansible.builtin.command:
-    cmd: tc qdisc show dev {{ ansible_facts['default_ipv4']['interface'] }}
+    cmd: tc qdisc show dev {{ vpn_tuning_iface }}
   register: vpn_tuning_qdisc
   changed_when: false
   # Без этого в --check задача пропускается, register остаётся пустым, и
   # следующая падает на обращении к .stdout.
   check_mode: false
 
+# Юнит с RemainAfterExit=yes второй раз не выполнится, а qdisc на живой машине
+# может быть чужим — правим явно.
 - name: Apply default qdisc to the already-up interface
   ansible.builtin.command:
     cmd: >-
-      tc qdisc replace dev {{ ansible_facts['default_ipv4']['interface'] }}
+      {{ vpn_tuning_tc_path }} qdisc replace dev {{ vpn_tuning_iface }}
       root {{ vpn_tuning_sysctl['net.core.default_qdisc'] }}
   when: >-
     vpn_tuning_sysctl['net.core.default_qdisc'] not in vpn_tuning_qdisc.stdout
