@@ -37,7 +37,14 @@ XRAY_IMAGE="${XRAY_IMAGE:-ghcr.io/xtls/xray-core:latest}"
 # ORIGIN_URL можно переопределить, чтобы прогнать по-старому через внешний
 # источник, — тогда имеет смысл вернуть и паузу: DL_GAP=10.
 ORIGIN_PORT="${ORIGIN_PORT:-18080}"
-ORIGIN_URL="${ORIGIN_URL:-http://127.0.0.1:$ORIGIN_PORT}"
+# Источник адресуется по имени, а не по 127.0.0.1: включённый в инбаундах
+# sniffing.destOverride ["http"] подменяет назначение заголовком Host, и
+# литерал IP уходит в резолвер как доменное имя — соединение зависает до
+# таймаута. Имя origin.local xray резолвит сам, через секцию dns.hosts,
+# которую проставляет generate-configs.py.
+ORIGIN_URL="${ORIGIN_URL:-http://origin.local:$ORIGIN_PORT}"
+# Проверять, поднялся ли источник, надо по адресу: имя знает только xray.
+ORIGIN_PROBE="http://127.0.0.1:$ORIGIN_PORT"
 ORIGIN_PID=""
 
 cleanup() {
@@ -49,14 +56,16 @@ trap cleanup EXIT
 
 # Локальный origin поднимается только если ORIGIN_URL смотрит на loopback:
 # при внешнем URL поднимать нечего.
-if [[ "$ORIGIN_URL" == *"127.0.0.1"* ]]; then
+if [[ "$ORIGIN_URL" == *"origin.local"* || "$ORIGIN_URL" == *"127.0.0.1"* ]]; then
     python3 "$ROOT/bench/local-origin.py" "$ORIGIN_PORT" &
     ORIGIN_PID=$!
     for _ in $(seq 1 20); do
-        curl -sS -o /dev/null --max-time 1 "$ORIGIN_URL/__down?bytes=1" && break
+        # Ошибки первых попыток гасятся: источник поднимается за доли
+        # секунды, и «connection refused» на старте — не сбой, а ожидание.
+        curl -sS -o /dev/null --max-time 1 "$ORIGIN_PROBE/__down?bytes=1" 2>/dev/null && break
         sleep 0.25
     done
-    if ! curl -sS -o /dev/null --max-time 2 "$ORIGIN_URL/__down?bytes=1"; then
+    if ! curl -sS -o /dev/null --max-time 2 "$ORIGIN_PROBE/__down?bytes=1"; then
         echo "! local origin did not start on :$ORIGIN_PORT"; exit 1
     fi
     echo "==> local origin on :$ORIGIN_PORT (pid $ORIGIN_PID)"

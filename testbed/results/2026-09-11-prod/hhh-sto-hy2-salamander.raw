@@ -1,0 +1,21 @@
+remark=🇸🇪 HHH-STO · HY2 Salamander
+node=hhh-sto-01.vpn.cosmdandy.dev
+parallel=1
+baseline_direct_bytes_s=56970115
+variant=hhh-sto-hy2-salamander
+timestamp=2026-09-11T18:47:31+00:00
+handshake_raw=tcp=0.000126 tls=0.000000 ttfb=0.030511 total=0.030884 httpcode=200
+dl_run_1=45358302
+dl_run_2=28179406
+dl_avg_bytes_s=36768854
+dl_max_bytes_s=45358302
+dl_fails=0
+ul_run_1=35188153
+ul_run_2=41759166
+ul_avg_bytes_s=38473659
+ul_max_bytes_s=41759166
+ul_fails=0
+cf_meta={"origin":"local","note":"transport overhead bench, no external path"} 
+freeze_5000=ok
+freeze_16000=ok
+freeze_50000=ok

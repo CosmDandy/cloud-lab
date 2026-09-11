@@ -143,12 +143,33 @@ def grpc(idx, name, multimode, sockopt):
     return inbound
 
 
+# Имя локального источника. Через него, а не через 127.0.0.1, потому что
+# sniffing.destOverride включает "http": xray подменяет назначение тем, что
+# стоит в заголовке Host, и литерал 127.0.0.1 уходит в резолвер как доменное
+# имя — соединение молча зависает до таймаута. На внешних адресах этого не
+# видно: там в Host настоящий домен, который резолвится.
+#
+# Отключать сниффинг нельзя — он включён и в бою, а стенд должен мерить то же
+# самое. Поэтому источнику дано имя, которое xray резолвит сам.
+ORIGIN_NAME = "origin.local"
+ORIGIN_ADDR = "127.0.0.1"
+
+
 def make_config(inbound):
     return {
         "log": {"loglevel": "warning"},
+        "dns": {"hosts": {ORIGIN_NAME: ORIGIN_ADDR}},
         "inbounds": [inbound],
         "outbounds": [
-            {"tag": "DIRECT", "protocol": "freedom"},
+            # ipsBlocked пустой не по недосмотру. Начиная с 26.4.x freedom
+            # применяет безопасную политику по умолчанию и молча отправляет
+            # приватные адреса в чёрную дыру:
+            #   proxy/freedom: blocked target: tcp:127.0.0.1:18080,
+            #   blackholing connection for 56s
+            # Для прода это правильно — там private и так закрыт правилом
+            # routing. Но здесь источник и есть localhost, и с политикой по
+            # умолчанию стенд меряет нули, выглядящие как «транспорт не тянет».
+            {"tag": "DIRECT", "protocol": "freedom", "settings": {"ipsBlocked": []}},
             {"tag": "BLOCK", "protocol": "blackhole"},
         ],
         "routing": {

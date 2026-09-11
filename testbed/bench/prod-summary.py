@@ -50,19 +50,18 @@ def proto_of(remark: str) -> str:
 
 def main() -> None:
     out_dir = Path(sys.argv[1] if len(sys.argv) > 1 else ".")
-    base = 0
-    baseline = out_dir / "baseline.raw"
-    if baseline.exists():
-        try:
-            base = int(float(read_raw(baseline).get("baseline_direct_bytes_s", 0)))
-        except ValueError:
-            base = 0
 
     rows = []
     for raw in sorted(out_dir.glob("*.raw")):
-        if raw.name == "baseline.raw":
+        if raw.name.startswith("baseline"):
             continue
         data = read_raw(raw)
+        # Знаменатель лежит в самом замере: у каждой ноды он свой, и общий
+        # столбец «от канала» без этого сравнивал бы Осло со стокгольмским.
+        try:
+            base = int(float(data.get("baseline_direct_bytes_s", 0)))
+        except ValueError:
+            base = 0
         remark = data.get("remark", raw.stem)
         handshake = dict(
             token.split("=", 1) for token in data.get("handshake_raw", "").split() if "=" in token
@@ -72,7 +71,10 @@ def main() -> None:
                 "node": node_of(remark),
                 "proto": proto_of(remark),
                 "status": data.get("status", "ok"),
-                "tls": handshake.get("tls", "—"),
+                # Приёмник отвечает по http, поэтому time_appconnect всегда ноль;
+                # смысл имеет TTFB — в него входит подъём туннеля.
+                "ttfb": handshake.get("ttfb", "—"),
+                "base": base,
                 "dl": data.get("dl_avg_bytes_s"),
                 "ul": data.get("ul_avg_bytes_s"),
                 "fails": f"{data.get('dl_fails', '-')}/{data.get('ul_fails', '-')}",
@@ -82,11 +84,16 @@ def main() -> None:
 
     rows.sort(key=lambda r: (r["node"], r["proto"]))
 
+    bases = {r["node"]: r["base"] for r in rows if r.get("base")}
     lines = [f"# Боевой стенд — {out_dir.name}", ""]
-    if base:
-        lines += [f"Прямой канал до приёмника, без туннеля: **{mbit(base)} Мбит/с**.", ""]
+    if bases:
+        lines.append("Прямой канал до ноды, без туннеля — знаменатель колонки «от канала»:")
+        lines.append("")
+        for node, value in sorted(bases.items()):
+            lines.append(f"- {node}: **{mbit(value)} Мбит/с**")
+        lines.append("")
     lines += [
-        "| Нода | Протокол | Рукопожатие, с | DL Мбит/с | от канала | UL Мбит/с | сбои dl/ul |",
+        "| Нода | Протокол | TTFB, с | DL Мбит/с | от канала | UL Мбит/с | сбои dl/ul |",
         "|---|---|---|---|---|---|---|",
     ]
     for r in rows:
@@ -94,8 +101,8 @@ def main() -> None:
             lines.append(f"| {r['node']} | {r['proto']} | — | — | — | — | **{r['status']}** |")
             continue
         lines.append(
-            f"| {r['node']} | {r['proto']} | {r['tls']} | **{mbit(r['dl'])}** | "
-            f"{share(r['dl'], base)} | {mbit(r['ul'])} | {r['fails']} |"
+            f"| {r['node']} | {r['proto']} | {r['ttfb']} | **{mbit(r['dl'])}** | "
+            f"{share(r['dl'], r['base'])} | {mbit(r['ul'])} | {r['fails']} |"
         )
 
     summary = out_dir / "SUMMARY.md"

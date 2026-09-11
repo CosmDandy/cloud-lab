@@ -187,7 +187,13 @@ def main() -> None:
     if not args.select:
         raise SystemExit("нужен --select или --list")
 
-    matched = [e for e in entries if args.select in e["remark"]]
+    # Точное совпадение имеет приоритет над подстрокой: имена хостов вложены
+    # друг в друга («XHTTP-Packet» — часть «XHTTP-Packet 443»), и без этого
+    # оркестратор, передающий полное имя, получал бы «выбрано 2» и молча
+    # терял по одному хосту на ноду.
+    matched = [e for e in entries if e["remark"] == args.select]
+    if not matched:
+        matched = [e for e in entries if args.select in e["remark"]]
     if len(matched) != 1:
         names = "\n  ".join(e["remark"] for e in matched) or "(ничего)"
         raise SystemExit(f"--select должен выбрать ровно один хост, выбрано {len(matched)}:\n  {names}")

@@ -1,0 +1,13 @@
+remark=🇳🇴 HHH-OSL · Vision
+status=proxy-down
+xray_log:
+2026/09/11 18:55:00.625045 from tcp:127.0.0.1:60512 accepted tcp:91.190.155.237:18080 [socks-in >> proxy]
+2026/09/11 18:55:03.660156 from tcp:127.0.0.1:60526 accepted tcp:91.190.155.237:18080 [socks-in >> proxy]
+2026/09/11 18:55:06.703112 from tcp:127.0.0.1:35008 accepted tcp:91.190.155.237:18080 [socks-in >> proxy]
+2026/09/11 18:55:09.739515 from tcp:127.0.0.1:35012 accepted tcp:91.190.155.237:18080 [socks-in >> proxy]
+2026/09/11 18:55:12.780664 from tcp:127.0.0.1:35018 accepted tcp:91.190.155.237:18080 [socks-in >> proxy]
+2026/09/11 18:55:15.827638 from tcp:127.0.0.1:35584 accepted tcp:91.190.155.237:18080 [socks-in >> proxy]
+2026/09/11 18:55:18.872590 from tcp:127.0.0.1:35600 accepted tcp:91.190.155.237:18080 [socks-in >> proxy]
+2026/09/11 18:55:21.913377 from tcp:127.0.0.1:35608 accepted tcp:91.190.155.237:18080 [socks-in >> proxy]
+2026/09/11 18:55:24.945589 from tcp:127.0.0.1:44000 accepted tcp:91.190.155.237:18080 [socks-in >> proxy]
+2026/09/11 18:55:28.457677 from tcp:127.0.0.1:44010 accepted tcp:91.190.155.237:18080 [socks-in >> proxy]
