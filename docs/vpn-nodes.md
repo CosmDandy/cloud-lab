@@ -114,6 +114,37 @@ rm /etc/sysctl.d/99-vpn-tuning.conf && sysctl --system
 tc qdisc replace dev eth0 root pfifo_fast
 ```
 
+## Брутфорс и hardening sshd
+
+11.09.2026 на `hhh-ams-01` нашлась включённая парольная аутентификация: 24 531
+неудачная попытка входа за сутки, преимущественно под `root` из подсети
+109.160.32.0/24, и раздутый до 903 МБ журнал при диске 8.8 ГБ. На двух других
+нодах пароль был уже выключен — потому и журналы там были вчетверо меньше.
+
+Причина живучести дыры важнее самого факта: **sshd берёт первое вхождение
+параметра**, а файлы `/etc/ssh/sshd_config.d/` читаются по алфавиту. Роль
+`base` писала hardening в `99-hardening.conf`, и `50-cloud-init.conf` с
+`PasswordAuthentication yes` побеждал его на каждой загрузке. На control-plane
+та же роль работала лишь потому, что cloud-init записал там `no`. Теперь файл
+называется `00-hardening.conf` и идёт первым; старый роль удаляет.
+
+Ноды берут из `base` только эту часть — `tasks/sshd.yaml` через `include_role`
+в `playbooks/vpn-node-tune.yml`. Остальное из роли (swap, пакеты, deploy user)
+им не нужно, а трогать ею живую машину целиком опасно.
+
+```bash
+cd ansible
+ansible-playbook -i inventory/cloud.yml playbooks/vpn-node-tune.yml --tags sshd --check --diff
+```
+
+После применения атакующий получает `Connection closed by authenticating user
+root ... [preauth]` вместо `Failed password`.
+
+**`MaxAuthTries 3` имеет побочный эффект**, о который легко споткнуться: если в
+ssh-агенте больше трёх ключей и нужный не в начале, сервер рвёт соединение с
+`Too many authentication failures` ещё до того, как дойдёт до него. Лечится
+`-o IdentitiesOnly=yes -i <ключ>`, а для Ansible — `--private-key`.
+
 ## Наблюдаемость: метрики и логи
 
 Обе модели — push: соединение инициирует нода, наружу на ней не открывается
