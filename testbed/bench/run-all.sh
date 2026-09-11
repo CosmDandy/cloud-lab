@@ -37,14 +37,8 @@ XRAY_IMAGE="${XRAY_IMAGE:-ghcr.io/xtls/xray-core:latest}"
 # ORIGIN_URL можно переопределить, чтобы прогнать по-старому через внешний
 # источник, — тогда имеет смысл вернуть и паузу: DL_GAP=10.
 ORIGIN_PORT="${ORIGIN_PORT:-18080}"
-# Источник адресуется по имени, а не по 127.0.0.1: включённый в инбаундах
-# sniffing.destOverride ["http"] подменяет назначение заголовком Host, и
-# литерал IP уходит в резолвер как доменное имя — соединение зависает до
-# таймаута. Имя origin.local xray резолвит сам, через секцию dns.hosts,
-# которую проставляет generate-configs.py.
-ORIGIN_URL="${ORIGIN_URL:-http://origin.local:$ORIGIN_PORT}"
-# Проверять, поднялся ли источник, надо по адресу: имя знает только xray.
-ORIGIN_PROBE="http://127.0.0.1:$ORIGIN_PORT"
+ORIGIN_URL="${ORIGIN_URL:-http://127.0.0.1:$ORIGIN_PORT}"
+ORIGIN_PROBE="$ORIGIN_URL"
 ORIGIN_PID=""
 
 cleanup() {
@@ -56,7 +50,7 @@ trap cleanup EXIT
 
 # Локальный origin поднимается только если ORIGIN_URL смотрит на loopback:
 # при внешнем URL поднимать нечего.
-if [[ "$ORIGIN_URL" == *"origin.local"* || "$ORIGIN_URL" == *"127.0.0.1"* ]]; then
+if [[ "$ORIGIN_URL" == *"127.0.0.1"* ]]; then
     python3 "$ROOT/bench/local-origin.py" "$ORIGIN_PORT" &
     ORIGIN_PID=$!
     for _ in $(seq 1 20); do
