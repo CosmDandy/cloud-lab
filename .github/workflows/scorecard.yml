@@ -1,0 +1,48 @@
+# OpenSSF Scorecard: a supply-chain audit of this repository — pinned actions,
+# minimal permissions, branch protection, signed releases, dependency update
+# tooling. Results are uploaded to the public Scorecard API, which is what backs
+# the badge in the README, and to the Security tab as SARIF.
+name: scorecard
+
+on:
+  branch_protection_rule:
+  schedule:
+    # Weekly: the score reflects repository settings, which drift without commits.
+    - cron: "0 7 * * 1"
+  push:
+    branches: [main, master]
+
+permissions: {}
+
+jobs:
+  analysis:
+    name: scorecard analysis
+    runs-on: ubuntu-latest
+    permissions:
+      # Upload the SARIF result to the Security tab.
+      security-events: write
+      # Read-only access to the workflow runs Scorecard inspects.
+      actions: read
+      contents: read
+      # OIDC token to publish the result to the public Scorecard API — this is
+      # what makes the badge resolve. Without it the run is local-only.
+      id-token: write
+
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - id: scorecard
+        uses: ossf/scorecard-action@2d1146689b8cda280b9bc96326124645441f03bc # v2.4.4
+        with:
+          results_file: results.sarif
+          results_format: sarif
+          # Publishing is what lets api.scorecard.dev serve the badge. It also
+          # means the score is public — which it already is for a public repo.
+          publish_results: true
+
+      - uses: github/codeql-action/upload-sarif@e58424170fb0262c8d7ed60a2e84b9bffe205c67 # codeql-bundle-v2.26.1
+        with:
+          sarif_file: results.sarif
+          category: scorecard
