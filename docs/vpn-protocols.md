@@ -16,7 +16,7 @@
 | VLESS-gRPC | gRPC + Reality | 2084 | `multiMode`, sockopt |
 | VLESS-XHTTP-Stream | XHTTP + Reality | 2444 | `stream-up`, xmux |
 | VLESS-XHTTP-Packet | XHTTP + Reality | 2446 | `packet-up`, xmux |
-| VLESS-XHTTP-Packet-443 | XHTTP + Reality | 443 | то же, на 443 |
+| VLESS-XHTTP-Stream-443 | XHTTP + Reality | 443 | `stream-up`, xmux |
 | HY2-Plain | Hysteria2 | 47821 | без маскировки |
 | HY2-Masquerade | Hysteria2 | 47822 | proxy-маскарад на debian.org |
 | HY2-Salamander | Hysteria2 | 47823 | обфускация salamander |
@@ -295,7 +295,9 @@ XHTTP-Stream, затем Vision/gRPC, `packet-up` последним; стран
 канала STO → OSL → AMS. Пока не действует: в настройках подписки включено
 `randomize_hosts`, и порядок у каждого клиента свой.
 
-**Инбаунд на 443 переведён из `packet-up` в `stream-up`.** Измерено там же,
+**Инбаунд на 443 переведён из `packet-up` в `stream-up`** и переименован
+в `VLESS-XHTTP-Stream-443` вместе с хостами: имя, противоречащее
+содержимому, хуже отсутствующего. Измерено там же,
 на Стокгольме (канал в моменты замеров разный, потому сравнивать надо доли):
 
 | режим | вниз | от канала | вверх |
