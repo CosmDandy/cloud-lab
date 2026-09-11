@@ -47,8 +47,12 @@ observability_remote_write_htpasswd: ""
 
 # Скрейп панели Remnawave: /metrics закрыт basic auth.
 observability_panel_metrics_enabled: false
-observability_panel_metrics_user: metrics
-observability_panel_metrics_password: ""
+# Те же учётные данные, что панель кладёт в METRICS_USER/METRICS_PASS: панель и
+# observability живут на одном хосте, и второго секрета для них не заводится.
+# Пока здесь стоял пустой дефолт, скрейп ходил без пароля и получал 401 — цель
+# молча числилась down, а метрик панели не было вовсе.
+observability_panel_metrics_user: "{{ panel_metrics_user | default('metrics') }}"
+observability_panel_metrics_password: "{{ panel_metrics_password | default('') }}"
 
 # Вход в Grafana через Pocket ID. Клиент заводится в UI Pocket ID,
 # redirect URI: https://<observability_domain>/login/generic_oauth

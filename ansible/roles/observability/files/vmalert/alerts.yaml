@@ -40,3 +40,57 @@ groups:
         annotations:
           summary: "Container {{ $labels.name }} is down"
           description: "Container {{ $labels.name }} has not been seen for more than 60 seconds"
+
+  # Сеть VPN-нод. Симптом пользователя — «обрывы и зависания» — виден только
+  # здесь: xray в лог ничего не пишет, панель логирует лишь свои cron-задачи,
+  # а gatus проверяет доступность порта, которая при этих потерях не падает.
+  - name: vpn-network
+    interval: 30s
+    rules:
+      - alert: UdpReceiveBufferErrors
+        # Переполнение приёмного буфера UDP-сокета: теряются QUIC и DNS, то
+        # есть видео и звонки. Порог в 100 за 5 минут отсекает единичные
+        # всплески — в спокойные часы на нодах ровно ноль.
+        expr: increase(node_netstat_Udp_RcvbufErrors[5m]) > 100
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: "UDP receive buffer overflow on {{ $labels.instance }}"
+          description: "{{ $value | printf \"%.0f\" }} datagrams dropped in 5m — QUIC and DNS suffer first"
+
+      - alert: HighTcpRetransmitRatio
+        expr: >-
+          100 * rate(node_netstat_Tcp_RetransSegs[15m])
+          / rate(node_netstat_Tcp_OutSegs[15m]) > 5
+        for: 15m
+        labels:
+          severity: warning
+        annotations:
+          summary: "TCP retransmit ratio above 5% on {{ $labels.instance }}"
+          description: "Current: {{ $value | printf \"%.1f\" }}% of outgoing segments retransmitted"
+
+      - alert: ConntrackNearLimit
+        expr: >-
+          node_nf_conntrack_entries
+          / node_nf_conntrack_entries_limit > 0.8
+        for: 5m
+        labels:
+          severity: critical
+        annotations:
+          summary: "Conntrack table {{ $value | humanizePercentage }} full on {{ $labels.instance }}"
+          description: "New connections are dropped silently once the table fills"
+
+  - name: scraping
+    interval: 30s
+    rules:
+      # Молчащий источник данных выглядит как «всё спокойно». Панель отдавала
+      # 401 на /metrics и не собиралась вовсе — заметить это было нечем.
+      - alert: ScrapeTargetDown
+        expr: up == 0
+        for: 10m
+        labels:
+          severity: warning
+        annotations:
+          summary: "Scrape target {{ $labels.job }} ({{ $labels.instance }}) is down"
+          description: "No metrics collected for 10 minutes — check credentials and reachability"
