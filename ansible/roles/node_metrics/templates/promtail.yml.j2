@@ -4,6 +4,11 @@ server:
   # promtail в интернет.
   http_listen_address: 127.0.0.1
   http_listen_port: {{ node_metrics_promtail_port }}
+  # gRPC по умолчанию слушает 0.0.0.0:9095 — в host-сети это открытый в
+  # интернет порт. Никто по нему к promtail не ходит, но закрыть надо явно:
+  # умолчание здесь смотрит наружу.
+  grpc_listen_address: 127.0.0.1
+  grpc_listen_port: {{ node_metrics_promtail_grpc_port }}
   # Логи самого promtail на уровне info — это строка на каждую отправку;
   # при обрыве связи с loki важны как раз warn и error.
   log_level: warn

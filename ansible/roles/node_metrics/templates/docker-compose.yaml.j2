@@ -33,6 +33,10 @@ services:
       - ./remote-write-password:/etc/vmagent/password:ro
       - vmagent_data:/vmagent-data
     command:
+      # Без явного адреса vmagent слушает 0.0.0.0:8429, а он в host-сети:
+      # его /targets и /metrics отвечали из интернета, и туда же смотрел
+      # приём записи. Наружу с ноды не должно смотреть ничего.
+      - "-httpListenAddr={{ node_metrics_vmagent_listen }}"
       - "-promscrape.config=/etc/vmagent/scrape.yml"
       - "-remoteWrite.url={{ node_metrics_remote_write_url }}"
       - "-remoteWrite.basicAuth.username={{ node_metrics_remote_write_user }}"

@@ -21,6 +21,9 @@ node_metrics_instance: "{{ inventory_hostname }}"
 node_metrics_exporter_listen: "127.0.0.1:9100"
 node_metrics_scrape_interval: 30s
 
+# vmagent в host-сети: без явного адреса он слушает все интерфейсы.
+node_metrics_vmagent_listen: "127.0.0.1:8429"
+
 # Буфер на диске, из которого vmagent досылает данные после обрыва связи.
 # Инцидент 14.08 в Осло длился десять минут — при pull это была бы дыра
 # в графиках, здесь метрики догонятся.
@@ -33,6 +36,7 @@ node_metrics_logs_enabled: false
 node_metrics_loki_url: ""
 node_metrics_promtail_image: grafana/promtail:3.6.11
 node_metrics_promtail_port: 9080
+node_metrics_promtail_grpc_port: 9095
 
 # Ротация docker-логов. До неё json-файлы росли без потолка: xray сейчас
 # молчит, но стоит поднять ему loglevel — и 8.8-гигабайтный диск ноды
