@@ -38,6 +38,11 @@ node_metrics_promtail_image: grafana/promtail:3.6.11
 node_metrics_promtail_port: 9080
 node_metrics_promtail_grpc_port: 9095
 
+# Логи xray. Пути внутри контейнера задаёт конфиг-профиль панели, каталог
+# наружу отдаёт роль remnanode — здесь он только читается.
+node_metrics_xray_logs_enabled: true
+node_metrics_xray_log_dir: /var/log/remnanode
+
 # Ротация docker-логов. До неё json-файлы росли без потолка: xray сейчас
 # молчит, но стоит поднять ему loglevel — и 8.8-гигабайтный диск ноды
 # кончится незаметно. 50 МБ × 3 = 150 МБ на контейнер.

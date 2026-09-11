@@ -55,6 +55,8 @@ services:
       - /var/run/docker.sock:/var/run/docker.sock:ro
       - /var/lib/docker/containers:/var/lib/docker/containers:ro
       - ./promtail.yml:/etc/promtail/config.yaml:ro
+      # Логи xray лежат файлами: rw-node не отдаёт stdout ядра в docker logs.
+      - {{ node_metrics_xray_log_dir }}:{{ node_metrics_xray_log_dir }}:ro
       - ./remote-write-password:/etc/promtail/password:ro
       - promtail_positions:/tmp
     command: -config.file=/etc/promtail/config.yaml

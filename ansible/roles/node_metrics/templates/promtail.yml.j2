@@ -44,3 +44,15 @@ scrape_configs:
       # что с instance у метрик.
       - target_label: host
         replacement: {{ node_metrics_instance }}
+{% if node_metrics_xray_logs_enabled %}
+
+  # Файловые логи xray. Отдельным job, потому что docker_sd их не видит:
+  # ядро пишет не в stdout, а в файлы, смонтированные снаружи.
+  - job_name: xray
+    static_configs:
+      - targets: ["localhost"]
+        labels:
+          job: xray
+          host: {{ node_metrics_instance }}
+          __path__: {{ node_metrics_xray_log_dir }}/*.log
+{% endif %}

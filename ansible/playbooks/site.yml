@@ -165,3 +165,14 @@
   roles:
     - role: derper
       tags: [derper]
+
+# Последней игрой намеренно: набор открытых портов зависит от того, какие
+# стеки на машине подняты, и закрывать их до того, как они появились, —
+# способ отрезать себе руки на чистой VM.
+- name: Firewall
+  hosts: svc_firewall
+  become: true
+
+  roles:
+    - role: firewall
+      tags: [firewall]
