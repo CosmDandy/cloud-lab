@@ -9,7 +9,10 @@ set -euo pipefail
 VARIANT="${1:?variant name required}"
 PROXY="${PROXY:-socks5h://127.0.0.1:10808}"
 URL="${URL:-https://speed.cloudflare.com}"
-DL_BYTES="${DOWNLOAD_BYTES:-200000000}"
+# 25 МБ, а не 200: 11.09.2026 speed.cloudflare.com стал отвечать 403 на
+# /__down с bytes больше ~26 МБ. Прежний дефолт не падал, а тихо возвращал
+# нулевую скорость — весь прогон выглядел рабочим и мерил мусор.
+DL_BYTES="${DOWNLOAD_BYTES:-26214400}"
 UL_BYTES="${UPLOAD_BYTES:-50000000}"
 REPEATS="${REPEATS:-3}"
 
