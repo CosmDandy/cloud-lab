@@ -1,0 +1,21 @@
+remark=🇸🇪 HHH-STO · XHTTP-Stream
+node=167.104.104.131
+parallel=8
+baseline_direct_bytes_s=51487657
+variant=hhh-sto-xhttp-stream
+timestamp=2026-09-11T19:48:28+00:00
+handshake_raw=tcp=0.000120 tls=0.000000 ttfb=0.033856 total=0.033891 httpcode=200
+dl_run_1=21359817
+dl_run_2=19072073
+dl_avg_bytes_s=20215945
+dl_max_bytes_s=21359817
+dl_fails=0
+ul_run_1=22936271
+ul_run_2=20770688
+ul_avg_bytes_s=21853479
+ul_max_bytes_s=22936271
+ul_fails=0
+cf_meta={"origin":"local","note":"transport overhead bench, no external path"} 
+freeze_5000=ok
+freeze_16000=ok
+freeze_50000=ok
