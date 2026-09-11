@@ -245,7 +245,7 @@ observability_oidc_client_id: 6ece9d45-1960-41d7-8b7c-be9035159169
 # --- gatus (статус-страница) ------------------------------------------------
 gatus_domain: status.cosmdandy.dev
 gatus_ui_title: cosmdandy.dev
-gatus_ui_header: Инфраструктура
+gatus_ui_header: Cloud Lab
 
 gatus_telegram_enabled: true
 
