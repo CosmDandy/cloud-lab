@@ -45,3 +45,10 @@ node_metrics_promtail_port: 9080
 node_metrics_log_rotation_enabled: true
 node_metrics_log_max_size: 50m
 node_metrics_log_max_file: "3"
+
+# Потолок journald. По умолчанию его нет вовсе — журнал берёт до 10 % раздела,
+# и на hhh-ams-01 он вырос до 903 МБ из 8.8-гигабайтного диска. Растёт он не
+# от работы ноды: 24 531 запись за сутки — это неудачные попытки входа по ssh
+# (см. docs/vpn-nodes.md, «Брутфорс»). Потолок не лечит причину, но не даёт
+# ей съесть диск.
+node_metrics_journal_max_use: 200M
