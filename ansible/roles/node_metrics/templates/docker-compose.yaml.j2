@@ -42,6 +42,28 @@ services:
       - "-remoteWrite.tmpDataPath=/vmagent-data"
       - "-remoteWrite.maxDiskUsagePerURL={{ node_metrics_max_disk_usage }}"
 
+{% if node_metrics_logs_enabled %}
+  promtail:
+    image: {{ node_metrics_promtail_image }}
+    container_name: promtail
+    restart: unless-stopped
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+      - /var/lib/docker/containers:/var/lib/docker/containers:ro
+      - ./promtail.yml:/etc/promtail/config.yaml:ro
+      - ./remote-write-password:/etc/promtail/password:ro
+      - promtail_positions:/tmp
+    command: -config.file=/etc/promtail/config.yaml
+    # Host-сеть, как у vmagent: promtail слушает только петлю (см. конфиг),
+    # поэтому наружу по-прежнему не открыто ничего, а vmagent скрейпит его
+    # метрики по 127.0.0.1 — доставка логов видна там же, где всё остальное.
+    network_mode: host
+{% endif %}
+
 volumes:
   vmagent_data:
     name: node_metrics_vmagent_data
+{% if node_metrics_logs_enabled %}
+  promtail_positions:
+    name: node_metrics_promtail_positions
+{% endif %}

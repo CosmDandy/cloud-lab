@@ -10,3 +10,13 @@ scrape_configs:
       - targets: ["{{ node_metrics_exporter_listen }}"]
         labels:
           instance: {{ node_metrics_instance }}
+{% if node_metrics_logs_enabled %}
+
+  # Метрики самого promtail: по ним видно, доезжают ли логи. Без них обрыв
+  # доставки выглядит как «на ноде просто тихо».
+  - job_name: promtail
+    static_configs:
+      - targets: ["127.0.0.1:{{ node_metrics_promtail_port }}"]
+        labels:
+          instance: {{ node_metrics_instance }}
+{% endif %}

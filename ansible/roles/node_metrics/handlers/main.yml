@@ -3,3 +3,12 @@
   community.docker.docker_compose_v2:
     project_src: "{{ node_metrics_dir }}"
     state: restarted
+
+# Именно reload: SIGHUP заставляет dockerd перечитать daemon.json, не трогая
+# запущенные контейнеры. Restart перезапустил бы remnanode, то есть оборвал
+# всех пользователей ноды ради настройки, которая и так применяется только
+# к новым контейнерам.
+- name: Reload docker
+  ansible.builtin.systemd_service:
+    name: docker
+    state: reloaded

@@ -1,0 +1,70 @@
+---
+- name: Validate log shipping variables
+  ansible.builtin.assert:
+    that:
+      - node_metrics_loki_url | length > 0
+      - node_metrics_remote_write_password | length > 0
+    fail_msg: >-
+      Нужны node_metrics_loki_url и пароль из SOPS: promtail поднимется и с
+      неверными данными, просто будет копить логи и молчать.
+  when: node_metrics_logs_enabled
+
+- name: Render promtail config
+  ansible.builtin.template:
+    src: promtail.yml.j2
+    dest: "{{ node_metrics_dir }}/promtail.yml"
+    owner: "{{ node_metrics_owner }}"
+    group: "{{ node_metrics_owner }}"
+    mode: "0644"
+  when: node_metrics_logs_enabled
+  notify: Restart node metrics
+
+# Ротация — двумя путями, и оба нужны. daemon.json действует только на
+# контейнеры, созданные после него: remnanode работает три недели, и
+# пересоздавать его ради ротации нельзя — это разрыв всех пользователей.
+- name: Read existing docker daemon config
+  ansible.builtin.slurp:
+    src: /etc/docker/daemon.json
+  register: node_metrics_daemon_raw
+  failed_when: false
+  when: node_metrics_log_rotation_enabled
+
+- name: Merge log rotation into docker daemon config
+  ansible.builtin.copy:
+    # Существующие ключи сохраняются: docker на нодах ставили не мы, и
+    # затирать его настройки своим файлом нельзя.
+    content: |
+      {{ (node_metrics_daemon_raw.content | default('') | b64decode | from_json
+          if node_metrics_daemon_raw.content is defined else {})
+         | combine({'log-driver': 'json-file',
+                    'log-opts': {'max-size': node_metrics_log_max_size,
+                                 'max-file': node_metrics_log_max_file}})
+         | to_nice_json }}
+    dest: /etc/docker/daemon.json
+    owner: root
+    group: root
+    mode: "0644"
+  when: node_metrics_log_rotation_enabled
+  notify: Reload docker
+
+# Уже работающие контейнеры daemon.json не задевает, а remnanode — как раз
+# такой. copytruncate режет файл на месте, не трогая дескриптор, который
+# держит открытым докер: без него ротация случилась бы только на пересоздании.
+- name: Install logrotate rule for running containers
+  ansible.builtin.copy:
+    dest: /etc/logrotate.d/docker-containers
+    content: |
+      # Managed by ansible (roles/node_metrics). Правки будут перезаписаны.
+      /var/lib/docker/containers/*/*-json.log {
+        rotate {{ node_metrics_log_max_file }}
+        size {{ node_metrics_log_max_size | regex_replace('m$', 'M') }}
+        copytruncate
+        missingok
+        notifempty
+        compress
+        delaycompress
+      }
+    owner: root
+    group: root
+    mode: "0644"
+  when: node_metrics_log_rotation_enabled
