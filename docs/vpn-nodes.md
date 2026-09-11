@@ -19,13 +19,19 @@ xray v26.6.27 в контейнере `remnanode` с `network_mode: host`. Ли�
 
 ## Чем управляются
 
-**Контейнер `remnanode` развёрнут вне репозитория.** Роли, которая его ставит
-или обновляет, здесь нет и не планируется — ноды заводились вручную скриптом
-Remnawave. Ansible отвечает ровно за одно: тюнинг ядра, роль `vpn_tuning`
-через `playbooks/vpn-node-tune.yml`.
+Контейнер `remnanode` заводился вручную скриптом Remnawave, но сейчас им
+управляет роль `remnanode` через `playbooks/remnanode.yml` — заголовок
+`managed-by:ansible` стоит в самом `/opt/remnanode/compose.yaml`. Прогон
+пересоздаёт контейнер и рвёт все инбаунды машины, поэтому в плейбуке
+`serial: 1`, а порядок задаётся явным `--limit`: сначала `hhh-sto-01`, затем
+`hhh-ams-01`, последним `hhh-osl-01` — через Осло ходит рабочая машина.
 
-Из этого следует практическое: `host_services` у нод не задан намеренно, они не
-участвуют в `site.yml`. Прогон без `--limit` их не тронет.
+Остальным заведует `playbooks/vpn-node-tune.yml`: роль `vpn_tuning` (тюнинг
+ядра), sshd-часть роли `base` и роль `firewall`. Метрики и логи — роль
+`node_metrics` через `playbooks/node-metrics.yml`.
+
+`host_services` у нод не задан намеренно, они не участвуют в `site.yml`.
+Прогон без `--limit` их не тронет.
 
 ```bash
 cd ansible
@@ -168,6 +174,26 @@ ssh-агенте больше трёх ключей и нужный не в на
 cd ansible
 ansible-playbook -i inventory/cloud.yml playbooks/node-metrics.yml --tags logs --check --diff
 ```
+
+### Логи xray
+
+Через `docker logs remnanode` их не видно: rw-node забирает stdout ядра себе.
+Xray пишет их в файлы, и работает это только при трёх условиях сразу:
+
+1. в секции `log` конфиг-профиля панели заданы пути
+   (`/var/log/remnanode/access.log` и `error.log`) и `loglevel`;
+2. каталог смонтирован в контейнер — это делает роль `remnanode`
+   (`remnanode_log_dir`);
+3. promtail читает файлы отдельным job `xray` — `docker_sd` их не видит.
+
+Уровень `info` даёт строку на каждое соединение: на Осло это около 70 МБ в
+сутки при диске 8.8 ГБ, поэтому ротация (`/etc/logrotate.d/remnanode-xray`,
+50 МБ × 3, `copytruncate`) ставится той же ролью. **Держать `info` постоянно
+не нужно** — включается на время диагностики и возвращается в `warning`.
+
+Отдельно про приватность: `access.log` содержит IP клиентов, адреса
+назначения и email пользователя из инбаунда. Всё это уезжает в loki и лежит
+там столько же, сколько остальные логи.
 
 ### Ротация docker-логов
 
