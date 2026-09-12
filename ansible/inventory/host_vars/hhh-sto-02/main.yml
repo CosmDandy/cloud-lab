@@ -228,6 +228,15 @@ observability_vm_domain: vm.cosmdandy.dev
 # из-под которого скрейпит vmagent (panel_metrics_user/password).
 observability_panel_metrics_enabled: true
 
+# Логи нод приезжают сюда тем же путём, что их метрики: домен vm.cosmdandy.dev,
+# та же push-учётка, traefik различает по пути /loki/api/v1/push.
+observability_logs_push_enabled: true
+
+# Алерты доезжают в тот же телеграм, что и оповещения gatus: правила есть с
+# 11.09.2026, а отправлять их до сих пор было некуда.
+observability_alerting_enabled: true
+
+
 observability_oidc_enabled: true
 observability_oidc_issuer: https://oidc.cosmdandy.dev
 # Callback URL: https://grafana.cosmdandy.dev/login/generic_oauth
@@ -236,7 +245,7 @@ observability_oidc_client_id: 6ece9d45-1960-41d7-8b7c-be9035159169
 # --- gatus (статус-страница) ------------------------------------------------
 gatus_domain: status.cosmdandy.dev
 gatus_ui_title: cosmdandy.dev
-gatus_ui_header: Инфраструктура
+gatus_ui_header: Cloud Lab
 
 gatus_telegram_enabled: true
 
@@ -383,25 +392,6 @@ gatus_endpoints:
       - "[STATUS] == 200"
       - "[BODY].response.isConnected == true"
 
-  - name: hhh-osl-01-tcp
-    group: vpn nodes
-    url: "tcp://hhh-osl-01.vpn.cosmdandy.dev:443"
-    conditions:
-      - "[CONNECTED] == true"
-  - name: hhh-osl-01-icmp
-    group: vpn nodes
-    url: "icmp://hhh-osl-01.vpn.cosmdandy.dev"
-    conditions:
-      - "[CONNECTED] == true"
-  - name: hhh-osl-01-panel
-    group: vpn nodes
-    url: https://vpn.cosmdandy.dev/api/nodes/48b8e924-ac49-4a65-a57e-02cd2282f28f
-    headers:
-      Authorization: "Bearer {{ gatus_panel_api_token }}"
-    conditions:
-      - "[STATUS] == 200"
-      - "[BODY].response.isConnected == true"
-
 # --- gatus-public (публичная статус-страница) --------------------------------
 # Отдельный экземпляр той же роли, переопределяется в site.yml. Отвечает на
 # единственный вопрос пользователя: «это у меня или у них». Поэтому здесь
@@ -428,14 +418,6 @@ gatus_public_endpoints:
   - name: Нидерланды
     group: Узлы
     url: https://vpn.cosmdandy.dev/api/nodes/43cb4483-02c1-4c81-904a-82442c0691aa
-    headers:
-      Authorization: "Bearer {{ gatus_panel_api_token }}"
-    conditions:
-      - "[STATUS] == 200"
-      - "[BODY].response.isConnected == true"
-  - name: Норвегия
-    group: Узлы
-    url: https://vpn.cosmdandy.dev/api/nodes/48b8e924-ac49-4a65-a57e-02cd2282f28f
     headers:
       Authorization: "Bearer {{ gatus_panel_api_token }}"
     conditions:
@@ -478,3 +460,25 @@ stt_domain: stt.cosmdandy.dev
 # обманчиво: пробу провайдера клиент делает, дописывая /models, и она
 # проходит, а саму диктовку шлёт ровно по указанному адресу, ничего не
 # добавляя, — в логе сервиса это POST /v1 с ответом 404.
+
+# --- Файрвол ----------------------------------------------------------------
+# Наружу смотрят только ssh и traefik: 80 нужен для редиректа и ACME, всё
+# остальное (панель, grafana, headscale, atuin, подписки) ходит через 443.
+# Приём метрик и логов с нод — тоже 443, отдельного порта им не заводили.
+firewall_tcp_ports:
+  - 22
+  - 80
+  - 443
+
+# Стеки панели ходят к сервисам хоста через docker-бриджи: victoriametrics
+# скрейпит node-exporter по host.docker.internal, и с policy drop этот
+# трафик попадает в ту же цепочку input, что и внешний.
+firewall_trusted_ifaces:
+  - docker0
+  - "br-*"
+
+# Приёмник боевого стенда панели не касается: 11.09.2026 выяснилось, что до
+# неё из офиса доходят только 22, 80 и 443 — SYN на любой другой порт
+# теряется, не дойдя до машины (tcpdump на панели не видит его вовсе, а с
+# ноды того же /24 тот же порт открывается за 29 мс). Приёмник стенда живёт
+# на самих нодах, см. group_vars/vpn_nodes/vars.yaml.

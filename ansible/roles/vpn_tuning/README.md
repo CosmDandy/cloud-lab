@@ -6,7 +6,9 @@
 
 ## Что делает
 
-- `tasks/sysctl.yaml` — `modprobe tcp_bbr`, `/etc/modules-load.d/bbr.conf`, через `ansible.posix.sysctl` пишет все значения в `/etc/sysctl.d/99-vpn-tuning.conf` с `reload: true`, и отдельно применяет корневой qdisc к уже поднятому интерфейсу: `net.core.default_qdisc` действует только на интерфейсы, поднятые после его установки, поэтому на живой машине одним sysctl не обойтись
+- `tasks/sysctl.yaml` — `modprobe tcp_bbr`, `/etc/modules-load.d/bbr.conf`, через `ansible.posix.sysctl` пишет все значения в `/etc/sysctl.d/99-vpn-tuning.conf` с `reload: true`, и закрывает корневой qdisc с двух сторон: `net.core.default_qdisc` действует только на интерфейсы, поднятые после его установки, поэтому одним sysctl не обойтись ни на живой машине, ни после ребута
+  - `vpn-tuning-qdisc.service` — `Type=oneshot` после `network-online.target`, ставит qdisc на загрузке. Без него после каждой перезагрузки интерфейс возвращается к `pfifo_fast`, потому что systemd-networkd поднимает его раньше, чем systemd-sysctl читает `/etc/sysctl.d`
+  - задача `tc qdisc replace` — правит текущее состояние живой машины, где юнит с `RemainAfterExit=yes` второй раз не сработает
 - `tasks/limits.yaml` — `community.general.pam_limits` для `* soft/hard nofile = 1048576`, плюс `DefaultLimitNOFILE` в `/etc/systemd/system.conf` (с `systemctl daemon-reexec` через handler)
 
 ## Переменные
@@ -15,6 +17,7 @@
 - `vpn_tuning_sysctl` — словарь sysctl-параметров (override через `group_vars/host_vars`)
 - `vpn_tuning_nofile_limit` — лимит дескрипторов (по умолчанию `1048576`)
 - `vpn_tuning_sysctl_file` — путь файла (по умолчанию `/etc/sysctl.d/99-vpn-tuning.conf`)
+- `vpn_tuning_qdisc_unit`, `vpn_tuning_iface`, `vpn_tuning_tc_path` — имя юнита, интерфейс (по умолчанию дефолтный из фактов) и абсолютный путь к `tc`: systemd не ищет бинарь в `PATH`
 
 ## Использование
 
@@ -47,8 +50,18 @@ ssh root@<node> '
          net.core.rmem_max fs.file-max net.ipv4.tcp_notsent_lowat \
          net.core.rmem_default net.ipv4.tcp_slow_start_after_idle
   tc qdisc show dev eth0 | head -1'
-# bbr / fq / 67108864 / 2097152 / 131072 / 1048576 / 0
+# bbr / fq / 67108864 / 2097152 / 131072 / 4194304 / 0
 # и корневой qdisc — fq, а не pfifo_fast
+
+# Юнит, который вернёт fq после перезагрузки:
+ssh root@<node> 'systemctl is-enabled vpn-tuning-qdisc; systemctl is-active vpn-tuning-qdisc'
+# enabled / active
+
+# Проверка без ребута — сбить qdisc и дать юниту его вернуть:
+ssh root@<node> '
+  tc qdisc replace dev eth0 root pfifo_fast
+  systemctl restart vpn-tuning-qdisc
+  tc qdisc show dev eth0 | head -1'   # снова fq
 
 # В новой сессии:
 ssh root@<node> 'ulimit -n'  # ≥ 1048576

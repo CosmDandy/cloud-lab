@@ -1,0 +1,21 @@
+remark=🇸🇪 HHH-STO · HY2 Hop
+node=hhh-sto-01.vpn.cosmdandy.dev
+parallel=1
+baseline_direct_bytes_s=56970115
+variant=hhh-sto-hy2-hop
+timestamp=2026-09-11T18:49:36+00:00
+handshake_raw=tcp=0.000129 tls=0.000000 ttfb=0.032147 total=0.032188 httpcode=200
+dl_run_1=49856076
+dl_run_2=29960632
+dl_avg_bytes_s=39908354
+dl_max_bytes_s=49856076
+dl_fails=0
+ul_run_1=30700368
+ul_run_2=48965106
+ul_avg_bytes_s=39832737
+ul_max_bytes_s=48965106
+ul_fails=0
+cf_meta={"origin":"local","note":"transport overhead bench, no external path"} 
+freeze_5000=ok
+freeze_16000=ok
+freeze_50000=ok

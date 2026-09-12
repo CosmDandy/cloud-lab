@@ -1,0 +1,21 @@
+remark=🇳🇱 HHH-AMS · HY2 Plain
+node=hhh-ams-01.vpn.cosmdandy.dev
+parallel=1
+baseline_direct_bytes_s=27777509
+variant=hhh-ams-hy2-plain
+timestamp=2026-09-11T18:50:58+00:00
+handshake_raw=tcp=0.000136 tls=0.000000 ttfb=0.058342 total=0.058422 httpcode=200
+dl_run_1=25053591
+dl_run_2=21381915
+dl_avg_bytes_s=23217753
+dl_max_bytes_s=25053591
+dl_fails=0
+ul_run_1=24412535
+ul_run_2=44010402
+ul_avg_bytes_s=34211468
+ul_max_bytes_s=44010402
+ul_fails=0
+cf_meta={"origin":"local","note":"transport overhead bench, no external path"} 
+freeze_5000=ok
+freeze_16000=ok
+freeze_50000=ok

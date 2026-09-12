@@ -1,0 +1,156 @@
+{
+  "uid": "remnawave-health",
+  "title": "VPN: здоровье нод",
+  "description": "Сводка по боевым нодам Remnawave. Верхний ряд — что видит пользователь, средний — почему ему плохо: потери UDP и ретрансмиты. Имена нод подтягиваются из remnawave_node_basic_info по node_uuid: в остальных метриках панели есть только uuid.",
+  "tags": ["vpn", "remnawave"],
+  "timezone": "browser",
+  "schemaVersion": 39,
+  "version": 1,
+  "refresh": "1m",
+  "time": { "from": "now-24h", "to": "now" },
+  "panels": [
+    {
+      "id": 1,
+      "type": "timeseries",
+      "title": "Пользователей онлайн",
+      "description": "Сколько человек реально ходит через каждую ноду.",
+      "datasource": { "type": "prometheus", "uid": "victoriametrics" },
+      "gridPos": { "x": 0, "y": 0, "w": 8, "h": 6 },
+      "fieldConfig": { "defaults": { "unit": "short" }, "overrides": [] },
+      "targets": [
+        {
+          "datasource": { "type": "prometheus", "uid": "victoriametrics" },
+          "expr": "remnawave_node_online_users * on(node_uuid) group_left(node_name) remnawave_node_basic_info",
+          "legendFormat": "{{node_name}}",
+          "refId": "A"
+        }
+      ]
+    },
+    {
+      "id": 2,
+      "type": "timeseries",
+      "title": "Статус нод",
+      "description": "1 — нода подключена к панели. Проваливается в 0 раньше, чем это заметят пользователи.",
+      "datasource": { "type": "prometheus", "uid": "victoriametrics" },
+      "gridPos": { "x": 8, "y": 0, "w": 8, "h": 6 },
+      "fieldConfig": { "defaults": { "unit": "short", "min": 0, "max": 1 }, "overrides": [] },
+      "targets": [
+        {
+          "datasource": { "type": "prometheus", "uid": "victoriametrics" },
+          "expr": "remnawave_node_status * on(node_uuid) group_left(node_name) remnawave_node_basic_info",
+          "legendFormat": "{{node_name}}",
+          "refId": "A"
+        }
+      ]
+    },
+    {
+      "id": 3,
+      "type": "timeseries",
+      "title": "Задержка event loop панели",
+      "description": "Растёт — панель не успевает обрабатывать статистику с нод.",
+      "datasource": { "type": "prometheus", "uid": "victoriametrics" },
+      "gridPos": { "x": 16, "y": 0, "w": 8, "h": 6 },
+      "fieldConfig": { "defaults": { "unit": "ms" }, "overrides": [] },
+      "targets": [
+        {
+          "datasource": { "type": "prometheus", "uid": "victoriametrics" },
+          "expr": "remnawave_process_event_loop_delay_ms",
+          "legendFormat": "delay",
+          "refId": "A"
+        },
+        {
+          "datasource": { "type": "prometheus", "uid": "victoriametrics" },
+          "expr": "remnawave_process_event_loop_p99_ms",
+          "legendFormat": "p99",
+          "refId": "B"
+        }
+      ]
+    },
+    {
+      "id": 4,
+      "type": "timeseries",
+      "title": "Потери UDP на приёме (датаграмм в минуту)",
+      "description": "Переполнение приёмного буфера сокета: теряются QUIC и DNS, то есть видео и звонки. Именно этот счётчик показал причину обрывов 11.09.2026 — всплески до 25 тыс. за час в вечерний пик при загрузке ядра 13 %.",
+      "datasource": { "type": "prometheus", "uid": "victoriametrics" },
+      "gridPos": { "x": 0, "y": 6, "w": 12, "h": 7 },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "custom": { "fillOpacity": 10 },
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              { "color": "green", "value": null },
+              { "color": "red", "value": 100 }
+            ]
+          }
+        },
+        "overrides": []
+      },
+      "targets": [
+        {
+          "datasource": { "type": "prometheus", "uid": "victoriametrics" },
+          "expr": "rate(node_netstat_Udp_RcvbufErrors[5m]) * 60",
+          "legendFormat": "{{instance}}",
+          "refId": "A"
+        }
+      ]
+    },
+    {
+      "id": 5,
+      "type": "timeseries",
+      "title": "Доля TCP-ретрансмитов",
+      "description": "Выше 5 % — путь до клиента теряет пакеты. У панели для сравнения обычно 0,06 %.",
+      "datasource": { "type": "prometheus", "uid": "victoriametrics" },
+      "gridPos": { "x": 12, "y": 6, "w": 12, "h": 7 },
+      "fieldConfig": { "defaults": { "unit": "percent" }, "overrides": [] },
+      "targets": [
+        {
+          "datasource": { "type": "prometheus", "uid": "victoriametrics" },
+          "expr": "100 * rate(node_netstat_Tcp_RetransSegs[15m]) / rate(node_netstat_Tcp_OutSegs[15m])",
+          "legendFormat": "{{instance}}",
+          "refId": "A"
+        }
+      ]
+    },
+    {
+      "id": 6,
+      "type": "timeseries",
+      "title": "Трафик нод",
+      "datasource": { "type": "prometheus", "uid": "victoriametrics" },
+      "gridPos": { "x": 0, "y": 13, "w": 12, "h": 7 },
+      "fieldConfig": { "defaults": { "unit": "Bps" }, "overrides": [] },
+      "targets": [
+        {
+          "datasource": { "type": "prometheus", "uid": "victoriametrics" },
+          "expr": "remnawave_node_network_rx_bytes_per_sec * on(node_uuid) group_left(node_name) remnawave_node_basic_info",
+          "legendFormat": "{{node_name}} rx",
+          "refId": "A"
+        },
+        {
+          "datasource": { "type": "prometheus", "uid": "victoriametrics" },
+          "expr": "remnawave_node_network_tx_bytes_per_sec * on(node_uuid) group_left(node_name) remnawave_node_basic_info",
+          "legendFormat": "{{node_name}} tx",
+          "refId": "B"
+        }
+      ]
+    },
+    {
+      "id": 7,
+      "type": "timeseries",
+      "title": "Свободная память нод",
+      "description": "У нод 2 ГБ и нет swap: упрётся — придёт OOM-killer, а не торможение.",
+      "datasource": { "type": "prometheus", "uid": "victoriametrics" },
+      "gridPos": { "x": 12, "y": 13, "w": 12, "h": 7 },
+      "fieldConfig": { "defaults": { "unit": "bytes" }, "overrides": [] },
+      "targets": [
+        {
+          "datasource": { "type": "prometheus", "uid": "victoriametrics" },
+          "expr": "remnawave_node_memory_free_bytes * on(node_uuid) group_left(node_name) remnawave_node_basic_info",
+          "legendFormat": "{{node_name}}",
+          "refId": "A"
+        }
+      ]
+    }
+  ]
+}

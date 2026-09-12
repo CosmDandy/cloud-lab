@@ -16,7 +16,7 @@ gatus_edge_network: "{{ edge_network | default('edge') }}"
 gatus_port: 8080
 
 gatus_ui_title: Status
-gatus_ui_header: Инфраструктура
+gatus_ui_header: Cloud Lab
 
 # Проверки. Каждая — словарь: name, group, url, interval, conditions,
 # опционально client (dns, tcp) и alerts.

@@ -1,0 +1,21 @@
+remark=🇳🇴 HHH-OSL · HY2 Salamander
+node=hhh-osl-01.vpn.cosmdandy.dev
+parallel=1
+baseline_direct_bytes_s=33319288
+variant=hhh-osl-hy2-salamander
+timestamp=2026-09-11T18:49:52+00:00
+handshake_raw=tcp=0.000125 tls=0.000000 ttfb=0.037104 total=0.037157 httpcode=200
+dl_run_1=36337777
+dl_run_2=35718115
+dl_avg_bytes_s=36027946
+dl_max_bytes_s=36337777
+dl_fails=0
+ul_run_1=26256541
+ul_run_2=37601967
+ul_avg_bytes_s=31929254
+ul_max_bytes_s=37601967
+ul_fails=0
+cf_meta={"origin":"local","note":"transport overhead bench, no external path"} 
+freeze_5000=ok
+freeze_16000=ok
+freeze_50000=ok

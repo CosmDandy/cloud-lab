@@ -33,6 +33,10 @@ services:
       - ./remote-write-password:/etc/vmagent/password:ro
       - vmagent_data:/vmagent-data
     command:
+      # Без явного адреса vmagent слушает 0.0.0.0:8429, а он в host-сети:
+      # его /targets и /metrics отвечали из интернета, и туда же смотрел
+      # приём записи. Наружу с ноды не должно смотреть ничего.
+      - "-httpListenAddr={{ node_metrics_vmagent_listen }}"
       - "-promscrape.config=/etc/vmagent/scrape.yml"
       - "-remoteWrite.url={{ node_metrics_remote_write_url }}"
       - "-remoteWrite.basicAuth.username={{ node_metrics_remote_write_user }}"
@@ -42,6 +46,30 @@ services:
       - "-remoteWrite.tmpDataPath=/vmagent-data"
       - "-remoteWrite.maxDiskUsagePerURL={{ node_metrics_max_disk_usage }}"
 
+{% if node_metrics_logs_enabled %}
+  promtail:
+    image: {{ node_metrics_promtail_image }}
+    container_name: promtail
+    restart: unless-stopped
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+      - /var/lib/docker/containers:/var/lib/docker/containers:ro
+      - ./promtail.yml:/etc/promtail/config.yaml:ro
+      # Логи xray лежат файлами: rw-node не отдаёт stdout ядра в docker logs.
+      - {{ node_metrics_xray_log_dir }}:{{ node_metrics_xray_log_dir }}:ro
+      - ./remote-write-password:/etc/promtail/password:ro
+      - promtail_positions:/tmp
+    command: -config.file=/etc/promtail/config.yaml
+    # Host-сеть, как у vmagent: promtail слушает только петлю (см. конфиг),
+    # поэтому наружу по-прежнему не открыто ничего, а vmagent скрейпит его
+    # метрики по 127.0.0.1 — доставка логов видна там же, где всё остальное.
+    network_mode: host
+{% endif %}
+
 volumes:
   vmagent_data:
     name: node_metrics_vmagent_data
+{% if node_metrics_logs_enabled %}
+  promtail_positions:
+    name: node_metrics_promtail_positions
+{% endif %}

@@ -1,0 +1,21 @@
+remark=🇳🇱 HHH-AMS · HY2 Salamander
+node=hhh-ams-01.vpn.cosmdandy.dev
+parallel=1
+baseline_direct_bytes_s=27777509
+variant=hhh-ams-hy2-salamander
+timestamp=2026-09-11T18:51:13+00:00
+handshake_raw=tcp=0.000131 tls=0.000000 ttfb=0.068047 total=0.068102 httpcode=200
+dl_run_1=27516320
+dl_run_2=21676446
+dl_avg_bytes_s=24596383
+dl_max_bytes_s=27516320
+dl_fails=0
+ul_run_1=23611258
+ul_run_2=31669962
+ul_avg_bytes_s=27640610
+ul_max_bytes_s=31669962
+ul_fails=0
+cf_meta={"origin":"local","note":"transport overhead bench, no external path"} 
+freeze_5000=ok
+freeze_16000=ok
+freeze_50000=ok

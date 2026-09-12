@@ -143,12 +143,35 @@ def grpc(idx, name, multimode, sockopt):
     return inbound
 
 
+# Адрес локального источника. Именно адрес, а не имя: freedom резолвит
+# доменные имена системным резолвером и секцию dns.hosts при этом не
+# смотрит — имя вроде origin.local он просто не находит.
+ORIGIN_ADDR = "127.0.0.1"
+
+
 def make_config(inbound):
     return {
         "log": {"loglevel": "warning"},
         "inbounds": [inbound],
         "outbounds": [
-            {"tag": "DIRECT", "protocol": "freedom"},
+            # finalRules нужен из-за безопасной политики, которую freedom
+            # применяет по умолчанию начиная с 26.4.x: приватные адреса молча
+            # уходят в чёрную дыру —
+            #   proxy/freedom: blocked target: tcp:127.0.0.1:18080,
+            #   blackholing connection for 56s
+            # Для прода это правильно, там private закрыт ещё и routing'ом. Но
+            # здесь источник и есть localhost, и с политикой по умолчанию
+            # стенд меряет нули, выглядящие как «транспорт не тянет».
+            #
+            # Пустой ipsBlocked политику не снимает — нужен именно явный
+            # allow, и только на адрес источника.
+            {
+                "tag": "DIRECT",
+                "protocol": "freedom",
+                "settings": {
+                    "finalRules": [{"action": "allow", "ip": [f"{ORIGIN_ADDR}/32"]}]
+                },
+            },
             {"tag": "BLOCK", "protocol": "blackhole"},
         ],
         "routing": {
