@@ -1,0 +1,25 @@
+# Managed by ansible (roles/node_metrics). Правки на хосте будут перезаписаны.
+[Unit]
+Description=Export per-client TCP quality and xray counters to the textfile directory
+Documentation=file://{{ node_metrics_dir }}/tcp-quality.py
+
+[Service]
+Type=oneshot
+ExecStart=/usr/bin/python3 {{ node_metrics_dir }}/tcp-quality.py {{ node_metrics_textfile_dir }}/tcp-quality.prom
+{% if node_metrics_xray_stats_enabled %}
+# Счётчики самого xray с его expvar-эндпоинта. Отдельным таймером их гонять
+# незачем: те же 30 секунд, тот же каталог, а один юнит проще читать.
+ExecStart=/usr/bin/python3 {{ node_metrics_dir }}/xray-stats.py {{ node_metrics_textfile_dir }}/xray-stats.prom
+{% endif %}
+# Читает состояние сокетов через netlink и пишет один файл — больше ему
+# ничего не нужно, поэтому забираем всё остальное.
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=strict
+ProtectHome=true
+ReadWritePaths={{ node_metrics_textfile_dir }}
+ProtectKernelTunables=true
+ProtectControlGroups=true
+RestrictAddressFamilies=AF_NETLINK AF_UNIX AF_INET
+MemoryMax=64M
+TimeoutStartSec=25s

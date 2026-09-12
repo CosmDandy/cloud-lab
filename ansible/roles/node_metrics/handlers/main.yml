@@ -20,3 +20,9 @@
   ansible.builtin.systemd_service:
     name: systemd-journald
     state: restarted
+
+# Юниты сборщика правятся шаблоном; без перечитывания systemd продолжит
+# работать по старой копии до следующей перезагрузки.
+- name: Reload systemd
+  ansible.builtin.systemd_service:
+    daemon_reload: true

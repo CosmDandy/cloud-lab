@@ -14,12 +14,20 @@ services:
       - /proc:/host/proc:ro
       - /sys:/host/sys:ro
       - /:/rootfs:ro
+{% if node_metrics_tcp_quality_enabled %}
+      # Готовые метрики, которые пишет tcp-quality.timer. Собирать их внутри
+      # контейнера нечем: ss читает состояние сокетов через netlink хоста.
+      - {{ node_metrics_textfile_dir }}:{{ node_metrics_textfile_dir }}:ro
+{% endif %}
     command:
       - "--web.listen-address={{ node_metrics_exporter_listen }}"
       - "--path.procfs=/host/proc"
       - "--path.sysfs=/host/sys"
       - "--path.rootfs=/rootfs"
       - "--collector.filesystem.mount-points-exclude=^/(sys|proc|dev|host|etc)($$|/)"
+{% if node_metrics_tcp_quality_enabled %}
+      - "--collector.textfile.directory={{ node_metrics_textfile_dir }}"
+{% endif %}
 
   vmagent:
     image: {{ node_metrics_vmagent_image }}

@@ -93,6 +93,87 @@ groups:
           summary: "Conntrack table {{ $value | humanizePercentage }} full on {{ $labels.instance }}"
           description: "New connections are dropped silently once the table fills"
 
+  # Правила про качество связи конкретного клиента. Ряды приходят из
+  # tcp-quality.timer на нодах (roles/node_metrics): ядро считает потери и RTT
+  # по каждому сокету, здесь они превращаются в повод разбудить человека.
+  #
+  # Почему это отдельно от HighTcpRetransmitRatio: тот считает долю по ноде за
+  # час и на инциденте 12.09 сработал через 45 минут после начала, когда всё
+  # уже кончилось. Клиентские ряды короче усредняют и называют пострадавшего.
+  - name: vpn-clients
+    interval: 30s
+    rules:
+      # 5 % по байтам — уже заметная деградация: TCP на таких потерях режет
+      # окно вдвое каждые несколько секунд и скорость падает кратно. Десять
+      # минут выдержки отсекают короткие всплески на переподключении.
+      - alert: ClientHighRetransmit
+        expr: vpn_client_tcp_retrans_ratio > 5
+        for: 10m
+        labels:
+          severity: warning
+        annotations:
+          summary: "Client {{ $labels.peer }} losing {{ $value | printf \"%.1f\" }}% on {{ $labels.inbound }}"
+          description: >-
+            Retransmitted bytes over total sent, measured per socket on
+            {{ $labels.instance }}. Check whether the same client is healthy on
+            another inbound before blaming the node.
+
+      # RTT втрое выше минимального по тому же пути — очередь где-то на пути
+      # заполнена. Это видно раньше потерь: сначала растёт задержка, потом
+      # буфер переполняется и начинается отброс.
+      - alert: ClientRttInflated
+        expr: vpn_client_tcp_rtt_inflation > 3
+        for: 10m
+        labels:
+          severity: warning
+        annotations:
+          summary: "Client {{ $labels.peer }} RTT {{ $value | printf \"%.1f\" }}x above path minimum"
+          description: "Queue building up on the path to {{ $labels.peer }} via {{ $labels.inbound }}"
+
+      # Отдельный случай: потери ложные. Пакеты идут разными путями, приходят
+      # не по порядку, TCP считает их потерянными и шлёт заново — DSACK потом
+      # сообщает, что это было зря. Транспорт менять бессмысленно, лечится
+      # настройками TCP, поэтому и алерт отдельный.
+      - alert: ClientReorderingHigh
+        expr: vpn_client_tcp_reordering > 100 and vpn_client_tcp_spurious_ratio > 0.05
+        for: 15m
+        labels:
+          severity: info
+        annotations:
+          summary: "Packet reordering on the path to {{ $labels.peer }}"
+          description: >-
+            Kernel reordering estimate {{ $value }} with over 5% of retransmits
+            reported spurious — multipath artefact rather than a lossy link.
+
+      # Клиент не может даже установить соединение: SYN уходит повторно.
+      # Счётчик уже собирался node-exporter'ом, но правила на него не было, и
+      # жалоба «не подключается» ничем не подтверждалась.
+      - alert: SynRetransmitSpike
+        expr: >-
+          rate(node_netstat_TcpExt_TCPSynRetrans[5m]) > 2
+          and rate(node_netstat_TcpExt_TCPSynRetrans[5m])
+              / rate(node_netstat_Tcp_OutSegs[5m]) > 0.02
+        for: 10m
+        labels:
+          severity: warning
+        annotations:
+          summary: "SYN retransmits on {{ $labels.instance }}: {{ $value | printf \"%.1f\" }}/s"
+          description: "Clients are failing to establish connections, not just losing data mid-stream"
+
+      # Короткое окно к часовому правилу: ловит то, что усреднение съедает.
+      # Порог выше (15 %), чтобы пятиминутка на пустом канале не будила зря.
+      - alert: TcpRetransmitBurst
+        expr: >-
+          (100 * rate(node_netstat_Tcp_RetransSegs[5m])
+           / rate(node_netstat_Tcp_OutSegs[5m]) > 15)
+          and (rate(node_netstat_Tcp_OutSegs[5m]) > 200)
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: "TCP retransmit burst on {{ $labels.instance }}: {{ $value | printf \"%.1f\" }}%"
+          description: "Short-window spike; the hourly rule will only catch this 30+ minutes later"
+
   - name: scraping
     interval: 30s
     rules:

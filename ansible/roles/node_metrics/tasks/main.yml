@@ -42,6 +42,71 @@
   ansible.builtin.import_tasks: logs.yaml
   tags: [logs]
 
+# Сборщик ставится до compose: node-exporter при старте монтирует каталог
+# textfile, и если его ещё нет, docker создаёт на его месте пустой каталог от
+# root, а потом таймер пишет уже не туда, куда смотрит экспортёр.
+- name: Configure per-client TCP quality collector
+  when: node_metrics_tcp_quality_enabled
+  tags: [tcp-quality]
+  block:
+    - name: Create textfile directory
+      ansible.builtin.file:
+        path: "{{ node_metrics_textfile_dir }}"
+        state: directory
+        owner: "{{ node_metrics_owner }}"
+        group: "{{ node_metrics_owner }}"
+        mode: "0755"
+
+    - name: Install TCP quality collector
+      ansible.builtin.copy:
+        src: tcp-quality.py
+        dest: "{{ node_metrics_dir }}/tcp-quality.py"
+        owner: "{{ node_metrics_owner }}"
+        group: "{{ node_metrics_owner }}"
+        mode: "0755"
+
+    - name: Install xray stats collector
+      ansible.builtin.copy:
+        src: xray-stats.py
+        dest: "{{ node_metrics_dir }}/xray-stats.py"
+        owner: "{{ node_metrics_owner }}"
+        group: "{{ node_metrics_owner }}"
+        mode: "0755"
+      when: node_metrics_xray_stats_enabled
+
+    - name: Render TCP quality units
+      ansible.builtin.template:
+        src: "{{ item }}.j2"
+        dest: "/etc/systemd/system/{{ item }}"
+        owner: root
+        group: root
+        mode: "0644"
+      loop:
+        - tcp-quality.service
+        - tcp-quality.timer
+      notify: Reload systemd
+
+    # В check-режиме юнит на диск не попадает, и systemd о нём не знает —
+    # задача упала бы на несуществующем сервисе, хотя в реальном прогоне
+    # к этому моменту файл уже есть.
+    - name: Enable TCP quality timer
+      ansible.builtin.systemd_service:
+        name: tcp-quality.timer
+        enabled: true
+        state: started
+        daemon_reload: true
+      when: not ansible_check_mode
+
+    # Без первого запуска файл появится только через интервал таймера, и до
+    # тех пор node-exporter отдаёт метрики без единого ряда — выглядит как
+    # поломка сборщика.
+    - name: Produce first sample
+      ansible.builtin.systemd_service:
+        name: tcp-quality.service
+        state: started
+      changed_when: false
+      when: not ansible_check_mode
+
 - name: Render compose file
   ansible.builtin.template:
     src: docker-compose.yaml.j2
