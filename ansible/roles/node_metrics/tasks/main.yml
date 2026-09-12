@@ -68,6 +68,14 @@
         group: "{{ node_metrics_owner }}"
         mode: "0755"
 
+    - name: Install kernel counter collector
+      ansible.builtin.copy:
+        src: nstat-extra.py
+        dest: "{{ node_metrics_dir }}/nstat-extra.py"
+        owner: "{{ node_metrics_owner }}"
+        group: "{{ node_metrics_owner }}"
+        mode: "0755"
+
     - name: Install xray stats collector
       ansible.builtin.copy:
         src: xray-stats.py
