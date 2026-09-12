@@ -38,6 +38,9 @@ node_metrics_max_disk_usage: 512MB
 node_metrics_tcp_quality_enabled: true
 node_metrics_tcp_quality_interval: 30s
 node_metrics_textfile_dir: /var/lib/node-exporter/textfile
+# Снимок прошлого замера: потери экспортируются счётчиками, а счётчик
+# собирается как сумма приростов по каждому сокету между запусками.
+node_metrics_state_dir: /var/lib/node-metrics
 
 # Счётчики самого xray: трафик по пользователю и по инбаунду. Xray отдаёт их
 # в формате expvar на 127.0.0.1:9101 — это включается в конфиг-профиле панели

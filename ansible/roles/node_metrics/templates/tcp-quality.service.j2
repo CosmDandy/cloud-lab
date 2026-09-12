@@ -17,7 +17,9 @@ NoNewPrivileges=true
 PrivateTmp=true
 ProtectSystem=strict
 ProtectHome=true
-ReadWritePaths={{ node_metrics_textfile_dir }}
+# Второй каталог — под снимок предыдущего замера: счётчики считаются как
+# прирост между запусками, без него каждый запуск начинал бы с нуля.
+ReadWritePaths={{ node_metrics_textfile_dir }} {{ node_metrics_state_dir }}
 ProtectKernelTunables=true
 ProtectControlGroups=true
 RestrictAddressFamilies=AF_NETLINK AF_UNIX AF_INET

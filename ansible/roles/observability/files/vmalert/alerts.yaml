@@ -94,66 +94,60 @@ groups:
           description: "New connections are dropped silently once the table fills"
 
   # Правила про качество связи конкретного клиента. Ряды приходят из
-  # tcp-quality.timer на нодах (roles/node_metrics): ядро считает потери и RTT
-  # по каждому сокету, здесь они превращаются в повод разбудить человека.
+  # tcp-quality.timer на нодах (roles/node_metrics).
   #
-  # Почему это отдельно от HighTcpRetransmitRatio: тот считает долю по ноде за
-  # час и на инциденте 12.09 сработал через 45 минут после начала, когда всё
-  # уже кончилось. Клиентские ряды короче усредняют и называют пострадавшего.
+  # Первая версия этих правил шумела до бесполезности, и причина была в
+  # метрике, а не в порогах: экспортировалось готовое отношение
+  # bytes_retrans/bytes_sent прямо с сокета, то есть доля за всю его жизнь.
+  # Она сползает вниз по мере накопления чистого трафика и прыгает вверх при
+  # пересоздании сокета — наблюдали 10.5 → 8.4 → 6.2 → 4.6 без единого
+  # изменения на пути. Алерт на таком ряде пилит порог и не значит ничего.
+  #
+  # Теперь экспортируются счётчики, а доля считается здесь через rate(): она
+  # описывает происходящее сейчас. Ко всем правилам добавлено условие на
+  # объём — на паре десятков килобайт любая доля случайна.
   - name: vpn-clients
-    interval: 30s
+    interval: 1m
     rules:
-      # 5 % по байтам — уже заметная деградация: TCP на таких потерях режет
-      # окно вдвое каждые несколько секунд и скорость падает кратно. Десять
-      # минут выдержки отсекают короткие всплески на переподключении.
+      # 10 % на десятиминутном окне при заметном трафике. Ниже порог держать
+      # смысла нет: 5 % ловились у половины российских клиентов в вечерний
+      # час и ничего не говорили о том, что надо что-то делать.
       - alert: ClientHighRetransmit
-        expr: vpn_client_tcp_retrans_ratio > 5
-        for: 10m
+        expr: >-
+          (100 * rate(vpn_client_tcp_retrans_bytes_total[10m])
+           / rate(vpn_client_tcp_sent_bytes_total[10m]) > 10)
+          and (rate(vpn_client_tcp_sent_bytes_total[10m]) > 65536)
+        for: 20m
         labels:
           severity: warning
         annotations:
           summary: "Client {{ $labels.peer }} losing {{ $value | printf \"%.1f\" }}% on {{ $labels.inbound }}"
           description: >-
-            Retransmitted bytes over total sent, measured per socket on
-            {{ $labels.instance }}. Check whether the same client is healthy on
+            Sustained for 20 minutes at over 64 KB/s. Check the same client on
             another inbound before blaming the node.
 
-      # RTT втрое выше минимального по тому же пути — очередь где-то на пути
-      # заполнена. Это видно раньше потерь: сначала растёт задержка, потом
-      # буфер переполняется и начинается отброс.
+      # Вчетверо против минимума по тому же пути — это уже очередь, а не
+      # обычное колебание. Втрое ловилось постоянно и у всех.
       - alert: ClientRttInflated
-        expr: vpn_client_tcp_rtt_inflation > 3
-        for: 10m
+        expr: >-
+          vpn_client_tcp_rtt_inflation > 4
+          and rate(vpn_client_tcp_sent_bytes_total[10m]) > 65536
+        for: 20m
         labels:
           severity: warning
         annotations:
           summary: "Client {{ $labels.peer }} RTT {{ $value | printf \"%.1f\" }}x above path minimum"
           description: "Queue building up on the path to {{ $labels.peer }} via {{ $labels.inbound }}"
 
-      # Отдельный случай: потери ложные. Пакеты идут разными путями, приходят
-      # не по порядку, TCP считает их потерянными и шлёт заново — DSACK потом
-      # сообщает, что это было зря. Транспорт менять бессмысленно, лечится
-      # настройками TCP, поэтому и алерт отдельный.
-      - alert: ClientReorderingHigh
-        expr: vpn_client_tcp_reordering > 100 and vpn_client_tcp_spurious_ratio > 0.05
-        for: 15m
-        labels:
-          severity: info
-        annotations:
-          summary: "Packet reordering on the path to {{ $labels.peer }}"
-          description: >-
-            Kernel reordering estimate {{ $value }} with over 5% of retransmits
-            reported spurious — multipath artefact rather than a lossy link.
-
-      # Клиент не может даже установить соединение: SYN уходит повторно.
-      # Счётчик уже собирался node-exporter'ом, но правила на него не было, и
-      # жалоба «не подключается» ничем не подтверждалась.
+      # Клиент не может установить соединение. Порог поднят с 2 до 10 в
+      # секунду: на 2 правило срабатывало по несколько раз в час на обычном
+      # фоне переподключений.
       - alert: SynRetransmitSpike
         expr: >-
-          rate(node_netstat_TcpExt_TCPSynRetrans[5m]) > 2
-          and rate(node_netstat_TcpExt_TCPSynRetrans[5m])
-              / rate(node_netstat_Tcp_OutSegs[5m]) > 0.02
-        for: 10m
+          rate(node_netstat_TcpExt_TCPSynRetrans[10m]) > 10
+          and rate(node_netstat_TcpExt_TCPSynRetrans[10m])
+              / rate(node_netstat_Tcp_OutSegs[10m]) > 0.05
+        for: 20m
         labels:
           severity: warning
         annotations:
@@ -161,18 +155,23 @@ groups:
           description: "Clients are failing to establish connections, not just losing data mid-stream"
 
       # Короткое окно к часовому правилу: ловит то, что усреднение съедает.
-      # Порог выше (15 %), чтобы пятиминутка на пустом канале не будила зря.
       - alert: TcpRetransmitBurst
         expr: >-
           (100 * rate(node_netstat_Tcp_RetransSegs[5m])
-           / rate(node_netstat_Tcp_OutSegs[5m]) > 15)
-          and (rate(node_netstat_Tcp_OutSegs[5m]) > 200)
-        for: 5m
+           / rate(node_netstat_Tcp_OutSegs[5m]) > 20)
+          and (rate(node_netstat_Tcp_OutSegs[5m]) > 500)
+        for: 10m
         labels:
           severity: warning
         annotations:
           summary: "TCP retransmit burst on {{ $labels.instance }}: {{ $value | printf \"%.1f\" }}%"
-          description: "Short-window spike; the hourly rule will only catch this 30+ minutes later"
+          description: "Short-window spike; the hourly rule would only catch this 30+ minutes later"
+
+      # Переупорядочивание намеренно НЕ алертит. Оценка ядра упирается в
+      # потолок tcp_max_reordering и держится там сутками у любого клиента с
+      # многопутёвым провайдером — как состояние это верно, как повод
+      # разбудить человека бессмысленно. Метрика
+      # vpn_client_tcp_reordering остаётся для разбора инцидентов руками.
 
   - name: scraping
     interval: 30s

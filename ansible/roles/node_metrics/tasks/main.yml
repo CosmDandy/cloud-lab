@@ -49,13 +49,16 @@
   when: node_metrics_tcp_quality_enabled
   tags: [tcp-quality]
   block:
-    - name: Create textfile directory
+    - name: Create collector directories
       ansible.builtin.file:
-        path: "{{ node_metrics_textfile_dir }}"
+        path: "{{ item }}"
         state: directory
         owner: "{{ node_metrics_owner }}"
         group: "{{ node_metrics_owner }}"
         mode: "0755"
+      loop:
+        - "{{ node_metrics_textfile_dir }}"
+        - "{{ node_metrics_state_dir }}"
 
     - name: Install TCP quality collector
       ansible.builtin.copy:

@@ -7,20 +7,30 @@ Node-level retransmit ratio answers "something is wrong somewhere". This answers
 between a graph and an actionable one. The kernel already tracks it per socket;
 `ss -ti` just exposes what is there.
 
-Two numbers matter beyond the loss ratio:
+**Counters, not ratios.** The obvious implementation — export
+bytes_retrans/bytes_sent straight off the socket — was tried first and is wrong.
+Those fields are cumulative over the socket's whole life, so the exported value
+drifts downward as clean traffic dilutes old losses, then jumps when the client
+opens a fresh socket. Alerting on that produces a sawtooth across the threshold
+and no information: observed drifting 10.5 → 8.4 → 6.2 → 4.6 while nothing on
+the path had changed.
 
-  * rtt/minrtt — how much the path is buffering under load. A value of 1 means
-    an idle path; 3 means packets are sitting in someone's queue, which is what
-    a saturated uplink looks like before it starts dropping.
-  * dsack/reordering — whether the "loss" is real. DSACK means a retransmitted
-    packet did arrive: TCP gave up on it too early because packets came out of
-    order. High reordering with high DSACK is a multipath artefact, not a lossy
-    link, and swapping transports will not help.
+So the per-socket deltas are accumulated here into monotonic counters keyed by
+(peer, inbound), and the ratio is left to PromQL, where `rate()` over a window
+says what is happening *now*:
 
-Output goes to the textfile collector directory, written atomically so a scrape
-never sees a half-written file.
+    rate(vpn_client_tcp_retrans_bytes_total[10m])
+      / rate(vpn_client_tcp_sent_bytes_total[10m])
+
+Sockets come and go; a socket seen for the first time contributes its full
+counters, since it was born between two samples. The previous sample is kept on
+disk because the collector runs as a timer and exits between runs — losing it
+would reset every counter every 30 seconds.
+
+RTT and reordering stay gauges: they describe a state, not an accumulation.
 """
 
+import json
 import os
 import re
 import subprocess
@@ -29,8 +39,7 @@ import tempfile
 from collections import defaultdict
 
 # Inbound ports as configured in the panel's config profile. A port missing here
-# is simply not reported — this is deliberate, node-to-internet sockets are not
-# what we are measuring.
+# is simply not reported — node-to-internet sockets are not what we measure.
 INBOUNDS = {
     443: "xhttp-stream-443",
     2444: "xhttp-stream",
@@ -39,12 +48,11 @@ INBOUNDS = {
     2084: "grpc",
 }
 
-# Reporting every client unbounded would let a scan inflate series count without
-# limit; the busiest ones are the only ones worth a time series anyway.
 MAX_SERIES = 50
+STATE_PATH = "/var/lib/node-metrics/tcp-quality.state"
 
 SOCKET_HEAD = re.compile(
-    r"\[?(?:::ffff:)?([\d.]+)\]?:(\d+)\s+\[?(?:::ffff:)?([\d.]+)\]?:\d+"
+    r"\[?(?:::ffff:)?([\d.]+)\]?:(\d+)\s+\[?(?:::ffff:)?([\d.]+)\]?:(\d+)"
 )
 
 
@@ -53,8 +61,29 @@ def field(pattern, line, default=0.0):
     return float(m.group(1)) if m else default
 
 
+def load_state():
+    try:
+        with open(STATE_PATH) as fh:
+            return json.load(fh)
+    except (OSError, ValueError):
+        return {"sockets": {}, "totals": {}}
+
+
+def save_state(state):
+    directory = os.path.dirname(STATE_PATH)
+    os.makedirs(directory, exist_ok=True)
+    fd, tmp = tempfile.mkstemp(dir=directory, prefix=".tcp-quality-state-")
+    try:
+        with os.fdopen(fd, "w") as fh:
+            json.dump(state, fh)
+        os.replace(tmp, STATE_PATH)
+    except Exception:
+        os.unlink(tmp)
+        raise
+
+
 def collect():
-    """Aggregate per (peer, inbound). One client holds many sockets at once."""
+    """Per-socket sample: current cumulative counters plus live gauges."""
     try:
         out = subprocess.run(
             ["ss", "-tin", "state", "established"],
@@ -64,68 +93,116 @@ def collect():
         print(f"ss failed: {exc}", file=sys.stderr)
         return {}
 
-    stats = defaultdict(lambda: defaultdict(float))
+    sockets = {}
     key = None
     for line in out:
         head = SOCKET_HEAD.search(line)
         if head and "bytes_sent" not in line:
             port = int(head.group(2))
-            key = (head.group(3), INBOUNDS[port]) if port in INBOUNDS else None
+            if port in INBOUNDS:
+                # Local and remote port together identify the connection; the
+                # pair is reused rarely enough that a stale match would have to
+                # be deliberate.
+                key = (head.group(3), INBOUNDS[port], head.group(4))
+            else:
+                key = None
             continue
         if key is None or "bytes_sent" not in line:
             continue
-
-        s = stats[key]
-        s["sockets"] += 1
-        s["sent"] += field(r"\bbytes_sent:(\d+)", line)
-        s["retrans_bytes"] += field(r"\bbytes_retrans:(\d+)", line)
-        s["dsack"] += field(r"\bdsack_dups:(\d+)", line)
-        # retrans reads as "current/total"; the total is the one that accumulates
-        s["retrans_pkts"] += field(r"\bretrans:\d+/(\d+)", line)
-        rtt = field(r"\brtt:([\d.]+)", line)
-        minrtt = field(r"\bminrtt:([\d.]+)", line)
-        s["rtt_sum"] += rtt
-        s["rtt_n"] += 1 if rtt else 0
-        s["minrtt"] = min(s["minrtt"], minrtt) if s["minrtt"] else minrtt
-        s["reordering"] = max(s["reordering"], field(r"\breordering:(\d+)", line))
-        s["delivery"] = max(s["delivery"], field(r"\bdelivery_rate:(\d+)", line))
+        sockets["|".join(key)] = {
+            "sent": field(r"\bbytes_sent:(\d+)", line),
+            "retrans": field(r"\bbytes_retrans:(\d+)", line),
+            "dsack": field(r"\bdsack_dups:(\d+)", line),
+            "retrans_pkts": field(r"\bretrans:\d+/(\d+)", line),
+            "rtt": field(r"\brtt:([\d.]+)", line),
+            "minrtt": field(r"\bminrtt:([\d.]+)", line),
+            "reordering": field(r"\breordering:(\d+)", line),
+        }
         key = None
-    return stats
+    return sockets
 
 
-def render(stats):
+def accumulate(sockets, state):
+    """Fold per-socket growth into counters keyed by (peer, inbound)."""
+    previous = state.get("sockets", {})
+    totals = defaultdict(float, state.get("totals", {}))
+
+    for sock_key, now in sockets.items():
+        peer, inbound, _rport = sock_key.split("|")
+        was = previous.get(sock_key)
+        for field_name in ("sent", "retrans", "dsack", "retrans_pkts"):
+            current = now[field_name]
+            # A counter that went backwards means the port was reused by a new
+            # connection: treat the whole current value as growth.
+            grew = current - was[field_name] if was and current >= was[field_name] else current
+            totals[f"{peer}|{inbound}|{field_name}"] += grew
+
+    state["sockets"] = sockets
+    state["totals"] = dict(totals)
+    return totals
+
+
+def gauges(sockets):
+    """Live state per (peer, inbound): worst RTT inflation, sockets, reordering."""
+    live = defaultdict(lambda: {"sockets": 0, "rtt": 0.0, "rtt_n": 0,
+                                "minrtt": 0.0, "reordering": 0.0})
+    for sock_key, s in sockets.items():
+        peer, inbound, _ = sock_key.split("|")
+        row = live[(peer, inbound)]
+        row["sockets"] += 1
+        if s["rtt"]:
+            row["rtt"] += s["rtt"]
+            row["rtt_n"] += 1
+        if s["minrtt"]:
+            row["minrtt"] = min(row["minrtt"], s["minrtt"]) if row["minrtt"] else s["minrtt"]
+        row["reordering"] = max(row["reordering"], s["reordering"])
+    return live
+
+
+def render(totals, live):
     lines = [
-        "# HELP vpn_client_tcp_sockets Established TCP sockets per client and inbound",
+        "# HELP vpn_client_tcp_sent_bytes_total Bytes sent to a client, accumulated across sockets",
+        "# TYPE vpn_client_tcp_sent_bytes_total counter",
+        "# HELP vpn_client_tcp_retrans_bytes_total Bytes retransmitted to a client",
+        "# TYPE vpn_client_tcp_retrans_bytes_total counter",
+        "# HELP vpn_client_tcp_retrans_packets_total Segments retransmitted to a client",
+        "# TYPE vpn_client_tcp_retrans_packets_total counter",
+        "# HELP vpn_client_tcp_spurious_packets_total Retransmits the peer reported as unnecessary",
+        "# TYPE vpn_client_tcp_spurious_packets_total counter",
+        "# HELP vpn_client_tcp_sockets Established sockets right now",
         "# TYPE vpn_client_tcp_sockets gauge",
-        "# HELP vpn_client_tcp_retrans_ratio Percent of bytes retransmitted",
-        "# TYPE vpn_client_tcp_retrans_ratio gauge",
         "# HELP vpn_client_tcp_rtt_ms Mean smoothed RTT across the client's sockets",
         "# TYPE vpn_client_tcp_rtt_ms gauge",
         "# HELP vpn_client_tcp_rtt_inflation Current RTT divided by the path minimum",
         "# TYPE vpn_client_tcp_rtt_inflation gauge",
         "# HELP vpn_client_tcp_reordering Kernel reordering estimate, 3 is the default",
         "# TYPE vpn_client_tcp_reordering gauge",
-        "# HELP vpn_client_tcp_spurious_ratio Share of retransmits the peer reported as unnecessary",
-        "# TYPE vpn_client_tcp_spurious_ratio gauge",
-        "# HELP vpn_client_tcp_delivery_bps Best delivery rate observed",
-        "# TYPE vpn_client_tcp_delivery_bps gauge",
     ]
 
-    ranked = sorted(stats.items(), key=lambda kv: -kv[1]["sent"])[:MAX_SERIES]
-    for (peer, inbound), s in ranked:
+    by_pair = defaultdict(dict)
+    for key, value in totals.items():
+        peer, inbound, field_name = key.split("|")
+        by_pair[(peer, inbound)][field_name] = value
+
+    ranked = sorted(by_pair.items(), key=lambda kv: -kv[1].get("sent", 0))[:MAX_SERIES]
+    for (peer, inbound), counters in ranked:
         tags = f'peer="{peer}",inbound="{inbound}"'
-        sent = s["sent"] or 1
-        rtt = s["rtt_sum"] / s["rtt_n"] if s["rtt_n"] else 0
-        inflation = rtt / s["minrtt"] if s["minrtt"] else 0
-        spurious = s["dsack"] / s["retrans_pkts"] if s["retrans_pkts"] else 0
         lines += [
-            f"vpn_client_tcp_sockets{{{tags}}} {int(s['sockets'])}",
-            f"vpn_client_tcp_retrans_ratio{{{tags}}} {100 * s['retrans_bytes'] / sent:.4f}",
+            f"vpn_client_tcp_sent_bytes_total{{{tags}}} {int(counters.get('sent', 0))}",
+            f"vpn_client_tcp_retrans_bytes_total{{{tags}}} {int(counters.get('retrans', 0))}",
+            f"vpn_client_tcp_retrans_packets_total{{{tags}}} {int(counters.get('retrans_pkts', 0))}",
+            f"vpn_client_tcp_spurious_packets_total{{{tags}}} {int(counters.get('dsack', 0))}",
+        ]
+        row = live.get((peer, inbound))
+        if not row:
+            continue
+        rtt = row["rtt"] / row["rtt_n"] if row["rtt_n"] else 0
+        inflation = rtt / row["minrtt"] if row["minrtt"] else 0
+        lines += [
+            f"vpn_client_tcp_sockets{{{tags}}} {row['sockets']}",
             f"vpn_client_tcp_rtt_ms{{{tags}}} {rtt:.3f}",
             f"vpn_client_tcp_rtt_inflation{{{tags}}} {inflation:.3f}",
-            f"vpn_client_tcp_reordering{{{tags}}} {int(s['reordering'])}",
-            f"vpn_client_tcp_spurious_ratio{{{tags}}} {spurious:.4f}",
-            f"vpn_client_tcp_delivery_bps{{{tags}}} {int(s['delivery'])}",
+            f"vpn_client_tcp_reordering{{{tags}}} {int(row['reordering'])}",
         ]
     lines.append(f"vpn_client_tcp_series_total {len(ranked)}")
     return "\n".join(lines) + "\n"
@@ -133,12 +210,15 @@ def render(stats):
 
 def main():
     target = sys.argv[1] if len(sys.argv) > 1 else "/var/lib/node-exporter/textfile/tcp-quality.prom"
-    body = render(collect())
+
+    state = load_state()
+    sockets = collect()
+    totals = accumulate(sockets, state)
+    save_state(state)
+    body = render(totals, gauges(sockets))
 
     directory = os.path.dirname(target)
     os.makedirs(directory, exist_ok=True)
-    # Rename is atomic within a filesystem, so the collector either sees the
-    # previous file or the complete new one, never a truncated read.
     fd, tmp = tempfile.mkstemp(dir=directory, prefix=".tcp-quality-")
     try:
         with os.fdopen(fd, "w") as fh:
