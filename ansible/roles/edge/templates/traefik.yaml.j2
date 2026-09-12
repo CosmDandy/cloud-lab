@@ -20,6 +20,10 @@ entryPoints:
         entryPoint:
           to: websecure
           scheme: https
+{% if edge_metrics_enabled %}
+  metrics:
+    address: ":{{ edge_metrics_port }}"
+{% endif %}
   websecure:
     address: ":443"
 {% if edge_http3_enabled %}
@@ -35,6 +39,32 @@ entryPoints:
         - security-headers@file
         - compression@file
 
+{% if edge_metrics_enabled %}
+# Отдельная точка входа для метрик: на 80 и 443 её выставлять нельзя, а
+# добавлять роутер с аутентификацией ради внутреннего скрейпа — лишняя деталь.
+# Порт публикуется только в docker-сеть, снаружи его нет.
+metrics:
+  prometheus:
+    entryPoint: metrics
+    # Разбивка по точкам входа, роутерам и сервисам. Без неё видно только
+    # «сколько всего запросов», а вопрос обычно звучит «какой сервис отдаёт
+    # пятисотки и с какой задержкой».
+    addEntryPointsLabels: true
+    addRoutersLabels: true
+    addServicesLabels: true
+    # Гистограмма задержек: по ней считаются перцентили. Границы подобраны под
+    # то, что здесь живёт — панель, подписка и статус-страницы отвечают за
+    # десятки миллисекунд, всё что больше секунды уже аномалия.
+    buckets:
+      - 0.05
+      - 0.1
+      - 0.25
+      - 0.5
+      - 1.0
+      - 2.5
+      - 5.0
+
+{% endif %}
 certificatesResolvers:
   letsencrypt:
     acme:

@@ -17,6 +17,14 @@ scrape_configs:
     static_configs:
       - targets: ["cadvisor:8080"]
 
+  # Тот же приём, что с gatus: по имени контейнера внутри сети edge. Точка
+  # входа метрик наружу не публикуется, и роутера для неё намеренно нет.
+  - job_name: traefik
+    static_configs:
+      - targets: ["traefik:{{ observability_traefik_metrics_port }}"]
+        labels:
+          instance: {{ inventory_hostname }}
+
   - job_name: vmalert
     static_configs:
       - targets: ["vmalert:8880"]

@@ -93,3 +93,7 @@ observability_oidc_name: Pocket ID
 observability_oidc_issuer: ""
 observability_oidc_client_id: ""
 observability_oidc_client_secret: ""
+
+# Порт точки входа метрик traefik — должен совпадать с edge_metrics_port
+# в роли edge, роли разворачиваются на одной машине и в одной сети.
+observability_traefik_metrics_port: 8082
