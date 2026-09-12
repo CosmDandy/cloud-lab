@@ -107,6 +107,73 @@
       changed_when: false
       when: not ansible_check_mode
 
+# Отдельным блоком от textfile-сборщика: тот работает везде, а этот зависит
+# от ядра с BTF и от bpftrace, и на машине без них должен молча не ставиться,
+# а не ронять весь прогон.
+- name: Configure Hysteria2 eBPF collector
+  when: node_metrics_hy2_ebpf_enabled
+  tags: [hy2-ebpf]
+  block:
+    - name: Check kernel BTF support
+      ansible.builtin.stat:
+        path: /sys/kernel/btf/vmlinux
+      register: node_metrics_btf
+
+    - name: Install bpftrace
+      ansible.builtin.apt:
+        name: bpftrace
+        state: present
+        update_cache: true
+        cache_valid_time: 3600
+      when: node_metrics_btf.stat.exists
+
+    - name: Render eBPF program
+      ansible.builtin.template:
+        src: hy2-ebpf.bt.j2
+        dest: "{{ node_metrics_dir }}/hy2-ebpf.bt"
+        owner: "{{ node_metrics_owner }}"
+        group: "{{ node_metrics_owner }}"
+        mode: "0644"
+      when: node_metrics_btf.stat.exists
+      notify: Restart hy2 collector
+
+    - name: Install Hysteria2 collector
+      ansible.builtin.copy:
+        src: hy2-stats.py
+        dest: "{{ node_metrics_dir }}/hy2-stats.py"
+        owner: "{{ node_metrics_owner }}"
+        group: "{{ node_metrics_owner }}"
+        mode: "0755"
+      when: node_metrics_btf.stat.exists
+      notify: Restart hy2 collector
+
+    - name: Render Hysteria2 collector unit
+      ansible.builtin.template:
+        src: hy2-stats.service.j2
+        dest: /etc/systemd/system/hy2-stats.service
+        owner: root
+        group: root
+        mode: "0644"
+      when: node_metrics_btf.stat.exists
+      notify: [Reload systemd, Restart hy2 collector]
+
+    - name: Enable Hysteria2 collector
+      ansible.builtin.systemd_service:
+        name: hy2-stats.service
+        enabled: true
+        state: started
+        daemon_reload: true
+      when:
+        - node_metrics_btf.stat.exists
+        - not ansible_check_mode
+
+    - name: Report missing BTF
+      ansible.builtin.debug:
+        msg: >-
+          В ядре нет /sys/kernel/btf/vmlinux — сборщик Hysteria2 пропущен.
+          Метрики по HY2 останутся на уровне счётчиков хоста.
+      when: not node_metrics_btf.stat.exists
+
 - name: Render compose file
   ansible.builtin.template:
     src: docker-compose.yaml.j2

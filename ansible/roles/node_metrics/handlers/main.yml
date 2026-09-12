@@ -26,3 +26,12 @@
 - name: Reload systemd
   ansible.builtin.systemd_service:
     daemon_reload: true
+
+# Программа и обёртка читаются при старте, на лету не перечитываются.
+- name: Restart hy2 collector
+  ansible.builtin.systemd_service:
+    name: hy2-stats.service
+    state: restarted
+    daemon_reload: true
+  # В check-режиме юнит на диск не попал, и systemd о нём не знает.
+  when: not ansible_check_mode
