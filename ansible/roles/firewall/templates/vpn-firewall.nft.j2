@@ -42,4 +42,14 @@ table inet {{ firewall_table }} {
     {{ rule.proto | default('tcp') }} dport {{ rule.port }} ip saddr { {{ rule.sources | join(', ') }} } accept
 {% endfor %}
   }
+{% if firewall_block_outgoing_tcp | length > 0 %}
+
+  chain output {
+    type filter hook output priority filter; policy accept;
+
+    # reject, а не drop: клиенту нужна немедленная ошибка. drop оставил бы
+    # его повторять SYN до собственного таймаута — именно то, что мы убираем.
+    tcp dport { {{ firewall_block_outgoing_tcp | join(', ') }} } reject with tcp reset
+  }
+{% endif %}
 }
