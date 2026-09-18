@@ -298,7 +298,7 @@
             "uid": "victoriametrics"
           },
           "editorMode": "code",
-          "expr": "(sum(rate(traefik_entrypoint_request_duration_seconds_bucket{le=\"0.3\",code=\"200\",entrypoint=~\"$entrypoint\"}[$interval])) by (method) + \n sum(rate(traefik_entrypoint_request_duration_seconds_bucket{le=\"1.2\",code=\"200\",entrypoint=~\"$entrypoint\"}[$interval])) by (method)) / 2 / \n sum(rate(traefik_entrypoint_request_duration_seconds_count{code=\"200\",entrypoint=~\"$entrypoint\"}[$interval])) by (method)\n",
+          "expr": "(sum(rate(traefik_entrypoint_request_duration_seconds_bucket{le=\"0.25\",code=\"200\",entrypoint=~\"$entrypoint\"}[$interval])) by (method) + \n sum(rate(traefik_entrypoint_request_duration_seconds_bucket{le=\"1\",code=\"200\",entrypoint=~\"$entrypoint\"}[$interval])) by (method)) / 2 / \n sum(rate(traefik_entrypoint_request_duration_seconds_count{code=\"200\",entrypoint=~\"$entrypoint\"}[$interval])) by (method)\n",
           "legendFormat": "{{method}}",
           "range": true,
           "refId": "A"
@@ -588,7 +588,7 @@
             "type": "prometheus",
             "uid": "victoriametrics"
           },
-          "description": "",
+          "description": "Доля запросов к сервису, не уложившихся в порог. Линия у нуля — порог соблюдается с запасом.",
           "fieldConfig": {
             "defaults": {
               "color": {
@@ -668,13 +668,13 @@
                 "uid": "victoriametrics"
               },
               "editorMode": "code",
-              "expr": "label_replace(\n  1 - (sum by (service)\n    (rate(traefik_service_request_duration_seconds_bucket{le=\"1.2\",service=~\"$service.*\"}[$interval])) / sum by (service) \n    (rate(traefik_service_request_duration_seconds_count{service=~\"$service.*\"}[$interval]))\n  ) > 0,\n  \"service\", \"$1\", \"service\", \"([^-]+-[^-]+).*\"\n)",
+              "expr": "label_replace(\n  1 - (sum by (service)\n    (rate(traefik_service_request_duration_seconds_bucket{le=\"1\",service=~\"$service.*\"}[$interval])) / sum by (service) \n    (rate(traefik_service_request_duration_seconds_count{service=~\"$service.*\"}[$interval]))\n  ),\n  \"service\", \"$1\", \"service\", \"([^-]+-[^-]+).*\"\n)",
               "legendFormat": "{{service}}",
               "range": true,
               "refId": "A"
             }
           ],
-          "title": "Services failing SLO of 1200ms",
+          "title": "Медленнее 1000ms",
           "type": "timeseries"
         },
         {
@@ -682,7 +682,7 @@
             "type": "prometheus",
             "uid": "victoriametrics"
           },
-          "description": "",
+          "description": "Доля запросов к сервису, не уложившихся в порог. Линия у нуля — порог соблюдается с запасом.",
           "fieldConfig": {
             "defaults": {
               "color": {
@@ -762,13 +762,13 @@
                 "uid": "victoriametrics"
               },
               "editorMode": "code",
-              "expr": "label_replace(\n  1 - (sum by (service)\n    (rate(traefik_service_request_duration_seconds_bucket{le=\"0.3\",service=~\"$service.*\"}[$interval])) / sum by (service) \n    (rate(traefik_service_request_duration_seconds_count{service=~\"$service.*\"}[$interval]))\n  ) > 0,\n  \"service\", \"$1\", \"service\", \"([^-]+-[^-]+).*\"\n)",
+              "expr": "label_replace(\n  1 - (sum by (service)\n    (rate(traefik_service_request_duration_seconds_bucket{le=\"0.25\",service=~\"$service.*\"}[$interval])) / sum by (service) \n    (rate(traefik_service_request_duration_seconds_count{service=~\"$service.*\"}[$interval]))\n  ),\n  \"service\", \"$1\", \"service\", \"([^-]+-[^-]+).*\"\n)",
               "legendFormat": "{{service}}",
               "range": true,
               "refId": "A"
             }
           ],
-          "title": "Services failing SLO of 300ms",
+          "title": "Медленнее 250ms",
           "type": "timeseries"
         }
       ],
