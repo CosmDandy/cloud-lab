@@ -1,76 +1,79 @@
 #!/usr/bin/env python3
 """
-Собирает для Happ ссылку с правилами маршрутизации.
+Добавляет домены в существующий профиль маршрутизации Happ.
 
 Часть сайтов не открывается именно через VPN: Cloudflare и подобные защиты
-встречают адреса дата-центров проверкой, которую браузер не проходит. Лечится
-это не на сервере — там запрос уже отдаёт 200, — а выводом такого домена из
-туннеля: он идёт с домашнего адреса, и вопросов к нему нет.
+встречают адреса дата-центров проверкой, которую браузер не проходит. На
+сервере чинить нечего — оттуда сайт отдаёт 200. Лечится выводом домена из
+туннеля: он идёт с домашнего адреса, к которому вопросов нет.
 
-Happ хранит правила отдельно от подписки и привязывает к ней, поэтому при
-смене серверов список исключений сохраняется. Ссылка ставится один раз.
+Скрипт не сочиняет профиль с нуля, а правит существующий: берёт ссылку
+happ://routing/add/…, добавляет домены в DirectSites и печатает новую.
+Так сохраняются все настройки — DNS, geo-файлы, порядок правил, — которые
+в самодельном профиле пришлось бы угадывать.
 
-    python3 happ-routing.py                    показать ссылку
-    python3 happ-routing.py --add example.com  добавить домен к списку
+    python3 happ-routing.py '<happ://routing/add/…>' hltv.org
+    python3 happ-routing.py '<ссылка>' hltv.org example.com --name 'Новое имя'
 """
 
 import base64
 import json
 import sys
 
-# Домены, которые ходят мимо туннеля. Каждый — с причиной: без неё через
-# полгода никто не вспомнит, можно ли убрать строку.
-DIRECT_SITES = [
-    "domain:hltv.org",  # Cloudflare challenge на адреса дата-центров, 21.09.2026
-]
-
-PROFILE = {
-    "Name": "KVT · исключения",
-    # true — в туннель идёт всё, кроме перечисленного ниже
-    "GlobalProxy": "true",
-    "RemoteDNSType": "DoH",
-    "RemoteDNSDomain": "https://cloudflare-dns.com/dns-query",
-    "DomesticDNSType": "UDP",
-    "DomesticDNSIP": "8.8.8.8",
-    "Geoipurl": "https://github.com/Loyalsoldier/v2ray-rules-dat/releases/latest/download/geoip.dat",
-    "Geositeurl": "https://github.com/Loyalsoldier/v2ray-rules-dat/releases/latest/download/geosite.dat",
-    "DirectSites": DIRECT_SITES,
-    "DirectIp": [],
-    "ProxySites": [],
-    "ProxyIp": [],
-    "BlockSites": [],
-    "BlockIp": [],
-    "DnsHosts": {},
-    "DomainStrategy": "IPIfNonMatch",
-    "FakeDNS": "false",
+# Домены и причины: без причины через полгода не вспомнить, можно ли убрать
+REASONS = {
+    "hltv.org": "Cloudflare challenge на адреса дата-центров, 21.09.2026",
 }
 
 
-def build(profile):
+def decode(link):
+    raw = link.split("/add/", 1)[1].strip()
+    raw += "=" * (-len(raw) % 4)
+    return json.loads(base64.b64decode(raw))
+
+
+def encode(profile):
+    # separators без пробелов и то же экранирование слэшей, что в оригинале:
+    # ссылка должна отличаться от исходной только содержимым, а не форматом
     raw = json.dumps(profile, ensure_ascii=False, separators=(",", ":"))
-    encoded = base64.b64encode(raw.encode("utf-8")).decode("ascii")
-    return raw, f"happ://routing/add/{encoded}"
+    return "happ://routing/add/" + base64.b64encode(raw.encode("utf-8")).decode("ascii")
 
 
 def main():
-    profile = dict(PROFILE)
-    if "--add" in sys.argv:
-        extra = sys.argv[sys.argv.index("--add") + 1]
-        site = extra if ":" in extra else f"domain:{extra}"
-        profile["DirectSites"] = [*DIRECT_SITES, site]
+    args = [a for a in sys.argv[1:] if not a.startswith("--")]
+    if len(args) < 2:
+        print(__doc__)
+        raise SystemExit(1)
 
-    raw, link = build(profile)
+    link, domains = args[0], args[1:]
+    profile = decode(link)
 
-    # Обратная проверка: ссылка бесполезна, если Happ не сможет её разобрать
-    decoded = json.loads(base64.b64decode(link.split("/add/", 1)[1]))
-    assert decoded == profile, "раскодированный профиль не совпал с исходным"
+    name = None
+    if "--name" in sys.argv:
+        name = sys.argv[sys.argv.index("--name") + 1]
 
-    print("Профиль:")
-    print(f"  мимо туннеля: {', '.join(profile['DirectSites'])}")
-    print("  остальное:    через VPN (GlobalProxy=true)")
-    print(f"  длина json:   {len(raw)} символов, ссылки {len(link)}")
-    print("\nСсылка — открыть на устройстве с установленным Happ:\n")
-    print(link)
+    direct = list(profile.get("DirectSites", []))
+    added = []
+    for d in domains:
+        entry = d if ":" in d or d.startswith("*") else f"domain:{d}"
+        if entry in direct:
+            continue
+        direct.append(entry)
+        added.append(entry)
+
+    profile["DirectSites"] = direct
+    if name:
+        profile["Name"] = name
+
+    print(f"профиль: {profile.get('Name')}")
+    print(f"порядок правил: {profile.get('RouteOrder', 'не задан')}")
+    print(f"добавлено в DirectSites: {', '.join(added) or 'ничего нового'}")
+    for d in domains:
+        if d in REASONS:
+            print(f"   {d}: {REASONS[d]}")
+    print(f"\nвсего мимо туннеля: {len(direct)} правил")
+    print("\nновая ссылка:\n")
+    print(encode(profile))
 
 
 if __name__ == "__main__":
