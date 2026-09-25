@@ -50,7 +50,7 @@ ssh root@<node> '
          net.core.rmem_max fs.file-max net.ipv4.tcp_notsent_lowat \
          net.core.rmem_default net.ipv4.tcp_slow_start_after_idle
   tc qdisc show dev eth0 | head -1'
-# bbr / fq / 67108864 / 2097152 / 131072 / 4194304 / 0
+# bbr / fq / 67108864 / 2097152 / 131072 / 16777216 / 0
 # и корневой qdisc — fq, а не pfifo_fast
 
 # Юнит, который вернёт fq после перезагрузки:
