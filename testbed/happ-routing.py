@@ -14,6 +14,10 @@ happ://routing/add/…, добавляет домены в DirectSites и печ
 
     python3 happ-routing.py '<happ://routing/add/…>' hltv.org
     python3 happ-routing.py '<ссылка>' hltv.org example.com --name 'Новое имя'
+    python3 happ-routing.py '<ссылка>' --incy
+
+--incy печатает тот же профиль для INCY: поля те же, но часть ключей
+написана иначе, а флаги — строками (docs.incy.cc/en/routing).
 """
 
 import base64
@@ -26,22 +30,50 @@ REASONS = {
 }
 
 
+# Ключ Happ → ключ INCY. Остальные совпадают.
+INCY_KEYS = {
+    "RemoteDNSIp": "RemoteDNSIP",
+    "DomesticDNSIp": "DomesticDNSIP",
+    "FakeDns": "FakeDNS",
+    "GeositeUrl": "Geositeurl",
+    "GeoipUrl": "Geoipurl",
+    "UseChunkFiles": "useChunkFiles",
+}
+# У INCY эти поля строковые: "true", "1700000000"
+INCY_STRINGS = ("GlobalProxy", "FakeDNS", "LastUpdated")
+
+
+def to_incy(profile):
+    out = {INCY_KEYS.get(k, k): v for k, v in profile.items()}
+    for k in INCY_STRINGS:
+        if isinstance(out.get(k), bool):
+            out[k] = "true" if out[k] else "false"
+        elif k in out:
+            out[k] = str(out[k])
+    return out
+
+
 def decode(link):
     raw = link.split("/add/", 1)[1].strip()
     raw += "=" * (-len(raw) % 4)
     return json.loads(base64.b64decode(raw))
 
 
-def encode(profile):
+def encode(profile, scheme="happ"):
     # separators без пробелов и то же экранирование слэшей, что в оригинале:
     # ссылка должна отличаться от исходной только содержимым, а не форматом
     raw = json.dumps(profile, ensure_ascii=False, separators=(",", ":"))
-    return "happ://routing/add/" + base64.b64encode(raw.encode("utf-8")).decode("ascii")
+    return f"{scheme}://routing/add/" + base64.b64encode(raw.encode("utf-8")).decode(
+        "ascii"
+    )
 
 
 def main():
+    incy = "--incy" in sys.argv
     args = [a for a in sys.argv[1:] if not a.startswith("--")]
-    if len(args) < 2:
+    if "--name" in sys.argv:
+        args.remove(sys.argv[sys.argv.index("--name") + 1])
+    if len(args) < (1 if incy else 2):
         print(__doc__)
         raise SystemExit(1)
 
@@ -73,7 +105,7 @@ def main():
             print(f"   {d}: {REASONS[d]}")
     print(f"\nвсего мимо туннеля: {len(direct)} правил")
     print("\nновая ссылка:\n")
-    print(encode(profile))
+    print(encode(to_incy(profile), "incy") if incy else encode(profile))
 
 
 if __name__ == "__main__":
