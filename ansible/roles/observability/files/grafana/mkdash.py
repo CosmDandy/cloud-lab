@@ -60,6 +60,51 @@ def row(pid, title, y):
             "gridPos": {"x": 0, "y": y, "w": 24, "h": 1}, "panels": []}
 
 
+# Client series carry only `peer` (an IP) and xray's own carry `user` (a panel
+# id). vpn_peer_user / vpn_user_info from the peer-users exporter put a name on
+# both. The `unless` branch keeps a series visible, nameless, when the lookup
+# has not seen it — a plain join would make it vanish from the graph.
+def named(expr):
+    return (f"({expr}) * on (peer) group_left (username) vpn_peer_user"
+            f" or (({expr}) unless on (peer) vpn_peer_user)")
+
+
+def named_user(expr):
+    return (f"({expr}) * on (user) group_left (username) vpn_user_info"
+            f" or (({expr}) unless on (user) vpn_user_info)")
+
+
+WHO = "{{username}} ({{peer}})"
+
+
+def table(pid, title, x, y, w, h, columns, desc=""):
+    """Instant queries merged into one row per label set; columns: (expr, header, unit)."""
+    return {
+        "id": pid, "type": "table", "title": title, "description": desc,
+        "datasource": DS,
+        "gridPos": {"x": x, "y": y, "w": w, "h": h},
+        "fieldConfig": {"defaults": {}, "overrides": [
+            {"matcher": {"id": "byName", "options": header},
+             "properties": [{"id": "unit", "value": unit}, {"id": "decimals", "value": 1}]}
+            for _, header, unit in columns
+        ]},
+        "options": {"showHeader": True, "sortBy": [{"displayName": columns[0][1], "desc": True}]},
+        "targets": [
+            {"datasource": DS, "expr": expr, "refId": chr(65 + i), "instant": True,
+             "range": False, "format": "table"}
+            for i, (expr, _, _) in enumerate(columns)
+        ],
+        "transformations": [
+            {"id": "merge", "options": {}},
+            {"id": "organize", "options": {
+                "excludeByName": {"Time": True},
+                "renameByName": {f"Value #{chr(65 + i)}": header
+                                 for i, (_, header, _) in enumerate(columns)},
+            }},
+        ],
+    }
+
+
 panels = []
 y = 0
 
@@ -84,6 +129,28 @@ panels += [
 ]
 y += 4
 
+# --- Кто сейчас ---------------------------------------------------------
+# One row per person and transport instead of fifty lines on a graph: the
+# question asked most often is "who is on, and is it bad for them".
+BY_WHO = "username, inbound"
+SENT = named("rate(vpn_client_tcp_sent_bytes_total[10m])")
+RETR = named("rate(vpn_client_tcp_retrans_bytes_total[10m])")
+ACTIVE = f"(sum by ({BY_WHO}) ({SENT}) > 1024)"
+panels.append(row(106, "Кто сейчас подключён", y)); y += 1
+panels += [
+    table(6, "Клиенты за последние 10 минут", 0, y, 24, 8, [
+        (f"sum by ({BY_WHO}) ({SENT}) * 8 and {ACTIVE}", "Отдача клиенту", "bps"),
+        (f"100 * sum by ({BY_WHO}) ({RETR}) / sum by ({BY_WHO}) ({SENT}) and {ACTIVE}",
+         "Потери", "percent"),
+        (f"max by ({BY_WHO}) ({named('vpn_client_tcp_rtt_ms')}) and {ACTIVE}", "RTT", "ms"),
+        (f"max by ({BY_WHO}) ({named('vpn_client_tcp_rtt_inflation')}) and {ACTIVE}",
+         "RTT к минимуму", "x"),
+    ], desc="Только TCP-транспорты: у Hysteria2 нет соединений, его клиенты — в разделе ниже. "
+            "Пустое имя — справочник ещё не видел этот адрес в логах. Потери до 5 % у "
+            "российских провайдеров — фон; RTT к минимуму выше 3 — очередь на пути."),
+]
+y += 8
+
 # --- Трафик -------------------------------------------------------------
 panels.append(row(101, "Трафик", y)); y += 1
 panels += [
@@ -92,9 +159,10 @@ panels += [
           unit="Bps", stack=True,
           desc="Счётчики самого xray. Видно, каким транспортом реально пользуются, а не какой настроен."),
     panel(11, "По пользователям", 12, y, 12, 8,
-          [('sum by (user) (rate(xray_user_traffic_bytes_total{direction="downlink"}[5m]))', "id {{user}}")],
+          [(named_user('sum by (user) (rate(xray_user_traffic_bytes_total{direction="downlink"}[5m]))'),
+            "{{username}}")],
           unit="Bps", stack=True,
-          desc="Ключ user — числовой id из панели, он же поле email в access.log."),
+          desc="Имя берётся из панели по числовому id (поле email в access.log)."),
 ]
 y += 8
 
@@ -102,20 +170,20 @@ y += 8
 panels.append(row(102, "Качество связи по клиентам", y)); y += 1
 panels += [
     panel(20, "Доля потерь", 0, y, 12, 8,
-          [("100 * rate(vpn_client_tcp_retrans_bytes_total[10m]) / rate(vpn_client_tcp_sent_bytes_total[10m])",
-            "{{peer}} · {{inbound}}")],
+          [(named("100 * rate(vpn_client_tcp_retrans_bytes_total[10m]) / rate(vpn_client_tcp_sent_bytes_total[10m])"),
+            WHO + " · {{inbound}}")],
           unit="percent",
           desc="Считается из счётчиков, а не берётся готовой с сокета: отношение на сокете накапливается за всю его жизнь и врёт."),
     panel(21, "RTT относительно минимума по тому же пути", 12, y, 12, 8,
-          [("vpn_client_tcp_rtt_inflation", "{{peer}} · {{inbound}}")],
+          [(named("vpn_client_tcp_rtt_inflation"), WHO + " · {{inbound}}")],
           desc="1 — путь свободен. 3 и выше — где-то по дороге заполняется очередь; это видно раньше, чем начнутся потери."),
     panel(22, "Повторы, оказавшиеся лишними", 0, y + 8, 12, 8,
-          [("100 * rate(vpn_client_tcp_spurious_packets_total[30m]) / rate(vpn_client_tcp_retrans_packets_total[30m])",
-            "{{peer}} · {{inbound}}")],
+          [(named("100 * rate(vpn_client_tcp_spurious_packets_total[30m]) / rate(vpn_client_tcp_retrans_packets_total[30m])"),
+            WHO + " · {{inbound}}")],
           unit="percent",
           desc="DSACK: пакет дошёл, а TCP счёл его потерянным. Высокая доля означает, что менять транспорт бесполезно — лечится настройками TCP."),
     panel(23, "Переупорядочивание", 12, y + 8, 12, 8,
-          [("vpn_client_tcp_reordering", "{{peer}} · {{inbound}}")],
+          [(named("vpn_client_tcp_reordering"), WHO + " · {{inbound}}")],
           desc="Оценка ядра, норма 3. Упирается в потолок tcp_max_reordering у клиентов с многопутёвым провайдером — алерта на это намеренно нет."),
 ]
 y += 16
@@ -124,12 +192,12 @@ y += 16
 panels.append(row(103, "Hysteria2 (eBPF)", y)); y += 1
 panels += [
     panel(30, "Датаграммы по клиентам", 0, y, 12, 8,
-          [("rate(hy2_rx_packets_total[5m])", "{{peer}} ← приём"),
-           ("rate(hy2_tx_packets_total[5m])", "{{peer}} → отдача")],
+          [(named("rate(hy2_rx_packets_total[5m])"), WHO + " ← приём"),
+           (named("rate(hy2_tx_packets_total[5m])"), WHO + " → отдача")],
           unit="pps",
           desc="Для UDP ядро не хранит состояния потока, поэтому данные снимаются пробами eBPF на udp_queue_rcv_one_skb и udp_send_skb."),
     panel(31, "Отброшенные датаграммы", 12, y, 12, 8,
-          [("rate(hy2_drops_total[5m])", "{{peer}} · {{reason}} · {{direction}}"),
+          [(named("rate(hy2_drops_total[5m])"), WHO + " · {{reason}} · {{direction}}"),
            ("rate(hy2_queue_drops_total[5m])", "очередь сокета, порт {{port}}")],
           unit="pps",
           desc="Причина приходит прямо из ядра: фильтр, отсутствие сокета, переполнение очереди. Пусто — значит нода не теряет ничего своего."),

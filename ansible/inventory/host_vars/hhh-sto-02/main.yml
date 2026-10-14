@@ -236,6 +236,9 @@ observability_logs_push_enabled: true
 # 11.09.2026, а отправлять их до сих пор было некуда.
 observability_alerting_enabled: true
 
+# Usernames next to client IPs in alerts and dashboards; token is gatus's.
+observability_peer_users_enabled: true
+
 
 observability_oidc_enabled: true
 observability_oidc_issuer: https://oidc.cosmdandy.dev

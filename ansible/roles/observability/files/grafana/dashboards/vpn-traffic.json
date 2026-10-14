@@ -300,13 +300,186 @@
       ]
     },
     {
+      "id": 106,
+      "type": "row",
+      "title": "Кто сейчас подключён",
+      "collapsed": false,
+      "gridPos": {
+        "x": 0,
+        "y": 5,
+        "w": 24,
+        "h": 1
+      },
+      "panels": []
+    },
+    {
+      "id": 6,
+      "type": "table",
+      "title": "Клиенты за последние 10 минут",
+      "description": "Только TCP-транспорты: у Hysteria2 нет соединений, его клиенты — в разделе ниже. Пустое имя — справочник ещё не видел этот адрес в логах. Потери до 5 % у российских провайдеров — фон; RTT к минимуму выше 3 — очередь на пути.",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "victoriametrics"
+      },
+      "gridPos": {
+        "x": 0,
+        "y": 6,
+        "w": 24,
+        "h": 8
+      },
+      "fieldConfig": {
+        "defaults": {},
+        "overrides": [
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "Отдача клиенту"
+            },
+            "properties": [
+              {
+                "id": "unit",
+                "value": "bps"
+              },
+              {
+                "id": "decimals",
+                "value": 1
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "Потери"
+            },
+            "properties": [
+              {
+                "id": "unit",
+                "value": "percent"
+              },
+              {
+                "id": "decimals",
+                "value": 1
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "RTT"
+            },
+            "properties": [
+              {
+                "id": "unit",
+                "value": "ms"
+              },
+              {
+                "id": "decimals",
+                "value": 1
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "RTT к минимуму"
+            },
+            "properties": [
+              {
+                "id": "unit",
+                "value": "x"
+              },
+              {
+                "id": "decimals",
+                "value": 1
+              }
+            ]
+          }
+        ]
+      },
+      "options": {
+        "showHeader": true,
+        "sortBy": [
+          {
+            "displayName": "Отдача клиенту",
+            "desc": true
+          }
+        ]
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "victoriametrics"
+          },
+          "expr": "sum by (username, inbound) ((rate(vpn_client_tcp_sent_bytes_total[10m])) * on (peer) group_left (username) vpn_peer_user or ((rate(vpn_client_tcp_sent_bytes_total[10m])) unless on (peer) vpn_peer_user)) * 8 and (sum by (username, inbound) ((rate(vpn_client_tcp_sent_bytes_total[10m])) * on (peer) group_left (username) vpn_peer_user or ((rate(vpn_client_tcp_sent_bytes_total[10m])) unless on (peer) vpn_peer_user)) > 1024)",
+          "refId": "A",
+          "instant": true,
+          "range": false,
+          "format": "table"
+        },
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "victoriametrics"
+          },
+          "expr": "100 * sum by (username, inbound) ((rate(vpn_client_tcp_retrans_bytes_total[10m])) * on (peer) group_left (username) vpn_peer_user or ((rate(vpn_client_tcp_retrans_bytes_total[10m])) unless on (peer) vpn_peer_user)) / sum by (username, inbound) ((rate(vpn_client_tcp_sent_bytes_total[10m])) * on (peer) group_left (username) vpn_peer_user or ((rate(vpn_client_tcp_sent_bytes_total[10m])) unless on (peer) vpn_peer_user)) and (sum by (username, inbound) ((rate(vpn_client_tcp_sent_bytes_total[10m])) * on (peer) group_left (username) vpn_peer_user or ((rate(vpn_client_tcp_sent_bytes_total[10m])) unless on (peer) vpn_peer_user)) > 1024)",
+          "refId": "B",
+          "instant": true,
+          "range": false,
+          "format": "table"
+        },
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "victoriametrics"
+          },
+          "expr": "max by (username, inbound) ((vpn_client_tcp_rtt_ms) * on (peer) group_left (username) vpn_peer_user or ((vpn_client_tcp_rtt_ms) unless on (peer) vpn_peer_user)) and (sum by (username, inbound) ((rate(vpn_client_tcp_sent_bytes_total[10m])) * on (peer) group_left (username) vpn_peer_user or ((rate(vpn_client_tcp_sent_bytes_total[10m])) unless on (peer) vpn_peer_user)) > 1024)",
+          "refId": "C",
+          "instant": true,
+          "range": false,
+          "format": "table"
+        },
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "victoriametrics"
+          },
+          "expr": "max by (username, inbound) ((vpn_client_tcp_rtt_inflation) * on (peer) group_left (username) vpn_peer_user or ((vpn_client_tcp_rtt_inflation) unless on (peer) vpn_peer_user)) and (sum by (username, inbound) ((rate(vpn_client_tcp_sent_bytes_total[10m])) * on (peer) group_left (username) vpn_peer_user or ((rate(vpn_client_tcp_sent_bytes_total[10m])) unless on (peer) vpn_peer_user)) > 1024)",
+          "refId": "D",
+          "instant": true,
+          "range": false,
+          "format": "table"
+        }
+      ],
+      "transformations": [
+        {
+          "id": "merge",
+          "options": {}
+        },
+        {
+          "id": "organize",
+          "options": {
+            "excludeByName": {
+              "Time": true
+            },
+            "renameByName": {
+              "Value #A": "Отдача клиенту",
+              "Value #B": "Потери",
+              "Value #C": "RTT",
+              "Value #D": "RTT к минимуму"
+            }
+          }
+        }
+      ]
+    },
+    {
       "id": 101,
       "type": "row",
       "title": "Трафик",
       "collapsed": false,
       "gridPos": {
         "x": 0,
-        "y": 5,
+        "y": 14,
         "w": 24,
         "h": 1
       },
@@ -323,7 +496,7 @@
       },
       "gridPos": {
         "x": 0,
-        "y": 6,
+        "y": 15,
         "w": 12,
         "h": 8
       },
@@ -375,14 +548,14 @@
       "id": 11,
       "type": "timeseries",
       "title": "По пользователям",
-      "description": "Ключ user — числовой id из панели, он же поле email в access.log.",
+      "description": "Имя берётся из панели по числовому id (поле email в access.log).",
       "datasource": {
         "type": "prometheus",
         "uid": "victoriametrics"
       },
       "gridPos": {
         "x": 12,
-        "y": 6,
+        "y": 15,
         "w": 12,
         "h": 8
       },
@@ -423,8 +596,8 @@
             "type": "prometheus",
             "uid": "victoriametrics"
           },
-          "expr": "sum by (user) (rate(xray_user_traffic_bytes_total{direction=\"downlink\"}[5m]))",
-          "legendFormat": "id {{user}}",
+          "expr": "(sum by (user) (rate(xray_user_traffic_bytes_total{direction=\"downlink\"}[5m]))) * on (user) group_left (username) vpn_user_info or ((sum by (user) (rate(xray_user_traffic_bytes_total{direction=\"downlink\"}[5m]))) unless on (user) vpn_user_info)",
+          "legendFormat": "{{username}}",
           "refId": "A",
           "range": true
         }
@@ -437,7 +610,7 @@
       "collapsed": false,
       "gridPos": {
         "x": 0,
-        "y": 14,
+        "y": 23,
         "w": 24,
         "h": 1
       },
@@ -454,7 +627,7 @@
       },
       "gridPos": {
         "x": 0,
-        "y": 15,
+        "y": 24,
         "w": 12,
         "h": 8
       },
@@ -491,8 +664,8 @@
             "type": "prometheus",
             "uid": "victoriametrics"
           },
-          "expr": "100 * rate(vpn_client_tcp_retrans_bytes_total[10m]) / rate(vpn_client_tcp_sent_bytes_total[10m])",
-          "legendFormat": "{{peer}} · {{inbound}}",
+          "expr": "(100 * rate(vpn_client_tcp_retrans_bytes_total[10m]) / rate(vpn_client_tcp_sent_bytes_total[10m])) * on (peer) group_left (username) vpn_peer_user or ((100 * rate(vpn_client_tcp_retrans_bytes_total[10m]) / rate(vpn_client_tcp_sent_bytes_total[10m])) unless on (peer) vpn_peer_user)",
+          "legendFormat": "{{username}} ({{peer}}) · {{inbound}}",
           "refId": "A",
           "range": true
         }
@@ -509,7 +682,7 @@
       },
       "gridPos": {
         "x": 12,
-        "y": 15,
+        "y": 24,
         "w": 12,
         "h": 8
       },
@@ -546,8 +719,8 @@
             "type": "prometheus",
             "uid": "victoriametrics"
           },
-          "expr": "vpn_client_tcp_rtt_inflation",
-          "legendFormat": "{{peer}} · {{inbound}}",
+          "expr": "(vpn_client_tcp_rtt_inflation) * on (peer) group_left (username) vpn_peer_user or ((vpn_client_tcp_rtt_inflation) unless on (peer) vpn_peer_user)",
+          "legendFormat": "{{username}} ({{peer}}) · {{inbound}}",
           "refId": "A",
           "range": true
         }
@@ -564,7 +737,7 @@
       },
       "gridPos": {
         "x": 0,
-        "y": 23,
+        "y": 32,
         "w": 12,
         "h": 8
       },
@@ -601,8 +774,8 @@
             "type": "prometheus",
             "uid": "victoriametrics"
           },
-          "expr": "100 * rate(vpn_client_tcp_spurious_packets_total[30m]) / rate(vpn_client_tcp_retrans_packets_total[30m])",
-          "legendFormat": "{{peer}} · {{inbound}}",
+          "expr": "(100 * rate(vpn_client_tcp_spurious_packets_total[30m]) / rate(vpn_client_tcp_retrans_packets_total[30m])) * on (peer) group_left (username) vpn_peer_user or ((100 * rate(vpn_client_tcp_spurious_packets_total[30m]) / rate(vpn_client_tcp_retrans_packets_total[30m])) unless on (peer) vpn_peer_user)",
+          "legendFormat": "{{username}} ({{peer}}) · {{inbound}}",
           "refId": "A",
           "range": true
         }
@@ -619,7 +792,7 @@
       },
       "gridPos": {
         "x": 12,
-        "y": 23,
+        "y": 32,
         "w": 12,
         "h": 8
       },
@@ -656,8 +829,8 @@
             "type": "prometheus",
             "uid": "victoriametrics"
           },
-          "expr": "vpn_client_tcp_reordering",
-          "legendFormat": "{{peer}} · {{inbound}}",
+          "expr": "(vpn_client_tcp_reordering) * on (peer) group_left (username) vpn_peer_user or ((vpn_client_tcp_reordering) unless on (peer) vpn_peer_user)",
+          "legendFormat": "{{username}} ({{peer}}) · {{inbound}}",
           "refId": "A",
           "range": true
         }
@@ -670,7 +843,7 @@
       "collapsed": false,
       "gridPos": {
         "x": 0,
-        "y": 31,
+        "y": 40,
         "w": 24,
         "h": 1
       },
@@ -687,7 +860,7 @@
       },
       "gridPos": {
         "x": 0,
-        "y": 32,
+        "y": 41,
         "w": 12,
         "h": 8
       },
@@ -724,8 +897,8 @@
             "type": "prometheus",
             "uid": "victoriametrics"
           },
-          "expr": "rate(hy2_rx_packets_total[5m])",
-          "legendFormat": "{{peer}} ← приём",
+          "expr": "(rate(hy2_rx_packets_total[5m])) * on (peer) group_left (username) vpn_peer_user or ((rate(hy2_rx_packets_total[5m])) unless on (peer) vpn_peer_user)",
+          "legendFormat": "{{username}} ({{peer}}) ← приём",
           "refId": "A",
           "range": true
         },
@@ -734,8 +907,8 @@
             "type": "prometheus",
             "uid": "victoriametrics"
           },
-          "expr": "rate(hy2_tx_packets_total[5m])",
-          "legendFormat": "{{peer}} → отдача",
+          "expr": "(rate(hy2_tx_packets_total[5m])) * on (peer) group_left (username) vpn_peer_user or ((rate(hy2_tx_packets_total[5m])) unless on (peer) vpn_peer_user)",
+          "legendFormat": "{{username}} ({{peer}}) → отдача",
           "refId": "A",
           "range": true
         }
@@ -752,7 +925,7 @@
       },
       "gridPos": {
         "x": 12,
-        "y": 32,
+        "y": 41,
         "w": 12,
         "h": 8
       },
@@ -789,8 +962,8 @@
             "type": "prometheus",
             "uid": "victoriametrics"
           },
-          "expr": "rate(hy2_drops_total[5m])",
-          "legendFormat": "{{peer}} · {{reason}} · {{direction}}",
+          "expr": "(rate(hy2_drops_total[5m])) * on (peer) group_left (username) vpn_peer_user or ((rate(hy2_drops_total[5m])) unless on (peer) vpn_peer_user)",
+          "legendFormat": "{{username}} ({{peer}}) · {{reason}} · {{direction}}",
           "refId": "A",
           "range": true
         },
@@ -813,7 +986,7 @@
       "collapsed": false,
       "gridPos": {
         "x": 0,
-        "y": 40,
+        "y": 49,
         "w": 24,
         "h": 1
       },
@@ -830,7 +1003,7 @@
       },
       "gridPos": {
         "x": 0,
-        "y": 41,
+        "y": 50,
         "w": 12,
         "h": 8
       },
@@ -895,7 +1068,7 @@
       },
       "gridPos": {
         "x": 12,
-        "y": 41,
+        "y": 50,
         "w": 12,
         "h": 8
       },
@@ -976,7 +1149,7 @@
       "collapsed": false,
       "gridPos": {
         "x": 0,
-        "y": 41,
+        "y": 50,
         "w": 24,
         "h": 1
       },
@@ -993,7 +1166,7 @@
       },
       "gridPos": {
         "x": 0,
-        "y": 42,
+        "y": 51,
         "w": 6,
         "h": 5
       },
@@ -1047,7 +1220,7 @@
       },
       "gridPos": {
         "x": 6,
-        "y": 42,
+        "y": 51,
         "w": 18,
         "h": 5
       },
@@ -1102,7 +1275,7 @@
       },
       "gridPos": {
         "x": 0,
-        "y": 47,
+        "y": 56,
         "w": 12,
         "h": 7
       },
@@ -1157,7 +1330,7 @@
       },
       "gridPos": {
         "x": 12,
-        "y": 47,
+        "y": 56,
         "w": 12,
         "h": 7
       },

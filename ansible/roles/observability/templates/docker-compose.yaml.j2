@@ -102,6 +102,24 @@ services:
       traefik.http.services.lokipush.loadbalancer.server.port: "3100"
 {% endif %}
 
+{% if observability_peer_users_enabled %}
+  # Stdlib-only script on a stock image: no build step, nothing to publish.
+  peer-users:
+    image: {{ observability_peer_users_image }}
+    container_name: peer-users
+    restart: unless-stopped
+    env_file:
+      - ./peer-users/.env
+    volumes:
+      - ./peer-users/peer_users.py:/app/peer_users.py:ro
+    command: ["python", "/app/peer_users.py"]
+    depends_on:
+      - loki
+      - victoriametrics
+    networks:
+      - monitoring
+
+{% endif %}
   promtail:
     image: {{ observability_promtail_image }}
     container_name: promtail

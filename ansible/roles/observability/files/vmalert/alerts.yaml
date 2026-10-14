@@ -112,16 +112,28 @@ groups:
       # 10 % на десятиминутном окне при заметном трафике. Ниже порог держать
       # смысла нет: 5 % ловились у половины российских клиентов в вечерний
       # час и ничего не говорили о том, что надо что-то делать.
+      #
+      # The username comes from vpn_peer_user (peer-users exporter). The second
+      # branch keeps the alert alive without it: a bare join would silently drop
+      # every client the moment the lookup is down or has not seen the IP yet.
       - alert: ClientHighRetransmit
         expr: >-
-          (100 * rate(vpn_client_tcp_retrans_bytes_total[10m])
-           / rate(vpn_client_tcp_sent_bytes_total[10m]) > 10)
-          and (rate(vpn_client_tcp_sent_bytes_total[10m]) > 65536)
+          (
+            (100 * rate(vpn_client_tcp_retrans_bytes_total[10m])
+             / rate(vpn_client_tcp_sent_bytes_total[10m]) > 10)
+            and (rate(vpn_client_tcp_sent_bytes_total[10m]) > 65536)
+          ) * on (peer) group_left (username) vpn_peer_user
+          or (
+            (100 * rate(vpn_client_tcp_retrans_bytes_total[10m])
+             / rate(vpn_client_tcp_sent_bytes_total[10m]) > 10)
+            and (rate(vpn_client_tcp_sent_bytes_total[10m]) > 65536)
+            unless on (peer) vpn_peer_user
+          )
         for: 20m
         labels:
           severity: warning
         annotations:
-          summary: "Client {{ $labels.peer }} losing {{ $value | printf \"%.1f\" }}% on {{ $labels.inbound }}"
+          summary: "Client {{ with $labels.username }}{{ . }} {{ end }}({{ $labels.peer }}) losing {{ $value | printf \"%.1f\" }}% on {{ $labels.inbound }}"
           description: >-
             Sustained for 20 minutes at over 64 KB/s. Check the same client on
             another inbound before blaming the node.
@@ -130,14 +142,21 @@ groups:
       # обычное колебание. Втрое ловилось постоянно и у всех.
       - alert: ClientRttInflated
         expr: >-
-          vpn_client_tcp_rtt_inflation > 4
-          and rate(vpn_client_tcp_sent_bytes_total[10m]) > 65536
+          (
+            vpn_client_tcp_rtt_inflation > 4
+            and rate(vpn_client_tcp_sent_bytes_total[10m]) > 65536
+          ) * on (peer) group_left (username) vpn_peer_user
+          or (
+            vpn_client_tcp_rtt_inflation > 4
+            and rate(vpn_client_tcp_sent_bytes_total[10m]) > 65536
+            unless on (peer) vpn_peer_user
+          )
         for: 20m
         labels:
           severity: warning
         annotations:
-          summary: "Client {{ $labels.peer }} RTT {{ $value | printf \"%.1f\" }}x above path minimum"
-          description: "Queue building up on the path to {{ $labels.peer }} via {{ $labels.inbound }}"
+          summary: "Client {{ with $labels.username }}{{ . }} {{ end }}({{ $labels.peer }}) RTT {{ $value | printf \"%.1f\" }}x above path minimum"
+          description: "Queue building up on the path to {{ with $labels.username }}{{ . }} {{ end }}({{ $labels.peer }}) via {{ $labels.inbound }}"
 
       # Клиент не может установить соединение. Порог поднят с 2 до 10 в
       # секунду: на 2 правило срабатывало по несколько раз в час на обычном

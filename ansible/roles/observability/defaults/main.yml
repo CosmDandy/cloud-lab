@@ -82,6 +82,16 @@ observability_panel_metrics_enabled: false
 observability_panel_metrics_user: "{{ panel_metrics_user | default('metrics') }}"
 observability_panel_metrics_password: "{{ panel_metrics_password | default('') }}"
 
+# Lookup metrics that name the panel user behind a client IP, so alerts and
+# dashboards show "Denis (95.24.175.40)" instead of a bare address. The
+# exporter reads xray access logs from Loki and usernames from the panel API;
+# the token defaults to subscription-page's — same host, and it can read
+# /users. Gatus's token cannot: the panel answers it 403 there.
+observability_peer_users_enabled: false
+observability_peer_users_image: python:3.12-alpine
+observability_panel_api_url: "https://{{ panel_domain | default('') }}/api"
+observability_panel_api_token: "{{ panel_subscription_api_token | default('') }}"
+
 # Вход в Grafana через Pocket ID. Клиент заводится в UI Pocket ID,
 # redirect URI: https://<observability_domain>/login/generic_oauth
 observability_oidc_enabled: false
