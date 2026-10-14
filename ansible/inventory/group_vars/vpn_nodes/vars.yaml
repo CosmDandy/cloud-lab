@@ -15,10 +15,14 @@ node_metrics_loki_url: https://vm.cosmdandy.dev/loki/api/v1/push
 # 443, 2054 (Vision), 2084 (gRPC), 2444 и 2446 (XHTTP) — tcp; 47821-47824 —
 # Hysteria2, плюс диапазон 47000-47100, который nft-таблица hyhop
 # заворачивает на 47824.
+#
+# 2056 — Vision без ML-DSA для sing-box (VLESS-Vision-NoPQ), поднят только на
+# hhh-sto-01. На остальных нодах слушателя нет, и порт отвечает RST.
 firewall_tcp_ports:
   - 22
   - 443
   - 2054
+  - 2056
   - 2084
   - 2444
   - 2446
