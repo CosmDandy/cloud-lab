@@ -45,6 +45,7 @@ INBOUNDS = {
     2444: "xhttp-stream",
     2446: "xhttp-packet",
     2054: "vision",
+    2056: "vision-nopq",
     2084: "grpc",
 }
 
