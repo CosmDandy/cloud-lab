@@ -389,3 +389,12 @@ sing-box получает только то, что у него работает
 Проверено 15.10.2026 со стенда: sing-box 1.14.2, 120-150 Мбит/с.
 
 XHTTP в sing-box нет вовсе, HY2-хосты в его подписку панель не генерирует.
+
+В шаблон SINGBOX встроен тот же роутинг, что в профиле Happ «Sigma Routing
+v4»: российское напрямую (домены `.ru/.su/.рф`, наборы SagerNet `category-ru`,
+`yandex`, `mailru`, `vk`, `category-gov-ru`, geoip `ru` от runetfreedom),
+адреса из `ru-blocked` и всё остальное — в туннель, реклама блокируется,
+прямые домены резолвит 77.88.8.8. Собирается `testbed/singbox-routing.py`
+из текущего шаблона. Двух списков Happ нет — у них нет sing-box-версии из
+доверенного источника: `antifilter-download-community` и
+`ru-available-only-inside`.
