@@ -55,8 +55,9 @@ DIRECT_SITES = [
 # fakeip a domain connection has no real IP, so IP rules only catch IP-literal
 # traffic, and resolving every unmatched domain first would add a DNS round trip
 # to each new site. Russian sites are caught by domain instead.
+MESH = ["100.64.0.0/10", "fd7a:115c:a1e0::/48"]
 RULES = [
-    {"ip_cidr": ["100.64.0.0/10", "fd7a:115c:a1e0::/48"], "outbound": "direct"},
+    {"ip_cidr": MESH, "outbound": "direct"},
     {"rule_set": ["geoip-ru-blocked"], "outbound": PROXY},
     {"domain_suffix": ["ru", "su", "xn--p1ai"], "outbound": "direct"},
     {"rule_set": DIRECT_SITES, "outbound": "direct"},
@@ -73,6 +74,13 @@ for s in cfg["dns"]["servers"]:
     if s["tag"] == "local":
         s.clear()
         s.update({"tag": "local", "type": "udp", "server": "77.88.8.8"})
+
+# Tailnet addresses must not enter the tun at all: the "direct" outbound binds
+# to the physical interface, so a packet for 100.x would leave via Wi-Fi
+# instead of tailscaled's own utun. Excluding the routes leaves them to it.
+for ib in cfg["inbounds"]:
+    if ib["type"] == "tun":
+        ib["route_exclude_address"] = MESH
 
 route = cfg["route"]
 base = [
