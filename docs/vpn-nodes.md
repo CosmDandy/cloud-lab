@@ -365,6 +365,30 @@ devcontainer выходит в интернет через туннель hhh-st
 обрывает ему соединение посреди шагов (15.10.2026 так оборвались и curl к
 API, и ssh).
 
+## Сайт-маскировка Reality и ML-DSA
+
+Инбаунд с `mldsa65Seed` работает, только пока сайт из `dest` отдаёт длинную
+цепочку сертификатов: подпись ML-DSA-65 (~3,3 КБ) должна в неё уместиться.
+Цепочки 2,8–3,1 КБ ломают инбаунд, от 4,1 КБ работает (xray 26.7.28).
+Симптом похож на бан, но им не является: TCP и ping в порядке, сервер шлёт
+FIN через ~12 мс после ClientHello, в логе xray
+`REALITY: processed invalid connection ... handshake did not complete`.
+
+16.10.2026 Google перешёл на короткие ECDSA-цепочки — сначала в Стокгольме,
+вечером и в Амстердаме, — и Vision (`www.googletagmanager.com`) с gRPC
+(`update.googleapis.com`) умерли на обеих нодах. 19.10 перенесены на
+`www.nvidia.com` (5029 Б) и `www.cisco.com` (4934 Б); XHTTP на
+`www.swisscom.ch` (5908 Б). Длина зависит от узла, на который попадает нода,
+поэтому мерить с каждой ноды:
+
+```bash
+openssl s_client -connect www.nvidia.com:443 -servername www.nvidia.com -showcerts </dev/null
+```
+
+Смена SNI меняет и `serverNames`/`dest` в профиле, и поле `sni` у хостов —
+оно задано в хостах явно. Клиенты подхватывают новый SNI при обновлении
+подписки.
+
 ## sing-box
 
 С нашими основными инбаундами sing-box не работает по двум независимым
