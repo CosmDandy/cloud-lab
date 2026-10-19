@@ -31,7 +31,7 @@
     group: "{{ panel_owner }}"
     mode: "0600"
   no_log: true
-  notify: Restart panel stack
+  register: panel_env_file
 
 - name: Render subscription environment file
   ansible.builtin.template:
@@ -41,7 +41,7 @@
     group: "{{ panel_owner }}"
     mode: "0600"
   no_log: true
-  notify: Restart panel stack
+  register: panel_subscription_env_file
 
 - name: Render compose file
   ansible.builtin.template:
@@ -50,14 +50,22 @@
     owner: "{{ panel_owner }}"
     group: "{{ panel_owner }}"
     mode: "0640"
-  notify: Restart panel stack
 
+# Один шаг вместо deploy + handler-рестарта. Раньше handler со
+# state: restarted срабатывал в конце плея и перезапускал весь стек вместе с
+# postgres — 19.10.2026 это случилось посреди миграций нового бэкенда, prisma
+# оставила миграцию в статусе failed, и панель ушла в цикл рестартов (P3009).
+# Изменения compose-файла compose пересоздаёт сам; правку env-файлов он не
+# видит, поэтому для неё — recreate: always.
 - name: Deploy stack
   community.docker.docker_compose_v2:
     project_src: "{{ panel_dir }}"
     state: present
     pull: missing
     remove_orphans: true
+    recreate: >-
+      {{ 'always' if panel_env_file is changed
+         or panel_subscription_env_file is changed else 'auto' }}
 
 # Токен выпускается в UI и в конфигурации не хранится: без него страница
 # подписок поднимется, но не покажет ни одной подписки.
