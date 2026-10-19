@@ -1,0 +1,5 @@
+---
+# 2056 — Vision без ML-DSA для sing-box (VLESS-Vision-NoPQ), поднят только
+# здесь. См. docs/vpn-nodes.md, раздел «sing-box».
+vpn_node_extra_tcp_ports:
+  - 2056
