@@ -405,9 +405,9 @@ openssl s_client -connect www.nvidia.com:443 -servername www.nvidia.com -showcer
   пользователи sing-box**.
 
 Поэтому для sing-box отдельный инбаунд `VLESS-Vision-NoPQ` (порт 2056): копия
-`VLESS-Vision` без `mldsa65Seed` и с `minClientVer`. Поднят только на
-hhh-sto-01, доступен сквадам tier-0 и tier-1. Его хост исключён из всех
-подписок, кроме SINGBOX, а все остальные VLESS-хосты исключены из SINGBOX —
+`VLESS-Vision` без `mldsa65Seed` и с `minClientVer`. Поднят на обеих нодах
+(AMS — с 19.10.2026), доступен сквадам tier-0 и tier-1. Его хосты исключены
+из всех подписок, кроме SINGBOX, а все остальные VLESS-хосты исключены из SINGBOX —
 sing-box получает только то, что у него работает. Шаблон SINGBOX `Default`
 переведён на формат 1.12+ (старый был фатален для sing-box 1.14).
 Проверено 15.10.2026 со стенда: sing-box 1.14.2, 120-150 Мбит/с.
