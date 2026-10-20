@@ -18,4 +18,12 @@ nodes = {
     ipv4_address = "91.190.155.237"
     country_code = "NO"
   }
+  "hhh-sto-03" = {
+    ipv4_address = "167.104.105.156"
+    country_code = "SE"
+  }
+  "hhh-sto-04" = {
+    ipv4_address = "167.104.105.157"
+    country_code = "SE"
+  }
 }
