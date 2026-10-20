@@ -19,6 +19,9 @@ firewall_tcp_ports:
   - 22
   - 443
   - 2054
+  # VLESS-Vision-NoPQ: the only inbound sing-box clients can use. It was open
+  # on the old nodes by hand only, so a run from the repo would have closed it.
+  - 2056
   - 2084
   - 2444
   - 2446
