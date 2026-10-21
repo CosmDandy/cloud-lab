@@ -26,6 +26,13 @@
     group: root
     mode: "0644"
 
+# NOTE: a fresh machine has no docker yet, so nothing has loaded the module
+# before the sysctl task below, and its net.netfilter.* keys do not exist.
+- name: Load nf_conntrack kernel module
+  community.general.modprobe:
+    name: nf_conntrack
+    state: present
+
 - name: Apply sysctl parameters
   ansible.posix.sysctl:
     name: "{{ item.key }}"

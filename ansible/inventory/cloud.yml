@@ -43,6 +43,16 @@ all:
           # host_vars control-plane. Ровно одна роль: base трогает sshd на
           # живой машине, а docker тут стоит и настроен не нами.
           derper_hostname: derp-sto.cosmdandy.dev
+        # A friend's node: remnanode plus AmneziaWG, which the Amnezia app
+        # installs over ssh into its own container. Its UDP port is published
+        # by docker and goes through DNAT -> forward, so the input-only
+        # firewall does not need it listed.
+        hhh-sto-03:
+          ansible_host: 167.104.105.156
+          country_code: "SE"
+        hhh-sto-04:
+          ansible_host: 167.104.105.157
+          country_code: "SE"
 
     # Control plane: headscale, headplane, traefik, OIDC, панель, наблюдаемость.
     # Адреса статические намеренно — динамический inventory-плагин вернул бы
