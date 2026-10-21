@@ -1,17 +1,17 @@
 {
   "uid": "vpn-traffic-quality",
   "title": "VPN: трафик и качество",
-  "description": "Трафик по инбаундам и пользователям, потери и RTT по каждому клиенту, Hysteria2 из eBPF, работа восстановления TCP.",
+  "description": "Кто подключён и как ему, трафик по транспортам и людям, недельная картина, Hysteria2 из eBPF, доступность.",
   "tags": [
     "vpn",
     "traffic"
   ],
   "timezone": "browser",
   "schemaVersion": 39,
-  "version": 1,
+  "version": 2,
   "refresh": "1m",
   "time": {
-    "from": "now-6h",
+    "from": "now-7d",
     "to": "now"
   },
   "editable": true,
@@ -32,8 +32,8 @@
     {
       "id": 1,
       "type": "stat",
-      "title": "Живых клиентов сейчас",
-      "description": "Уникальные адреса с установленными TCP-сессиями. HY2-клиенты сюда не попадают: у UDP нет соединений.",
+      "title": "Пользователей онлайн",
+      "description": "По данным панели, со всех нод и всех транспортов, включая Hysteria2.",
       "datasource": {
         "type": "prometheus",
         "uid": "victoriametrics"
@@ -68,6 +68,7 @@
           "values": false
         },
         "textMode": "auto",
+        "colorMode": "background",
         "graphMode": "area"
       },
       "targets": [
@@ -76,8 +77,8 @@
             "type": "prometheus",
             "uid": "victoriametrics"
           },
-          "expr": "count(count by (peer) (vpn_client_tcp_sockets > 0))",
-          "legendFormat": "клиентов",
+          "expr": "sum(remnawave_node_online_users)",
+          "legendFormat": "онлайн",
           "refId": "A",
           "range": true
         }
@@ -87,7 +88,7 @@
       "id": 2,
       "type": "stat",
       "title": "Трафик наружу",
-      "description": "",
+      "description": "Сумма исходящего трафика всех VPN-нод.",
       "datasource": {
         "type": "prometheus",
         "uid": "victoriametrics"
@@ -95,7 +96,7 @@
       "gridPos": {
         "x": 4,
         "y": 1,
-        "w": 5,
+        "w": 4,
         "h": 4
       },
       "fieldConfig": {
@@ -122,6 +123,7 @@
           "values": false
         },
         "textMode": "auto",
+        "colorMode": "background",
         "graphMode": "area"
       },
       "targets": [
@@ -130,7 +132,7 @@
             "type": "prometheus",
             "uid": "victoriametrics"
           },
-          "expr": "sum(rate(node_network_transmit_bytes_total{device!~\"lo|docker.*|veth.*|br-.*\",instance=~\"hhh-(sto|ams)-01\"}[5m]))",
+          "expr": "sum((rate(node_network_transmit_bytes_total{device!~\"lo|docker.*|veth.*|br-.*|amn.*|awg.*|wg.*\"}[5m])) and on (instance) xray_up)",
           "legendFormat": "исходящий",
           "refId": "A",
           "range": true
@@ -141,15 +143,15 @@
       "id": 3,
       "type": "stat",
       "title": "Худшая доля потерь",
-      "description": "По самому пострадавшему клиенту. Порог алерта — 10 %.",
+      "description": "Самый пострадавший клиент за 10 минут, среди тех, кому отдаётся больше 64 КиБ/с. Порог алерта — 10 %.",
       "datasource": {
         "type": "prometheus",
         "uid": "victoriametrics"
       },
       "gridPos": {
-        "x": 9,
+        "x": 8,
         "y": 1,
-        "w": 5,
+        "w": 4,
         "h": 4
       },
       "fieldConfig": {
@@ -161,9 +163,18 @@
               {
                 "color": "green",
                 "value": null
+              },
+              {
+                "color": "yellow",
+                "value": 5
+              },
+              {
+                "color": "red",
+                "value": 10
               }
             ]
-          }
+          },
+          "decimals": 1
         },
         "overrides": []
       },
@@ -176,6 +187,7 @@
           "values": false
         },
         "textMode": "auto",
+        "colorMode": "background",
         "graphMode": "area"
       },
       "targets": [
@@ -184,7 +196,7 @@
             "type": "prometheus",
             "uid": "victoriametrics"
           },
-          "expr": "max(100 * rate(vpn_client_tcp_retrans_bytes_total[10m]) / rate(vpn_client_tcp_sent_bytes_total[10m]))",
+          "expr": "max(100 * sum by (username, inbound) ((rate(vpn_client_tcp_retrans_bytes_total[10m])) * on (peer) group_left (username) vpn_peer_user or ((rate(vpn_client_tcp_retrans_bytes_total[10m])) unless on (peer) vpn_peer_user)) / sum by (username, inbound) ((rate(vpn_client_tcp_sent_bytes_total[10m])) * on (peer) group_left (username) vpn_peer_user or ((rate(vpn_client_tcp_sent_bytes_total[10m])) unless on (peer) vpn_peer_user)) and (sum by (username, inbound) ((rate(vpn_client_tcp_sent_bytes_total[10m])) * on (peer) group_left (username) vpn_peer_user or ((rate(vpn_client_tcp_sent_bytes_total[10m])) unless on (peer) vpn_peer_user)) > 65536))",
           "legendFormat": "потери",
           "refId": "A",
           "range": true
@@ -201,9 +213,9 @@
         "uid": "victoriametrics"
       },
       "gridPos": {
-        "x": 14,
+        "x": 12,
         "y": 1,
-        "w": 5,
+        "w": 4,
         "h": 4
       },
       "fieldConfig": {
@@ -215,6 +227,10 @@
               {
                 "color": "green",
                 "value": null
+              },
+              {
+                "color": "red",
+                "value": 10
               }
             ]
           }
@@ -230,6 +246,7 @@
           "values": false
         },
         "textMode": "auto",
+        "colorMode": "background",
         "graphMode": "area"
       },
       "targets": [
@@ -238,7 +255,7 @@
             "type": "prometheus",
             "uid": "victoriametrics"
           },
-          "expr": "sum(rate(node_netstat_TcpExt_TCPSynRetrans[10m]))",
+          "expr": "sum((rate(node_netstat_TcpExt_TCPSynRetrans[10m])) and on (instance) xray_up)",
           "legendFormat": "SYN/с",
           "refId": "A",
           "range": true
@@ -248,16 +265,16 @@
     {
       "id": 5,
       "type": "stat",
-      "title": "Сборщики живы",
-      "description": "eBPF по Hysteria2 и экспорт счётчиков xray, по одному на ноду.",
+      "title": "Сборщиков не работает",
+      "description": "Экспорт счётчиков xray и eBPF по Hysteria2 на каждой ноде панели. Нода, которая перестала присылать метрики совсем, тоже считается. 0 — все живы.",
       "datasource": {
         "type": "prometheus",
         "uid": "victoriametrics"
       },
       "gridPos": {
-        "x": 19,
+        "x": 16,
         "y": 1,
-        "w": 5,
+        "w": 4,
         "h": 4
       },
       "fieldConfig": {
@@ -269,6 +286,10 @@
               {
                 "color": "green",
                 "value": null
+              },
+              {
+                "color": "red",
+                "value": 1
               }
             ]
           }
@@ -284,7 +305,8 @@
           "values": false
         },
         "textMode": "auto",
-        "graphMode": "area"
+        "colorMode": "background",
+        "graphMode": "none"
       },
       "targets": [
         {
@@ -292,10 +314,71 @@
             "type": "prometheus",
             "uid": "victoriametrics"
           },
-          "expr": "sum(hy2_collector_up) + sum(xray_up)",
-          "legendFormat": "из 4",
+          "expr": "(count(remnawave_node_basic_info) - (count(xray_up == 1) or vector(0))) + (count(remnawave_node_basic_info) - (count(hy2_collector_up == 1) or vector(0)))",
+          "legendFormat": "сборщиков",
           "refId": "A",
-          "range": true
+          "range": false,
+          "instant": true
+        }
+      ]
+    },
+    {
+      "id": 7,
+      "type": "stat",
+      "title": "Алертов горит",
+      "description": "",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "victoriametrics"
+      },
+      "gridPos": {
+        "x": 20,
+        "y": 1,
+        "w": 4,
+        "h": 4
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              },
+              {
+                "color": "red",
+                "value": 1
+              }
+            ]
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        },
+        "textMode": "auto",
+        "colorMode": "background",
+        "graphMode": "none"
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "victoriametrics"
+          },
+          "expr": "count(ALERTS{alertstate=\"firing\"}) or vector(0)",
+          "legendFormat": "алертов",
+          "refId": "A",
+          "range": false,
+          "instant": true
         }
       ]
     },
@@ -316,7 +399,7 @@
       "id": 6,
       "type": "table",
       "title": "Клиенты за последние 10 минут",
-      "description": "Только TCP-транспорты: у Hysteria2 нет соединений, его клиенты — в разделе ниже. Пустое имя — справочник ещё не видел этот адрес в логах. Потери до 5 % у российских провайдеров — фон; RTT к минимуму выше 3 — очередь на пути.",
+      "description": "TCP-транспорты, клиенты с отдачей больше 64 КиБ/с. Hysteria2 — в разделе ниже. Несколько имён через запятую — общий адрес (офис, NAT), а не несколько пострадавших. Потери до 5 % у российских провайдеров — фон.",
       "datasource": {
         "type": "prometheus",
         "uid": "victoriametrics"
@@ -377,22 +460,6 @@
                 "value": 1
               }
             ]
-          },
-          {
-            "matcher": {
-              "id": "byName",
-              "options": "RTT к минимуму"
-            },
-            "properties": [
-              {
-                "id": "unit",
-                "value": "x"
-              },
-              {
-                "id": "decimals",
-                "value": 1
-              }
-            ]
           }
         ]
       },
@@ -411,7 +478,7 @@
             "type": "prometheus",
             "uid": "victoriametrics"
           },
-          "expr": "sum by (username, inbound) ((rate(vpn_client_tcp_sent_bytes_total[10m])) * on (peer) group_left (username) vpn_peer_user or ((rate(vpn_client_tcp_sent_bytes_total[10m])) unless on (peer) vpn_peer_user)) * 8 and (sum by (username, inbound) ((rate(vpn_client_tcp_sent_bytes_total[10m])) * on (peer) group_left (username) vpn_peer_user or ((rate(vpn_client_tcp_sent_bytes_total[10m])) unless on (peer) vpn_peer_user)) > 1024)",
+          "expr": "sum by (username, inbound) ((rate(vpn_client_tcp_sent_bytes_total[10m])) * on (peer) group_left (username) vpn_peer_user or ((rate(vpn_client_tcp_sent_bytes_total[10m])) unless on (peer) vpn_peer_user)) * 8 and (sum by (username, inbound) ((rate(vpn_client_tcp_sent_bytes_total[10m])) * on (peer) group_left (username) vpn_peer_user or ((rate(vpn_client_tcp_sent_bytes_total[10m])) unless on (peer) vpn_peer_user)) > 65536)",
           "refId": "A",
           "instant": true,
           "range": false,
@@ -422,7 +489,7 @@
             "type": "prometheus",
             "uid": "victoriametrics"
           },
-          "expr": "100 * sum by (username, inbound) ((rate(vpn_client_tcp_retrans_bytes_total[10m])) * on (peer) group_left (username) vpn_peer_user or ((rate(vpn_client_tcp_retrans_bytes_total[10m])) unless on (peer) vpn_peer_user)) / sum by (username, inbound) ((rate(vpn_client_tcp_sent_bytes_total[10m])) * on (peer) group_left (username) vpn_peer_user or ((rate(vpn_client_tcp_sent_bytes_total[10m])) unless on (peer) vpn_peer_user)) and (sum by (username, inbound) ((rate(vpn_client_tcp_sent_bytes_total[10m])) * on (peer) group_left (username) vpn_peer_user or ((rate(vpn_client_tcp_sent_bytes_total[10m])) unless on (peer) vpn_peer_user)) > 1024)",
+          "expr": "100 * sum by (username, inbound) ((rate(vpn_client_tcp_retrans_bytes_total[10m])) * on (peer) group_left (username) vpn_peer_user or ((rate(vpn_client_tcp_retrans_bytes_total[10m])) unless on (peer) vpn_peer_user)) / sum by (username, inbound) ((rate(vpn_client_tcp_sent_bytes_total[10m])) * on (peer) group_left (username) vpn_peer_user or ((rate(vpn_client_tcp_sent_bytes_total[10m])) unless on (peer) vpn_peer_user)) and (sum by (username, inbound) ((rate(vpn_client_tcp_sent_bytes_total[10m])) * on (peer) group_left (username) vpn_peer_user or ((rate(vpn_client_tcp_sent_bytes_total[10m])) unless on (peer) vpn_peer_user)) > 65536)",
           "refId": "B",
           "instant": true,
           "range": false,
@@ -433,19 +500,8 @@
             "type": "prometheus",
             "uid": "victoriametrics"
           },
-          "expr": "max by (username, inbound) ((vpn_client_tcp_rtt_ms) * on (peer) group_left (username) vpn_peer_user or ((vpn_client_tcp_rtt_ms) unless on (peer) vpn_peer_user)) and (sum by (username, inbound) ((rate(vpn_client_tcp_sent_bytes_total[10m])) * on (peer) group_left (username) vpn_peer_user or ((rate(vpn_client_tcp_sent_bytes_total[10m])) unless on (peer) vpn_peer_user)) > 1024)",
+          "expr": "max by (username, inbound) ((vpn_client_tcp_rtt_ms) * on (peer) group_left (username) vpn_peer_user or ((vpn_client_tcp_rtt_ms) unless on (peer) vpn_peer_user)) and (sum by (username, inbound) ((rate(vpn_client_tcp_sent_bytes_total[10m])) * on (peer) group_left (username) vpn_peer_user or ((rate(vpn_client_tcp_sent_bytes_total[10m])) unless on (peer) vpn_peer_user)) > 65536)",
           "refId": "C",
-          "instant": true,
-          "range": false,
-          "format": "table"
-        },
-        {
-          "datasource": {
-            "type": "prometheus",
-            "uid": "victoriametrics"
-          },
-          "expr": "max by (username, inbound) ((vpn_client_tcp_rtt_inflation) * on (peer) group_left (username) vpn_peer_user or ((vpn_client_tcp_rtt_inflation) unless on (peer) vpn_peer_user)) and (sum by (username, inbound) ((rate(vpn_client_tcp_sent_bytes_total[10m])) * on (peer) group_left (username) vpn_peer_user or ((rate(vpn_client_tcp_sent_bytes_total[10m])) unless on (peer) vpn_peer_user)) > 1024)",
-          "refId": "D",
           "instant": true,
           "range": false,
           "format": "table"
@@ -465,8 +521,7 @@
             "renameByName": {
               "Value #A": "Отдача клиенту",
               "Value #B": "Потери",
-              "Value #C": "RTT",
-              "Value #D": "RTT к минимуму"
+              "Value #C": "RTT"
             }
           }
         }
@@ -488,8 +543,8 @@
     {
       "id": 10,
       "type": "timeseries",
-      "title": "По инбаундам, отдача клиентам",
-      "description": "Счётчики самого xray. Видно, каким транспортом реально пользуются, а не какой настроен.",
+      "title": "По транспортам, отдача клиентам",
+      "description": "Счётчики самого xray, копии инбаундов выделенных нод сложены с общими.",
       "datasource": {
         "type": "prometheus",
         "uid": "victoriametrics"
@@ -497,7 +552,7 @@
       "gridPos": {
         "x": 0,
         "y": 15,
-        "w": 12,
+        "w": 8,
         "h": 8
       },
       "fieldConfig": {
@@ -507,7 +562,7 @@
             "lineWidth": 1,
             "fillOpacity": 18,
             "showPoints": "never",
-            "spanNulls": true,
+            "spanNulls": 300000,
             "stacking": {
               "mode": "normal",
               "group": "A"
@@ -522,7 +577,7 @@
           "placement": "bottom",
           "showLegend": true,
           "calcs": [
-            "lastNotNull",
+            "mean",
             "max"
           ]
         },
@@ -537,8 +592,67 @@
             "type": "prometheus",
             "uid": "victoriametrics"
           },
-          "expr": "sum by (tag) (rate(xray_inbound_traffic_bytes_total{direction=\"downlink\"}[5m]))",
+          "expr": "sum by (tag) (label_replace(rate(xray_inbound_traffic_bytes_total{direction=\"downlink\",tag!=\"REMNAWAVE_API_INBOUND\"}[$__rate_interval]), \"tag\", \"$1\", \"tag\", \"(.*?)(-STO[0-9]+)?\"))",
           "legendFormat": "{{tag}}",
+          "refId": "A",
+          "range": true
+        }
+      ]
+    },
+    {
+      "id": 12,
+      "type": "timeseries",
+      "title": "По нодам, отдача клиентам",
+      "description": "",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "victoriametrics"
+      },
+      "gridPos": {
+        "x": 8,
+        "y": 15,
+        "w": 8,
+        "h": 8
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "Bps",
+          "custom": {
+            "lineWidth": 1,
+            "fillOpacity": 18,
+            "showPoints": "never",
+            "spanNulls": 300000,
+            "stacking": {
+              "mode": "normal",
+              "group": "A"
+            }
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "legend": {
+          "displayMode": "table",
+          "placement": "bottom",
+          "showLegend": true,
+          "calcs": [
+            "mean",
+            "max"
+          ]
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "desc"
+        }
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "victoriametrics"
+          },
+          "expr": "sum by (instance) (rate(xray_inbound_traffic_bytes_total{direction=\"downlink\"}[$__rate_interval]))",
+          "legendFormat": "{{instance}}",
           "refId": "A",
           "range": true
         }
@@ -554,9 +668,9 @@
         "uid": "victoriametrics"
       },
       "gridPos": {
-        "x": 12,
+        "x": 16,
         "y": 15,
-        "w": 12,
+        "w": 8,
         "h": 8
       },
       "fieldConfig": {
@@ -566,7 +680,7 @@
             "lineWidth": 1,
             "fillOpacity": 18,
             "showPoints": "never",
-            "spanNulls": true,
+            "spanNulls": 300000,
             "stacking": {
               "mode": "normal",
               "group": "A"
@@ -581,7 +695,7 @@
           "placement": "bottom",
           "showLegend": true,
           "calcs": [
-            "lastNotNull",
+            "mean",
             "max"
           ]
         },
@@ -596,7 +710,7 @@
             "type": "prometheus",
             "uid": "victoriametrics"
           },
-          "expr": "(sum by (user) (rate(xray_user_traffic_bytes_total{direction=\"downlink\"}[5m]))) * on (user) group_left (username) vpn_user_info or ((sum by (user) (rate(xray_user_traffic_bytes_total{direction=\"downlink\"}[5m]))) unless on (user) vpn_user_info)",
+          "expr": "(sum by (user) (rate(xray_user_traffic_bytes_total{direction=\"downlink\"}[$__rate_interval])) > 0) * on (user) group_left (username) vpn_user_info or ((sum by (user) (rate(xray_user_traffic_bytes_total{direction=\"downlink\"}[$__rate_interval])) > 0) unless on (user) vpn_user_info)",
           "legendFormat": "{{username}}",
           "refId": "A",
           "range": true
@@ -604,9 +718,9 @@
       ]
     },
     {
-      "id": 102,
+      "id": 107,
       "type": "row",
-      "title": "Качество связи по клиентам",
+      "title": "По дням и по людям",
       "collapsed": false,
       "gridPos": {
         "x": 0,
@@ -617,10 +731,10 @@
       "panels": []
     },
     {
-      "id": 20,
+      "id": 13,
       "type": "timeseries",
-      "title": "Доля потерь",
-      "description": "Считается из счётчиков, а не берётся готовой с сокета: отношение на сокете накапливается за всю его жизнь и врёт.",
+      "title": "Трафик за сутки",
+      "description": "Отдача и приём вместе, все ноды и транспорты, включая Hysteria2.",
       "datasource": {
         "type": "prometheus",
         "uid": "victoriametrics"
@@ -633,12 +747,17 @@
       },
       "fieldConfig": {
         "defaults": {
-          "unit": "percent",
+          "unit": "bytes",
           "custom": {
             "lineWidth": 1,
-            "fillOpacity": 8,
+            "fillOpacity": 80,
             "showPoints": "never",
-            "spanNulls": true
+            "spanNulls": 300000,
+            "drawStyle": "bars",
+            "stacking": {
+              "mode": "normal",
+              "group": "A"
+            }
           }
         },
         "overrides": []
@@ -649,7 +768,64 @@
           "placement": "bottom",
           "showLegend": true,
           "calcs": [
-            "lastNotNull",
+            "sum"
+          ]
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "desc"
+        }
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "victoriametrics"
+          },
+          "expr": "(sum by (user) (increase(xray_user_traffic_bytes_total[1d])) > 1e6) * on (user) group_left (username) vpn_user_info or ((sum by (user) (increase(xray_user_traffic_bytes_total[1d])) > 1e6) unless on (user) vpn_user_info)",
+          "legendFormat": "{{username}}",
+          "refId": "A",
+          "range": true,
+          "interval": "1d"
+        }
+      ]
+    },
+    {
+      "id": 14,
+      "type": "timeseries",
+      "title": "Потери за сутки",
+      "description": "Доля повторно отправленных байтов за сутки, TCP-транспорты, только при отдаче больше 50 МБ за день. Это главный ответ на «было ли плохо на этой неделе».",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "victoriametrics"
+      },
+      "gridPos": {
+        "x": 12,
+        "y": 24,
+        "w": 12,
+        "h": 8
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "percent",
+          "custom": {
+            "lineWidth": 1,
+            "fillOpacity": 80,
+            "showPoints": "never",
+            "spanNulls": 300000,
+            "drawStyle": "bars"
+          },
+          "decimals": 1
+        },
+        "overrides": []
+      },
+      "options": {
+        "legend": {
+          "displayMode": "table",
+          "placement": "bottom",
+          "showLegend": true,
+          "calcs": [
+            "mean",
             "max"
           ]
         },
@@ -664,36 +840,107 @@
             "type": "prometheus",
             "uid": "victoriametrics"
           },
-          "expr": "(100 * rate(vpn_client_tcp_retrans_bytes_total[10m]) / rate(vpn_client_tcp_sent_bytes_total[10m])) * on (peer) group_left (username) vpn_peer_user or ((100 * rate(vpn_client_tcp_retrans_bytes_total[10m]) / rate(vpn_client_tcp_sent_bytes_total[10m])) unless on (peer) vpn_peer_user)",
-          "legendFormat": "{{username}} ({{peer}}) · {{inbound}}",
+          "expr": "100 * sum by (username) ((increase(vpn_client_tcp_retrans_bytes_total[1d])) * on (peer) group_left (username) vpn_peer_user or ((increase(vpn_client_tcp_retrans_bytes_total[1d])) unless on (peer) vpn_peer_user)) / sum by (username) ((increase(vpn_client_tcp_sent_bytes_total[1d])) * on (peer) group_left (username) vpn_peer_user or ((increase(vpn_client_tcp_sent_bytes_total[1d])) unless on (peer) vpn_peer_user)) and sum by (username) ((increase(vpn_client_tcp_sent_bytes_total[1d])) * on (peer) group_left (username) vpn_peer_user or ((increase(vpn_client_tcp_sent_bytes_total[1d])) unless on (peer) vpn_peer_user)) > 5e7",
+          "legendFormat": "{{username}}",
           "refId": "A",
-          "range": true
+          "range": true,
+          "interval": "1d"
+        }
+      ]
+    },
+    {
+      "id": 102,
+      "type": "row",
+      "title": "Качество связи по клиентам",
+      "collapsed": false,
+      "gridPos": {
+        "x": 0,
+        "y": 32,
+        "w": 24,
+        "h": 1
+      },
+      "panels": []
+    },
+    {
+      "id": 20,
+      "type": "timeseries",
+      "title": "Доля потерь",
+      "description": "Повторно отправленные байты к отправленным, по человеку и транспорту, только при отдаче больше 64 КиБ/с. Окно не короче 5 минут.",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "victoriametrics"
+      },
+      "gridPos": {
+        "x": 0,
+        "y": 33,
+        "w": 12,
+        "h": 8
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "percent",
+          "custom": {
+            "lineWidth": 1,
+            "fillOpacity": 8,
+            "showPoints": "never",
+            "spanNulls": 300000
+          },
+          "decimals": 1
+        },
+        "overrides": []
+      },
+      "options": {
+        "legend": {
+          "displayMode": "table",
+          "placement": "bottom",
+          "showLegend": true,
+          "calcs": [
+            "mean",
+            "max"
+          ]
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "desc"
+        }
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "victoriametrics"
+          },
+          "expr": "100 * sum by (username, inbound) ((rate(vpn_client_tcp_retrans_bytes_total[$__rate_interval])) * on (peer) group_left (username) vpn_peer_user or ((rate(vpn_client_tcp_retrans_bytes_total[$__rate_interval])) unless on (peer) vpn_peer_user)) / sum by (username, inbound) ((rate(vpn_client_tcp_sent_bytes_total[$__rate_interval])) * on (peer) group_left (username) vpn_peer_user or ((rate(vpn_client_tcp_sent_bytes_total[$__rate_interval])) unless on (peer) vpn_peer_user)) and (sum by (username, inbound) ((rate(vpn_client_tcp_sent_bytes_total[$__rate_interval])) * on (peer) group_left (username) vpn_peer_user or ((rate(vpn_client_tcp_sent_bytes_total[$__rate_interval])) unless on (peer) vpn_peer_user)) > 65536)",
+          "legendFormat": "{{username}} · {{inbound}}",
+          "refId": "A",
+          "range": true,
+          "interval": "5m"
         }
       ]
     },
     {
       "id": 21,
       "type": "timeseries",
-      "title": "RTT относительно минимума по тому же пути",
-      "description": "1 — путь свободен. 3 и выше — где-то по дороге заполняется очередь; это видно раньше, чем начнутся потери.",
+      "title": "RTT",
+      "description": "Сглаженный RTT ядра от ноды до клиента, худший сокет. Рост без роста потерь — очередь на пути.",
       "datasource": {
         "type": "prometheus",
         "uid": "victoriametrics"
       },
       "gridPos": {
         "x": 12,
-        "y": 24,
+        "y": 33,
         "w": 12,
         "h": 8
       },
       "fieldConfig": {
         "defaults": {
-          "unit": "short",
+          "unit": "ms",
           "custom": {
             "lineWidth": 1,
             "fillOpacity": 8,
             "showPoints": "never",
-            "spanNulls": true
+            "spanNulls": 300000
           }
         },
         "overrides": []
@@ -704,7 +951,7 @@
           "placement": "bottom",
           "showLegend": true,
           "calcs": [
-            "lastNotNull",
+            "mean",
             "max"
           ]
         },
@@ -719,120 +966,11 @@
             "type": "prometheus",
             "uid": "victoriametrics"
           },
-          "expr": "(vpn_client_tcp_rtt_inflation) * on (peer) group_left (username) vpn_peer_user or ((vpn_client_tcp_rtt_inflation) unless on (peer) vpn_peer_user)",
-          "legendFormat": "{{username}} ({{peer}}) · {{inbound}}",
+          "expr": "max by (username, inbound) ((vpn_client_tcp_rtt_ms) * on (peer) group_left (username) vpn_peer_user or ((vpn_client_tcp_rtt_ms) unless on (peer) vpn_peer_user)) and (sum by (username, inbound) ((rate(vpn_client_tcp_sent_bytes_total[$__rate_interval])) * on (peer) group_left (username) vpn_peer_user or ((rate(vpn_client_tcp_sent_bytes_total[$__rate_interval])) unless on (peer) vpn_peer_user)) > 65536)",
+          "legendFormat": "{{username}} · {{inbound}}",
           "refId": "A",
-          "range": true
-        }
-      ]
-    },
-    {
-      "id": 22,
-      "type": "timeseries",
-      "title": "Повторы, оказавшиеся лишними",
-      "description": "DSACK: пакет дошёл, а TCP счёл его потерянным. Высокая доля означает, что менять транспорт бесполезно — лечится настройками TCP.",
-      "datasource": {
-        "type": "prometheus",
-        "uid": "victoriametrics"
-      },
-      "gridPos": {
-        "x": 0,
-        "y": 32,
-        "w": 12,
-        "h": 8
-      },
-      "fieldConfig": {
-        "defaults": {
-          "unit": "percent",
-          "custom": {
-            "lineWidth": 1,
-            "fillOpacity": 8,
-            "showPoints": "never",
-            "spanNulls": true
-          }
-        },
-        "overrides": []
-      },
-      "options": {
-        "legend": {
-          "displayMode": "table",
-          "placement": "bottom",
-          "showLegend": true,
-          "calcs": [
-            "lastNotNull",
-            "max"
-          ]
-        },
-        "tooltip": {
-          "mode": "multi",
-          "sort": "desc"
-        }
-      },
-      "targets": [
-        {
-          "datasource": {
-            "type": "prometheus",
-            "uid": "victoriametrics"
-          },
-          "expr": "(100 * rate(vpn_client_tcp_spurious_packets_total[30m]) / rate(vpn_client_tcp_retrans_packets_total[30m])) * on (peer) group_left (username) vpn_peer_user or ((100 * rate(vpn_client_tcp_spurious_packets_total[30m]) / rate(vpn_client_tcp_retrans_packets_total[30m])) unless on (peer) vpn_peer_user)",
-          "legendFormat": "{{username}} ({{peer}}) · {{inbound}}",
-          "refId": "A",
-          "range": true
-        }
-      ]
-    },
-    {
-      "id": 23,
-      "type": "timeseries",
-      "title": "Переупорядочивание",
-      "description": "Оценка ядра, норма 3. Упирается в потолок tcp_max_reordering у клиентов с многопутёвым провайдером — алерта на это намеренно нет.",
-      "datasource": {
-        "type": "prometheus",
-        "uid": "victoriametrics"
-      },
-      "gridPos": {
-        "x": 12,
-        "y": 32,
-        "w": 12,
-        "h": 8
-      },
-      "fieldConfig": {
-        "defaults": {
-          "unit": "short",
-          "custom": {
-            "lineWidth": 1,
-            "fillOpacity": 8,
-            "showPoints": "never",
-            "spanNulls": true
-          }
-        },
-        "overrides": []
-      },
-      "options": {
-        "legend": {
-          "displayMode": "table",
-          "placement": "bottom",
-          "showLegend": true,
-          "calcs": [
-            "lastNotNull",
-            "max"
-          ]
-        },
-        "tooltip": {
-          "mode": "multi",
-          "sort": "desc"
-        }
-      },
-      "targets": [
-        {
-          "datasource": {
-            "type": "prometheus",
-            "uid": "victoriametrics"
-          },
-          "expr": "(vpn_client_tcp_reordering) * on (peer) group_left (username) vpn_peer_user or ((vpn_client_tcp_reordering) unless on (peer) vpn_peer_user)",
-          "legendFormat": "{{username}} ({{peer}}) · {{inbound}}",
-          "refId": "A",
-          "range": true
+          "range": true,
+          "interval": "5m"
         }
       ]
     },
@@ -843,7 +981,7 @@
       "collapsed": false,
       "gridPos": {
         "x": 0,
-        "y": 40,
+        "y": 41,
         "w": 24,
         "h": 1
       },
@@ -852,7 +990,7 @@
     {
       "id": 30,
       "type": "timeseries",
-      "title": "Датаграммы по клиентам",
+      "title": "Hysteria2 по нодам",
       "description": "Для UDP ядро не хранит состояния потока, поэтому данные снимаются пробами eBPF на udp_queue_rcv_one_skb и udp_send_skb.",
       "datasource": {
         "type": "prometheus",
@@ -860,18 +998,18 @@
       },
       "gridPos": {
         "x": 0,
-        "y": 41,
+        "y": 42,
         "w": 12,
         "h": 8
       },
       "fieldConfig": {
         "defaults": {
-          "unit": "pps",
+          "unit": "bps",
           "custom": {
             "lineWidth": 1,
             "fillOpacity": 8,
             "showPoints": "never",
-            "spanNulls": true
+            "spanNulls": 300000
           }
         },
         "overrides": []
@@ -882,7 +1020,7 @@
           "placement": "bottom",
           "showLegend": true,
           "calcs": [
-            "lastNotNull",
+            "mean",
             "max"
           ]
         },
@@ -897,8 +1035,8 @@
             "type": "prometheus",
             "uid": "victoriametrics"
           },
-          "expr": "(rate(hy2_rx_packets_total[5m])) * on (peer) group_left (username) vpn_peer_user or ((rate(hy2_rx_packets_total[5m])) unless on (peer) vpn_peer_user)",
-          "legendFormat": "{{username}} ({{peer}}) ← приём",
+          "expr": "sum by (instance) (rate(hy2_tx_bytes_total[$__rate_interval])) * 8",
+          "legendFormat": "{{instance}} → отдача",
           "refId": "A",
           "range": true
         },
@@ -907,160 +1045,17 @@
             "type": "prometheus",
             "uid": "victoriametrics"
           },
-          "expr": "(rate(hy2_tx_packets_total[5m])) * on (peer) group_left (username) vpn_peer_user or ((rate(hy2_tx_packets_total[5m])) unless on (peer) vpn_peer_user)",
-          "legendFormat": "{{username}} ({{peer}}) → отдача",
-          "refId": "A",
+          "expr": "sum by (instance) (rate(hy2_rx_bytes_total[$__rate_interval])) * 8",
+          "legendFormat": "{{instance}} ← приём",
+          "refId": "B",
           "range": true
         }
       ]
     },
     {
-      "id": 31,
+      "id": 32,
       "type": "timeseries",
-      "title": "Отброшенные датаграммы",
-      "description": "Причина приходит прямо из ядра: фильтр, отсутствие сокета, переполнение очереди. Пусто — значит нода не теряет ничего своего.",
-      "datasource": {
-        "type": "prometheus",
-        "uid": "victoriametrics"
-      },
-      "gridPos": {
-        "x": 12,
-        "y": 41,
-        "w": 12,
-        "h": 8
-      },
-      "fieldConfig": {
-        "defaults": {
-          "unit": "pps",
-          "custom": {
-            "lineWidth": 1,
-            "fillOpacity": 8,
-            "showPoints": "never",
-            "spanNulls": true
-          }
-        },
-        "overrides": []
-      },
-      "options": {
-        "legend": {
-          "displayMode": "table",
-          "placement": "bottom",
-          "showLegend": true,
-          "calcs": [
-            "lastNotNull",
-            "max"
-          ]
-        },
-        "tooltip": {
-          "mode": "multi",
-          "sort": "desc"
-        }
-      },
-      "targets": [
-        {
-          "datasource": {
-            "type": "prometheus",
-            "uid": "victoriametrics"
-          },
-          "expr": "(rate(hy2_drops_total[5m])) * on (peer) group_left (username) vpn_peer_user or ((rate(hy2_drops_total[5m])) unless on (peer) vpn_peer_user)",
-          "legendFormat": "{{username}} ({{peer}}) · {{reason}} · {{direction}}",
-          "refId": "A",
-          "range": true
-        },
-        {
-          "datasource": {
-            "type": "prometheus",
-            "uid": "victoriametrics"
-          },
-          "expr": "rate(hy2_queue_drops_total[5m])",
-          "legendFormat": "очередь сокета, порт {{port}}",
-          "refId": "A",
-          "range": true
-        }
-      ]
-    },
-    {
-      "id": 104,
-      "type": "row",
-      "title": "Как ядро справляется с потерями",
-      "collapsed": false,
-      "gridPos": {
-        "x": 0,
-        "y": 49,
-        "w": 24,
-        "h": 1
-      },
-      "panels": []
-    },
-    {
-      "id": 40,
-      "type": "timeseries",
-      "title": "Лишние повторы и потерянные повторы",
-      "description": "Первая линия — мера того, насколько TCP ошибается; по ней оценивается эффект от tcp_reordering. Вторая — признак тяжёлых потерь.",
-      "datasource": {
-        "type": "prometheus",
-        "uid": "victoriametrics"
-      },
-      "gridPos": {
-        "x": 0,
-        "y": 50,
-        "w": 12,
-        "h": 8
-      },
-      "fieldConfig": {
-        "defaults": {
-          "unit": "cps",
-          "custom": {
-            "lineWidth": 1,
-            "fillOpacity": 8,
-            "showPoints": "never",
-            "spanNulls": true
-          }
-        },
-        "overrides": []
-      },
-      "options": {
-        "legend": {
-          "displayMode": "table",
-          "placement": "bottom",
-          "showLegend": true,
-          "calcs": [
-            "lastNotNull",
-            "max"
-          ]
-        },
-        "tooltip": {
-          "mode": "multi",
-          "sort": "desc"
-        }
-      },
-      "targets": [
-        {
-          "datasource": {
-            "type": "prometheus",
-            "uid": "victoriametrics"
-          },
-          "expr": "rate(node_tcp_dsack_received_total[15m])",
-          "legendFormat": "{{instance}} · повтор был лишним",
-          "refId": "A",
-          "range": true
-        },
-        {
-          "datasource": {
-            "type": "prometheus",
-            "uid": "victoriametrics"
-          },
-          "expr": "rate(node_tcp_lost_retransmit_total[15m])",
-          "legendFormat": "{{instance}} · потерялся сам повтор",
-          "refId": "A",
-          "range": true
-        }
-      ]
-    },
-    {
-      "id": 41,
-      "type": "timeseries",
-      "title": "Восстановления и таймауты",
+      "title": "Hysteria2 по людям",
       "description": "",
       "datasource": {
         "type": "prometheus",
@@ -1068,18 +1063,22 @@
       },
       "gridPos": {
         "x": 12,
-        "y": 50,
-        "w": 12,
+        "y": 42,
+        "w": 8,
         "h": 8
       },
       "fieldConfig": {
         "defaults": {
-          "unit": "cps",
+          "unit": "bps",
           "custom": {
             "lineWidth": 1,
-            "fillOpacity": 8,
+            "fillOpacity": 18,
             "showPoints": "never",
-            "spanNulls": true
+            "spanNulls": 300000,
+            "stacking": {
+              "mode": "normal",
+              "group": "A"
+            }
           }
         },
         "overrides": []
@@ -1090,7 +1089,7 @@
           "placement": "bottom",
           "showLegend": true,
           "calcs": [
-            "lastNotNull",
+            "mean",
             "max"
           ]
         },
@@ -1105,80 +1104,41 @@
             "type": "prometheus",
             "uid": "victoriametrics"
           },
-          "expr": "rate(node_tcp_sack_recovery_total[15m])",
-          "legendFormat": "{{instance}} · через SACK",
-          "refId": "A",
-          "range": true
-        },
-        {
-          "datasource": {
-            "type": "prometheus",
-            "uid": "victoriametrics"
-          },
-          "expr": "rate(node_tcp_sack_recovery_fail_total[15m])",
-          "legendFormat": "{{instance}} · не помогло",
-          "refId": "A",
-          "range": true
-        },
-        {
-          "datasource": {
-            "type": "prometheus",
-            "uid": "victoriametrics"
-          },
-          "expr": "rate(node_tcp_timeouts_total[15m])",
-          "legendFormat": "{{instance}} · таймауты",
-          "refId": "A",
-          "range": true
-        },
-        {
-          "datasource": {
-            "type": "prometheus",
-            "uid": "victoriametrics"
-          },
-          "expr": "rate(node_tcp_loss_probe_recovery_total[15m])",
-          "legendFormat": "{{instance}} · спасено пробой хвоста",
+          "expr": "sum by (username) ((rate(hy2_tx_bytes_total[$__rate_interval])) * on (peer) group_left (username) vpn_peer_user or ((rate(hy2_tx_bytes_total[$__rate_interval])) unless on (peer) vpn_peer_user)) * 8 > 0",
+          "legendFormat": "{{username}}",
           "refId": "A",
           "range": true
         }
       ]
     },
     {
-      "id": 105,
-      "type": "row",
-      "title": "Доступность (SLA)",
-      "collapsed": false,
-      "gridPos": {
-        "x": 0,
-        "y": 50,
-        "w": 24,
-        "h": 1
-      },
-      "panels": []
-    },
-    {
-      "id": 50,
+      "id": 31,
       "type": "stat",
-      "title": "Худшая доступность за период",
-      "description": "Самая проблемная проверка за выбранный период. 100 % — не упало ничего.",
+      "title": "Отброшено датаграмм за период",
+      "description": "Причину ядро отдаёт само: фильтр, нет сокета, переполнение очереди.",
       "datasource": {
         "type": "prometheus",
         "uid": "victoriametrics"
       },
       "gridPos": {
-        "x": 0,
-        "y": 51,
-        "w": 6,
-        "h": 5
+        "x": 20,
+        "y": 42,
+        "w": 4,
+        "h": 8
       },
       "fieldConfig": {
         "defaults": {
-          "unit": "percent",
+          "unit": "short",
           "thresholds": {
             "mode": "absolute",
             "steps": [
               {
                 "color": "green",
                 "value": null
+              },
+              {
+                "color": "yellow",
+                "value": 100
               }
             ]
           }
@@ -1194,7 +1154,8 @@
           "values": false
         },
         "textMode": "auto",
-        "graphMode": "area"
+        "colorMode": "background",
+        "graphMode": "none"
       },
       "targets": [
         {
@@ -1202,27 +1163,41 @@
             "type": "prometheus",
             "uid": "victoriametrics"
           },
-          "expr": "min(100 * (sum by (name) (increase(gatus_results_total{success=\"true\"}[$__range]))) / (sum by (name) (increase(gatus_results_total[$__range]))))",
-          "legendFormat": "минимум",
+          "expr": "sum(increase(hy2_drops_total[$__range])) or vector(0)",
+          "legendFormat": "датаграмм",
           "refId": "A",
-          "range": true
+          "range": false,
+          "instant": true
         }
       ]
     },
     {
-      "id": 51,
+      "id": 104,
+      "type": "row",
+      "title": "Как ядро справляется с потерями",
+      "collapsed": false,
+      "gridPos": {
+        "x": 0,
+        "y": 50,
+        "w": 24,
+        "h": 1
+      },
+      "panels": []
+    },
+    {
+      "id": 40,
       "type": "timeseries",
-      "title": "Доступность по проверкам",
-      "description": "Доля успешных проверок. Проседание здесь — то, что видит пользователь снаружи, а не то, что думает о себе сервер.",
+      "title": "Доля лишних и потерянных повторов",
+      "description": "Доля от всех повторов ноды за час. Первая линия — насколько TCP ошибается, принимая задержку за потерю; вторая — признак тяжёлых потерь на пути.",
       "datasource": {
         "type": "prometheus",
         "uid": "victoriametrics"
       },
       "gridPos": {
-        "x": 6,
+        "x": 0,
         "y": 51,
-        "w": 18,
-        "h": 5
+        "w": 24,
+        "h": 8
       },
       "fieldConfig": {
         "defaults": {
@@ -1231,8 +1206,9 @@
             "lineWidth": 1,
             "fillOpacity": 8,
             "showPoints": "never",
-            "spanNulls": true
-          }
+            "spanNulls": 300000
+          },
+          "decimals": 1
         },
         "overrides": []
       },
@@ -1242,7 +1218,7 @@
           "placement": "bottom",
           "showLegend": true,
           "calcs": [
-            "lastNotNull",
+            "mean",
             "max"
           ]
         },
@@ -1257,10 +1233,161 @@
             "type": "prometheus",
             "uid": "victoriametrics"
           },
-          "expr": "100 * (sum by (name) (increase(gatus_results_total{success=\"true\"}[$__range]))) / (sum by (name) (increase(gatus_results_total[$__range])))",
-          "legendFormat": "{{name}}",
+          "expr": "(100 * rate(node_tcp_dsack_received_total[1h]) / rate(node_netstat_Tcp_RetransSegs[1h])) and on (instance) xray_up",
+          "legendFormat": "{{instance}} · повтор был лишним",
           "refId": "A",
           "range": true
+        },
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "victoriametrics"
+          },
+          "expr": "(100 * rate(node_tcp_lost_retransmit_total[1h]) / rate(node_netstat_Tcp_RetransSegs[1h])) and on (instance) xray_up",
+          "legendFormat": "{{instance}} · потерялся сам повтор",
+          "refId": "B",
+          "range": true
+        }
+      ]
+    },
+    {
+      "id": 105,
+      "type": "row",
+      "title": "Доступность (SLA)",
+      "collapsed": false,
+      "gridPos": {
+        "x": 0,
+        "y": 59,
+        "w": 24,
+        "h": 1
+      },
+      "panels": []
+    },
+    {
+      "id": 50,
+      "type": "stat",
+      "title": "Худшая доступность за период",
+      "description": "Самая проблемная проверка gatus за выбранный период. Проверки идут из Швеции и видят только доступность адреса, а не работу протоколов из России.",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "victoriametrics"
+      },
+      "gridPos": {
+        "x": 0,
+        "y": 60,
+        "w": 6,
+        "h": 6
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "percent",
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "red",
+                "value": null
+              },
+              {
+                "color": "yellow",
+                "value": 99.5
+              },
+              {
+                "color": "green",
+                "value": 99.9
+              }
+            ]
+          },
+          "decimals": 2
+        },
+        "overrides": []
+      },
+      "options": {
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        },
+        "textMode": "auto",
+        "colorMode": "background",
+        "graphMode": "none"
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "victoriametrics"
+          },
+          "expr": "min(100 * (sum by (name) (increase(gatus_results_total{success=\"true\"}[$__range]))) / (sum by (name) (increase(gatus_results_total[$__range]))))",
+          "legendFormat": "минимум",
+          "refId": "A",
+          "range": false,
+          "instant": true
+        }
+      ]
+    },
+    {
+      "id": 51,
+      "type": "state-timeline",
+      "title": "Проверки по часам",
+      "description": "Доля успешных проверок за каждый час: зелёный — все, жёлтый — часть, красный — большинство упало.",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "victoriametrics"
+      },
+      "gridPos": {
+        "x": 6,
+        "y": 60,
+        "w": 18,
+        "h": 6
+      },
+      "fieldConfig": {
+        "defaults": {
+          "mappings": [],
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "red",
+                "value": null
+              },
+              {
+                "color": "yellow",
+                "value": 0.5
+              },
+              {
+                "color": "green",
+                "value": 0.99
+              }
+            ]
+          },
+          "color": {
+            "mode": "thresholds"
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "showValue": "never",
+        "mergeValues": true,
+        "rowHeight": 0.8,
+        "legend": {
+          "showLegend": false
+        }
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "victoriametrics"
+          },
+          "expr": "avg by (name) (avg_over_time(gatus_results_endpoint_success[1h]))",
+          "legendFormat": "{{name}}",
+          "refId": "A",
+          "range": true,
+          "interval": "1h"
         }
       ]
     },
@@ -1275,8 +1402,8 @@
       },
       "gridPos": {
         "x": 0,
-        "y": 56,
-        "w": 12,
+        "y": 66,
+        "w": 24,
         "h": 7
       },
       "fieldConfig": {
@@ -1286,7 +1413,7 @@
             "lineWidth": 1,
             "fillOpacity": 8,
             "showPoints": "never",
-            "spanNulls": true
+            "spanNulls": 300000
           }
         },
         "overrides": []
@@ -1297,7 +1424,7 @@
           "placement": "bottom",
           "showLegend": true,
           "calcs": [
-            "lastNotNull",
+            "mean",
             "max"
           ]
         },
@@ -1313,61 +1440,6 @@
             "uid": "victoriametrics"
           },
           "expr": "gatus_results_duration_seconds",
-          "legendFormat": "{{name}}",
-          "refId": "A",
-          "range": true
-        }
-      ]
-    },
-    {
-      "id": 53,
-      "type": "timeseries",
-      "title": "Дней до истечения сертификатов",
-      "description": "Let's Encrypt обновляет за 30 дней до конца. Линия, ушедшая ниже 20, означает, что обновление не отработало.",
-      "datasource": {
-        "type": "prometheus",
-        "uid": "victoriametrics"
-      },
-      "gridPos": {
-        "x": 12,
-        "y": 56,
-        "w": 12,
-        "h": 7
-      },
-      "fieldConfig": {
-        "defaults": {
-          "unit": "d",
-          "custom": {
-            "lineWidth": 1,
-            "fillOpacity": 8,
-            "showPoints": "never",
-            "spanNulls": true
-          }
-        },
-        "overrides": []
-      },
-      "options": {
-        "legend": {
-          "displayMode": "table",
-          "placement": "bottom",
-          "showLegend": true,
-          "calcs": [
-            "lastNotNull",
-            "max"
-          ]
-        },
-        "tooltip": {
-          "mode": "multi",
-          "sort": "desc"
-        }
-      },
-      "targets": [
-        {
-          "datasource": {
-            "type": "prometheus",
-            "uid": "victoriametrics"
-          },
-          "expr": "gatus_results_certificate_expiration_seconds / 86400",
           "legendFormat": "{{name}}",
           "refId": "A",
           "range": true

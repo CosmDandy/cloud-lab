@@ -1,68 +1,149 @@
 {
   "uid": "remnawave-health",
   "title": "VPN: здоровье нод",
-  "description": "Сводка по боевым нодам Remnawave. Верхний ряд — что видит пользователь, средний — почему ему плохо: потери UDP и ретрансмиты. Имена нод подтягиваются из remnawave_node_basic_info по node_uuid: в остальных метриках панели есть только uuid.",
-  "tags": ["vpn", "remnawave"],
+  "description": "Связь нод с панелью, онлайн, потери на нодах, трафик и память, сертификаты.",
+  "tags": [
+    "vpn",
+    "remnawave"
+  ],
   "timezone": "browser",
   "schemaVersion": 39,
-  "version": 1,
+  "version": 2,
   "refresh": "1m",
-  "time": { "from": "now-24h", "to": "now" },
+  "time": {
+    "from": "now-7d",
+    "to": "now"
+  },
+  "editable": true,
   "panels": [
     {
       "id": 1,
-      "type": "timeseries",
-      "title": "Пользователей онлайн",
-      "description": "Сколько человек реально ходит через каждую ноду.",
-      "datasource": { "type": "prometheus", "uid": "victoriametrics" },
-      "gridPos": { "x": 0, "y": 0, "w": 8, "h": 6 },
-      "fieldConfig": { "defaults": { "unit": "short" }, "overrides": [] },
+      "type": "state-timeline",
+      "title": "Нода на связи с панелью",
+      "description": "Видит ли панель агента ноды. Красный — панель не может раздать ноде конфиг.",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "victoriametrics"
+      },
+      "gridPos": {
+        "x": 0,
+        "y": 0,
+        "w": 12,
+        "h": 6
+      },
+      "fieldConfig": {
+        "defaults": {
+          "mappings": [
+            {
+              "type": "value",
+              "options": {
+                "0": {
+                  "text": "нет связи",
+                  "color": "red"
+                },
+                "1": {
+                  "text": "на связи",
+                  "color": "green"
+                }
+              }
+            }
+          ],
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "red",
+                "value": null
+              },
+              {
+                "color": "yellow",
+                "value": 0.5
+              },
+              {
+                "color": "green",
+                "value": 0.99
+              }
+            ]
+          },
+          "color": {
+            "mode": "thresholds"
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "showValue": "never",
+        "mergeValues": true,
+        "rowHeight": 0.8,
+        "legend": {
+          "showLegend": false
+        }
+      },
       "targets": [
         {
-          "datasource": { "type": "prometheus", "uid": "victoriametrics" },
-          "expr": "remnawave_node_online_users * on(node_uuid) group_left(node_name) remnawave_node_basic_info",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "victoriametrics"
+          },
+          "expr": "remnawave_node_status * on (node_uuid) group_left (node_name) remnawave_node_basic_info",
           "legendFormat": "{{node_name}}",
-          "refId": "A"
+          "refId": "A",
+          "range": true
         }
       ]
     },
     {
       "id": 2,
       "type": "timeseries",
-      "title": "Статус нод",
-      "description": "1 — нода подключена к панели. Проваливается в 0 раньше, чем это заметят пользователи.",
-      "datasource": { "type": "prometheus", "uid": "victoriametrics" },
-      "gridPos": { "x": 8, "y": 0, "w": 8, "h": 6 },
-      "fieldConfig": { "defaults": { "unit": "short", "min": 0, "max": 1 }, "overrides": [] },
-      "targets": [
-        {
-          "datasource": { "type": "prometheus", "uid": "victoriametrics" },
-          "expr": "remnawave_node_status * on(node_uuid) group_left(node_name) remnawave_node_basic_info",
-          "legendFormat": "{{node_name}}",
-          "refId": "A"
-        }
-      ]
-    },
-    {
-      "id": 3,
-      "type": "timeseries",
-      "title": "Задержка event loop панели",
-      "description": "Растёт — панель не успевает обрабатывать статистику с нод.",
-      "datasource": { "type": "prometheus", "uid": "victoriametrics" },
-      "gridPos": { "x": 16, "y": 0, "w": 8, "h": 6 },
-      "fieldConfig": { "defaults": { "unit": "ms" }, "overrides": [] },
-      "targets": [
-        {
-          "datasource": { "type": "prometheus", "uid": "victoriametrics" },
-          "expr": "remnawave_process_event_loop_delay_ms",
-          "legendFormat": "delay",
-          "refId": "A"
+      "title": "Пользователей онлайн",
+      "description": "",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "victoriametrics"
+      },
+      "gridPos": {
+        "x": 12,
+        "y": 0,
+        "w": 12,
+        "h": 6
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "custom": {
+            "lineWidth": 1,
+            "fillOpacity": 8,
+            "showPoints": "never",
+            "spanNulls": 300000
+          }
         },
+        "overrides": []
+      },
+      "options": {
+        "legend": {
+          "displayMode": "table",
+          "placement": "bottom",
+          "showLegend": true,
+          "calcs": [
+            "lastNotNull",
+            "max"
+          ]
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "desc"
+        }
+      },
+      "targets": [
         {
-          "datasource": { "type": "prometheus", "uid": "victoriametrics" },
-          "expr": "remnawave_process_event_loop_p99_ms",
-          "legendFormat": "p99",
-          "refId": "B"
+          "datasource": {
+            "type": "prometheus",
+            "uid": "victoriametrics"
+          },
+          "expr": "remnawave_node_online_users * on (node_uuid) group_left (node_name) remnawave_node_basic_info",
+          "legendFormat": "{{node_name}}",
+          "refId": "A",
+          "range": true
         }
       ]
     },
@@ -70,29 +151,54 @@
       "id": 4,
       "type": "timeseries",
       "title": "Потери UDP на приёме (датаграмм в минуту)",
-      "description": "Переполнение приёмного буфера сокета: теряются QUIC и DNS, то есть видео и звонки. Именно этот счётчик показал причину обрывов 11.09.2026 — всплески до 25 тыс. за час в вечерний пик при загрузке ядра 13 %.",
-      "datasource": { "type": "prometheus", "uid": "victoriametrics" },
-      "gridPos": { "x": 0, "y": 6, "w": 12, "h": 7 },
+      "description": "Датаграммы, которые ядро выбросило из-за полного буфера сокета. Бьёт по Hysteria2 и QUIC.",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "victoriametrics"
+      },
+      "gridPos": {
+        "x": 0,
+        "y": 6,
+        "w": 12,
+        "h": 7
+      },
       "fieldConfig": {
         "defaults": {
           "unit": "short",
-          "custom": { "fillOpacity": 10 },
-          "thresholds": {
-            "mode": "absolute",
-            "steps": [
-              { "color": "green", "value": null },
-              { "color": "red", "value": 100 }
-            ]
+          "custom": {
+            "lineWidth": 1,
+            "fillOpacity": 8,
+            "showPoints": "never",
+            "spanNulls": 300000
           }
         },
         "overrides": []
       },
+      "options": {
+        "legend": {
+          "displayMode": "table",
+          "placement": "bottom",
+          "showLegend": true,
+          "calcs": [
+            "max",
+            "sum"
+          ]
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "desc"
+        }
+      },
       "targets": [
         {
-          "datasource": { "type": "prometheus", "uid": "victoriametrics" },
-          "expr": "rate(node_netstat_Udp_RcvbufErrors[5m]) * 60",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "victoriametrics"
+          },
+          "expr": "(rate(node_netstat_Udp_RcvbufErrors[5m]) * 60) and on (instance) xray_up",
           "legendFormat": "{{instance}}",
-          "refId": "A"
+          "refId": "A",
+          "range": true
         }
       ]
     },
@@ -100,16 +206,55 @@
       "id": 5,
       "type": "timeseries",
       "title": "Доля TCP-ретрансмитов",
-      "description": "Выше 5 % — путь до клиента теряет пакеты. У панели для сравнения обычно 0,06 %.",
-      "datasource": { "type": "prometheus", "uid": "victoriametrics" },
-      "gridPos": { "x": 12, "y": 6, "w": 12, "h": 7 },
-      "fieldConfig": { "defaults": { "unit": "percent" }, "overrides": [] },
+      "description": "Все TCP-сокеты ноды, когда она отправляет больше 500 сегментов в секунду: на пустой ноде десяток повторов даёт «20 %» на ровном месте.",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "victoriametrics"
+      },
+      "gridPos": {
+        "x": 12,
+        "y": 6,
+        "w": 12,
+        "h": 7
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "percent",
+          "custom": {
+            "lineWidth": 1,
+            "fillOpacity": 8,
+            "showPoints": "never",
+            "spanNulls": 300000
+          },
+          "decimals": 1
+        },
+        "overrides": []
+      },
+      "options": {
+        "legend": {
+          "displayMode": "table",
+          "placement": "bottom",
+          "showLegend": true,
+          "calcs": [
+            "mean",
+            "max"
+          ]
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "desc"
+        }
+      },
       "targets": [
         {
-          "datasource": { "type": "prometheus", "uid": "victoriametrics" },
-          "expr": "100 * rate(node_netstat_Tcp_RetransSegs[15m]) / rate(node_netstat_Tcp_OutSegs[15m])",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "victoriametrics"
+          },
+          "expr": "(100 * rate(node_netstat_Tcp_RetransSegs[15m]) / rate(node_netstat_Tcp_OutSegs[15m]) and rate(node_netstat_Tcp_OutSegs[15m]) > 500) and on (instance) xray_up",
           "legendFormat": "{{instance}}",
-          "refId": "A"
+          "refId": "A",
+          "range": true
         }
       ]
     },
@@ -117,21 +262,64 @@
       "id": 6,
       "type": "timeseries",
       "title": "Трафик нод",
-      "datasource": { "type": "prometheus", "uid": "victoriametrics" },
-      "gridPos": { "x": 0, "y": 13, "w": 12, "h": 7 },
-      "fieldConfig": { "defaults": { "unit": "Bps" }, "overrides": [] },
+      "description": "",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "victoriametrics"
+      },
+      "gridPos": {
+        "x": 0,
+        "y": 13,
+        "w": 12,
+        "h": 7
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "Bps",
+          "custom": {
+            "lineWidth": 1,
+            "fillOpacity": 8,
+            "showPoints": "never",
+            "spanNulls": 300000
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "legend": {
+          "displayMode": "table",
+          "placement": "bottom",
+          "showLegend": true,
+          "calcs": [
+            "mean",
+            "max"
+          ]
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "desc"
+        }
+      },
       "targets": [
         {
-          "datasource": { "type": "prometheus", "uid": "victoriametrics" },
-          "expr": "remnawave_node_network_rx_bytes_per_sec * on(node_uuid) group_left(node_name) remnawave_node_basic_info",
-          "legendFormat": "{{node_name}} rx",
-          "refId": "A"
+          "datasource": {
+            "type": "prometheus",
+            "uid": "victoriametrics"
+          },
+          "expr": "remnawave_node_network_rx_bytes_per_sec * on (node_uuid) group_left (node_name) remnawave_node_basic_info",
+          "legendFormat": "{{node_name}} ← приём",
+          "refId": "A",
+          "range": true
         },
         {
-          "datasource": { "type": "prometheus", "uid": "victoriametrics" },
-          "expr": "remnawave_node_network_tx_bytes_per_sec * on(node_uuid) group_left(node_name) remnawave_node_basic_info",
-          "legendFormat": "{{node_name}} tx",
-          "refId": "B"
+          "datasource": {
+            "type": "prometheus",
+            "uid": "victoriametrics"
+          },
+          "expr": "remnawave_node_network_tx_bytes_per_sec * on (node_uuid) group_left (node_name) remnawave_node_basic_info",
+          "legendFormat": "{{node_name}} → отдача",
+          "refId": "B",
+          "range": true
         }
       ]
     },
@@ -139,18 +327,127 @@
       "id": 7,
       "type": "timeseries",
       "title": "Свободная память нод",
-      "description": "У нод 2 ГБ и нет swap: упрётся — придёт OOM-killer, а не торможение.",
-      "datasource": { "type": "prometheus", "uid": "victoriametrics" },
-      "gridPos": { "x": 12, "y": 13, "w": 12, "h": 7 },
-      "fieldConfig": { "defaults": { "unit": "bytes" }, "overrides": [] },
+      "description": "",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "victoriametrics"
+      },
+      "gridPos": {
+        "x": 12,
+        "y": 13,
+        "w": 12,
+        "h": 7
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "bytes",
+          "custom": {
+            "lineWidth": 1,
+            "fillOpacity": 8,
+            "showPoints": "never",
+            "spanNulls": 300000
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "legend": {
+          "displayMode": "table",
+          "placement": "bottom",
+          "showLegend": true,
+          "calcs": [
+            "lastNotNull",
+            "min"
+          ]
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "desc"
+        }
+      },
       "targets": [
         {
-          "datasource": { "type": "prometheus", "uid": "victoriametrics" },
-          "expr": "remnawave_node_memory_free_bytes * on(node_uuid) group_left(node_name) remnawave_node_basic_info",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "victoriametrics"
+          },
+          "expr": "remnawave_node_memory_free_bytes * on (node_uuid) group_left (node_name) remnawave_node_basic_info",
           "legendFormat": "{{node_name}}",
-          "refId": "A"
+          "refId": "A",
+          "range": true
+        }
+      ]
+    },
+    {
+      "id": 100,
+      "type": "row",
+      "title": "Инфраструктура",
+      "collapsed": false,
+      "gridPos": {
+        "x": 0,
+        "y": 20,
+        "w": 24,
+        "h": 1
+      },
+      "panels": []
+    },
+    {
+      "id": 8,
+      "type": "timeseries",
+      "title": "Дней до истечения сертификатов",
+      "description": "Let's Encrypt обновляет за 30 дней до конца. Линия ниже 20 — обновление не отработало.",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "victoriametrics"
+      },
+      "gridPos": {
+        "x": 0,
+        "y": 21,
+        "w": 24,
+        "h": 7
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "d",
+          "custom": {
+            "lineWidth": 1,
+            "fillOpacity": 8,
+            "showPoints": "never",
+            "spanNulls": 300000
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "legend": {
+          "displayMode": "table",
+          "placement": "bottom",
+          "showLegend": true,
+          "calcs": [
+            "lastNotNull",
+            "min"
+          ]
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "desc"
+        }
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "victoriametrics"
+          },
+          "expr": "gatus_results_certificate_expiration_seconds / 86400",
+          "legendFormat": "{{name}}",
+          "refId": "A",
+          "range": true
         }
       ]
     }
-  ]
+  ],
+  "templating": {
+    "list": []
+  }
 }
