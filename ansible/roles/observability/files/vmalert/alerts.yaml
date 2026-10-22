@@ -138,6 +138,31 @@ groups:
             Sustained for 20 minutes at over 64 KB/s. Check the same client on
             another inbound before blaming the node.
 
+      # Короткое окно к правилу выше. То срабатывает не раньше чем через полчаса
+      # и пропускает десятиминутный провал целиком, а именно такие пользователь
+      # и замечает. Порог взят из прогона по истории за 7 дней (21.10): при
+      # 10 % на пятиминутном окне вышло бы 33 эпизода в неделю, при 20 % — 2,
+      # столько же, сколько у часового правила, но через 10 минут, а не через 30.
+      - alert: ClientRetransmitBurst
+        expr: >-
+          (
+            (100 * rate(vpn_client_tcp_retrans_bytes_total[5m])
+             / rate(vpn_client_tcp_sent_bytes_total[5m]) > 20)
+            and (rate(vpn_client_tcp_sent_bytes_total[5m]) > 65536)
+          ) * on (peer) group_left (username) vpn_peer_user
+          or (
+            (100 * rate(vpn_client_tcp_retrans_bytes_total[5m])
+             / rate(vpn_client_tcp_sent_bytes_total[5m]) > 20)
+            and (rate(vpn_client_tcp_sent_bytes_total[5m]) > 65536)
+            unless on (peer) vpn_peer_user
+          )
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: "Client {{ with $labels.username }}{{ . }} {{ end }}({{ $labels.peer }}) burst {{ $value | printf \"%.1f\" }}% on {{ $labels.inbound }}"
+          description: "Over 20% for 5 minutes at over 64 KB/s — a short outage the 20-minute rule would miss"
+
       # Вчетверо против минимума по тому же пути — это уже очередь, а не
       # обычное колебание. Втрое ловилось постоянно и у всех.
       - alert: ClientRttInflated
@@ -191,6 +216,54 @@ groups:
       # многопутёвым провайдером — как состояние это верно, как повод
       # разбудить человека бессмысленно. Метрика
       # vpn_client_tcp_reordering остаётся для разбора инцидентов руками.
+
+  # Проба из офиса в России (roles/vpn_probe), раз в пять минут. Gatus этого
+  # не видит: он ходит из Швеции, и 17-18.10 AMS Vision был мёртв из России
+  # при полностью зелёных проверках.
+  - name: vpn-probe
+    interval: 1m
+    rules:
+      # Два прогона подряд без единого ответа, при живом прямом выходе из
+      # офиса: когда лежит сам офисный канал, падает всё разом, и к VPN это
+      # отношения не имеет.
+      - alert: ProtocolDeadFromRussia
+        expr: >-
+          max_over_time(vpn_probe_success_ratio[12m]) == 0
+          and on (instance) last_over_time(vpn_probe_direct_success[12m]) == 1
+        for: 5m
+        labels:
+          severity: critical
+        annotations:
+          summary: "{{ $labels.host }} does not work from Russia"
+          description: >-
+            Every probe through {{ $labels.transport }} on {{ $labels.node }}
+            failed for 10+ minutes while the office reached the internet directly.
+
+      # Клиенты обновляют конфиг с этого домена; недоступен из России —
+      # новые устройства не подключить, а старые не узнают о новых хостах.
+      - alert: SubscriptionUnreachableFromRussia
+        expr: >-
+          max_over_time(vpn_probe_subscription_success[12m]) == 0
+          and on (instance) last_over_time(vpn_probe_direct_success[12m]) == 1
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: "Subscription domain unreachable from {{ $labels.instance }}"
+          description: "The probe cannot fetch the subscription while the office reaches the internet directly"
+
+      # Тестбед — LXC в офисе, его выключают. Молчание пробы значит не
+      # «всё хорошо», а «из России сейчас не смотрит никто».
+      - alert: VpnProbeSilent
+        expr: >-
+          time() - max(last_over_time(vpn_probe_last_run_timestamp_seconds[1d])) > 1800
+          or absent_over_time(vpn_probe_last_run_timestamp_seconds[1d])
+        for: 10m
+        labels:
+          severity: info
+        annotations:
+          summary: "No probe results from Russia for 30+ minutes"
+          description: "testbed-l-01 is off or cannot push; protocols are unwatched from inside Russia"
 
   - name: scraping
     interval: 30s

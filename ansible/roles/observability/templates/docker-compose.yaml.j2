@@ -27,8 +27,10 @@ services:
       traefik.enable: "true"
       # Path, а не PathPrefix: наружу открыт ровно приём записи. Запросы и
       # /api/v1/admin/tsdb/delete_series остаются недоступными снаружи, при
-      # том что сама victoriametrics их обслуживает без авторизации.
-      traefik.http.routers.vmwrite.rule: "Host(`{{ observability_vm_domain }}`) && Path(`/api/v1/write`)"
+      # том что сама victoriametrics их обслуживает без авторизации. Второй путь —
+      # приём текстового формата: так отдаёт результат проба из России
+      # (roles/vpn_probe), которой не нужен ни vmagent, ни экспортёр.
+      traefik.http.routers.vmwrite.rule: "Host(`{{ observability_vm_domain }}`) && (Path(`/api/v1/write`) || Path(`/api/v1/import/prometheus`))"
       traefik.http.routers.vmwrite.entrypoints: websecure
       traefik.http.routers.vmwrite.tls.certresolver: letsencrypt
       traefik.http.routers.vmwrite.middlewares: vm-write-auth

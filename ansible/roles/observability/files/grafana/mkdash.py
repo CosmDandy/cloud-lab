@@ -700,6 +700,54 @@ panels += [
 ]
 y += 8
 
+# --- Из России ----------------------------------------------------------
+# roles/vpn_probe on the office testbed: every subscription host, the way a
+# user connects, every five minutes. Lanes are hosts, colour is the share of
+# requests that got through.
+panels.append(row(108, "Из России (проба из офиса)", y))
+y += 1
+panels += [
+    timeline(
+        60,
+        "Хосты подписки",
+        0,
+        y,
+        16,
+        10,
+        [("max by (host) (vpn_probe_success_ratio)", "{{host}}")],
+        interval="5m",
+        desc="Доля запросов, прошедших через хост, по каждому прогону пробы из офиса. "
+        "Серый — проба не работала (тестбед выключен). Красная полоса у всех разом при "
+        "красном «прямой выход» — лёг офисный канал, а не VPN.",
+    ),
+    timeline(
+        61,
+        "Прямой выход и подписка",
+        16,
+        y,
+        8,
+        5,
+        [
+            ("max(vpn_probe_direct_success)", "прямой выход"),
+            ("max(vpn_probe_subscription_success)", "подписка"),
+        ],
+        interval="5m",
+    ),
+    panel(
+        62,
+        "Время ответа через хост",
+        16,
+        y + 5,
+        8,
+        5,
+        [("max by (host) (vpn_probe_latency_seconds)", "{{host}}")],
+        unit="s",
+        interval="5m",
+        calcs=("mean", "max"),
+    ),
+]
+y += 10
+
 # --- Доступность -------------------------------------------------------
 # Gatus probes from the control plane in Sweden: TCP connect, ICMP and the
 # panel's view of the node. It cannot see a protocol-level failure or the

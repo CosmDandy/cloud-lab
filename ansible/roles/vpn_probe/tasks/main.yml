@@ -1,0 +1,90 @@
+---
+- name: Validate required variables
+  ansible.builtin.assert:
+    that:
+      - vpn_probe_subscription_url | length > 0
+      - vpn_probe_push_password | length > 0
+    fail_msg: >-
+      Нужны vpn_probe_subscription_url (SOPS хоста) и пароль приёма метрик:
+      без первого пробовать нечего, без второго некуда отдать результат.
+
+- name: Install probe dependencies
+  ansible.builtin.apt:
+    name: [curl, unzip, python3]
+    state: present
+    update_cache: true
+    cache_valid_time: 3600
+
+- name: Create probe directory
+  ansible.builtin.file:
+    path: "{{ vpn_probe_dir }}"
+    state: directory
+    owner: root
+    group: root
+    mode: "0750"
+
+# Каталог с версией в имени: смена vpn_probe_xray_version ставит новый
+# бинарь рядом, а не считает старый уже распакованным.
+- name: Create xray directory
+  ansible.builtin.file:
+    path: "{{ vpn_probe_dir }}/xray-{{ vpn_probe_xray_version }}"
+    state: directory
+    owner: root
+    group: root
+    mode: "0755"
+
+- name: Install xray
+  ansible.builtin.unarchive:
+    src: "{{ vpn_probe_xray_url }}"
+    dest: "{{ vpn_probe_dir }}/xray-{{ vpn_probe_xray_version }}"
+    remote_src: true
+    include: [xray]
+    creates: "{{ vpn_probe_dir }}/xray-{{ vpn_probe_xray_version }}/xray"
+
+- name: Install probe scripts
+  ansible.builtin.copy:
+    src: "{{ item }}"
+    dest: "{{ vpn_probe_dir }}/{{ item }}"
+    owner: root
+    group: root
+    mode: "0755"
+  loop:
+    - vpn-probe.py
+    - sub2client.py
+
+- name: Write probe environment
+  ansible.builtin.template:
+    src: vpn-probe.env.j2
+    dest: "{{ vpn_probe_dir }}/vpn-probe.env"
+    owner: root
+    group: root
+    mode: "0600"
+  no_log: true
+
+- name: Render probe units
+  ansible.builtin.template:
+    src: "{{ item }}.j2"
+    dest: "/etc/systemd/system/{{ item }}"
+    owner: root
+    group: root
+    mode: "0644"
+  loop:
+    - vpn-probe.service
+    - vpn-probe.timer
+
+- name: Enable probe timer
+  ansible.builtin.systemd_service:
+    name: vpn-probe.timer
+    enabled: true
+    state: started
+    daemon_reload: true
+  when: not ansible_check_mode
+
+# Первый прогон сразу: иначе результат появится только через интервал, и до
+# тех пор не видно, работает ли вообще отправка.
+- name: Run the first probe
+  ansible.builtin.systemd_service:
+    name: vpn-probe.service
+    state: started
+  changed_when: false
+  when: not ansible_check_mode

@@ -1,0 +1,33 @@
+---
+# Проба протоколов из России: каждый хост подписки глазами пользователя,
+# раз в несколько минут, результат — в VictoriaMetrics. Gatus проверяет ноды
+# из Швеции и остаётся зелёным, когда путь из России режет протокол: 17-18.10
+# AMS Vision не принял ни одного соединения при полностью зелёном gatus.
+vpn_probe_dir: /opt/vpn-probe
+
+# Та же подписка, что у живого пользователя: расхождение между конфигом
+# сервера и тем, что раздаёт панель, — тоже поломка, и проба её видит.
+# Секрет, задаётся в SOPS хоста.
+vpn_probe_subscription_url: ""
+
+# Приём текстового формата Prometheus — на том же домене и под той же
+# basic-auth, что remote write нод.
+vpn_probe_push_url: https://vm.cosmdandy.dev/api/v1/import/prometheus
+vpn_probe_push_user: metrics-push
+vpn_probe_push_password: ""
+vpn_probe_instance: "{{ inventory_hostname }}"
+
+# Клиент не старее сервера: с 26.7 REALITY по умолчанию требует
+# minClientVer 26.3.27, а клиент без ML-DSA не проверит подпись так, как
+# это делает живое приложение.
+vpn_probe_xray_version: "26.7.28"
+vpn_probe_xray_url: >-
+  https://github.com/XTLS/Xray-core/releases/download/v{{ vpn_probe_xray_version }}/Xray-linux-64.zip
+
+# Последовательный прогон при недоступности всего подряд занимал бы десятки
+# минут: три попытки по 8 секунд на хост, четыре хоста разом.
+vpn_probe_tries: 3
+vpn_probe_workers: 4
+# От завершения прошлого прогона, а не от его начала: медленный прогон не
+# наслаивается на следующий.
+vpn_probe_interval: 5min
