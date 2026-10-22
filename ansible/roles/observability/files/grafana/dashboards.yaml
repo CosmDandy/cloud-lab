@@ -15,7 +15,7 @@ providers:
       path: /var/lib/grafana/dashboards/ops
   - name: network
     orgId: 1
-    folder: Сеть и VPN
+    folder: Network & VPN
     type: file
     disableDeletion: false
     updateIntervalSeconds: 30

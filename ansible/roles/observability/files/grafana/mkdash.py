@@ -32,6 +32,7 @@ NODE_METRICS = {
     "node_network_transmit_bytes_total",
     "node_tcp_dsack_received_total",
     "node_tcp_lost_retransmit_total",
+    "node_tcp_retrans_segs_total",
     "vpn_client_tcp_retrans_bytes_total",
     "vpn_client_tcp_rtt_ms",
     "vpn_client_tcp_sent_bytes_total",
@@ -47,7 +48,7 @@ SELECTOR = re.compile(
 
 NODE_VAR = {
     "name": "node",
-    "label": "Нода",
+    "label": "Node",
     "type": "query",
     "datasource": DS,
     "definition": "label_values(xray_up, instance)",
@@ -273,6 +274,8 @@ def named_user(expr):
 def vpn_nodes(expr):
     return f"({expr}) and on (instance) xray_up"
 
+
+RETRANS_ENOUGH = "increase(node_tcp_retrans_segs_total[1h]) > 1000"
 
 EGRESS = (
     "rate(node_network_transmit_bytes_total"
@@ -745,15 +748,25 @@ panels += [
         24,
         8,
         [
+            # The denominator comes from the same nstat read as the numerator
+            # (nstat-extra.py), not from node-exporter: see the note there.
+            # The kernel marks a retransmit lost or reported as duplicate up
+            # to an RTO after sending it, so with a handful of retransmits
+            # per hour the share still jumps past 100 %; below 1000 it is
+            # noise and is not drawn.
             (
                 vpn_nodes(
-                    "100 * rate(node_tcp_dsack_received_total[1h]) / rate(node_netstat_Tcp_RetransSegs[1h])"
+                    "100 * rate(node_tcp_dsack_received_total[1h])"
+                    " / rate(node_tcp_retrans_segs_total[1h])"
+                    f" and {RETRANS_ENOUGH}"
                 ),
                 "{{instance}} · повтор был лишним",
             ),
             (
                 vpn_nodes(
-                    "100 * rate(node_tcp_lost_retransmit_total[1h]) / rate(node_netstat_Tcp_RetransSegs[1h])"
+                    "100 * rate(node_tcp_lost_retransmit_total[1h])"
+                    " / rate(node_tcp_retrans_segs_total[1h])"
+                    f" and {RETRANS_ENOUGH}"
                 ),
                 "{{instance}} · потерялся сам повтор",
             ),
@@ -761,7 +774,9 @@ panels += [
         unit="percent",
         decimals=1,
         desc="Доля от всех повторов ноды за час. Первая линия — насколько TCP ошибается, "
-        "принимая задержку за потерю; вторая — признак тяжёлых потерь на пути.",
+        "принимая задержку за потерю; вторая — признак тяжёлых потерь на пути. "
+        "Рисуется, только когда повторов за час больше тысячи: на меньшем числе "
+        "доля скачет выше 100 % и ничего не значит.",
     ),
 ]
 y += 8
@@ -878,7 +893,7 @@ dump(
     "network/vpn-traffic.json",
     {
         "uid": "vpn-traffic-quality",
-        "title": "VPN · трафик и качество",
+        "title": "VPN · traffic & quality",
         "description": "Кто подключён и как ему, трафик по транспортам и людям, недельная картина, "
         "Hysteria2 из eBPF, доступность.",
         "tags": ["vpn", "traffic"],
@@ -1021,7 +1036,7 @@ dump(
     "ops/remnawave-health.json",
     {
         "uid": "remnawave-health",
-        "title": "Ноды · здоровье",
+        "title": "Nodes · health",
         "description": "Связь нод с панелью, онлайн, потери на нодах, трафик и память, сертификаты.",
         "tags": ["vpn", "remnawave"],
         "timezone": "browser",

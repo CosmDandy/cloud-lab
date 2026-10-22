@@ -1,6 +1,6 @@
 {
   "uid": "remnawave-health",
-  "title": "Ноды · здоровье",
+  "title": "Nodes · health",
   "description": "Связь нод с панелью, онлайн, потери на нодах, трафик и память, сертификаты.",
   "tags": [
     "vpn",
@@ -451,7 +451,7 @@
     "list": [
       {
         "name": "node",
-        "label": "Нода",
+        "label": "Node",
         "type": "query",
         "datasource": {
           "type": "prometheus",

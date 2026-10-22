@@ -1,7 +1,7 @@
 {
   "id": null,
   "uid": "docker-logs",
-  "title": "Логи Docker",
+  "title": "Docker logs",
   "tags": [
     "logs"
   ],

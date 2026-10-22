@@ -1503,7 +1503,7 @@
   },
   "timepicker": {},
   "timezone": "",
-  "title": "Traefik · входящий трафик",
+  "title": "Traefik · ingress",
   "uid": "traefik-standalone",
   "version": 7,
   "weekStart": ""

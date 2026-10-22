@@ -1,6 +1,6 @@
 {
   "uid": "vpn-traffic-quality",
-  "title": "VPN · трафик и качество",
+  "title": "VPN · traffic & quality",
   "description": "Кто подключён и как ему, трафик по транспортам и людям, недельная картина, Hysteria2 из eBPF, доступность.",
   "tags": [
     "vpn",
@@ -1188,7 +1188,7 @@
       "id": 40,
       "type": "timeseries",
       "title": "Доля лишних и потерянных повторов",
-      "description": "Доля от всех повторов ноды за час. Первая линия — насколько TCP ошибается, принимая задержку за потерю; вторая — признак тяжёлых потерь на пути.",
+      "description": "Доля от всех повторов ноды за час. Первая линия — насколько TCP ошибается, принимая задержку за потерю; вторая — признак тяжёлых потерь на пути. Рисуется, только когда повторов за час больше тысячи: на меньшем числе доля скачет выше 100 % и ничего не значит.",
       "datasource": {
         "type": "prometheus",
         "uid": "victoriametrics"
@@ -1233,7 +1233,7 @@
             "type": "prometheus",
             "uid": "victoriametrics"
           },
-          "expr": "(100 * rate(node_tcp_dsack_received_total{instance=~\"$node\"}[1h]) / rate(node_netstat_Tcp_RetransSegs{instance=~\"$node\"}[1h])) and on (instance) xray_up{instance=~\"$node\"}",
+          "expr": "(100 * rate(node_tcp_dsack_received_total{instance=~\"$node\"}[1h]) / rate(node_tcp_retrans_segs_total{instance=~\"$node\"}[1h]) and increase(node_tcp_retrans_segs_total{instance=~\"$node\"}[1h]) > 1000) and on (instance) xray_up{instance=~\"$node\"}",
           "legendFormat": "{{instance}} · повтор был лишним",
           "refId": "A",
           "range": true
@@ -1243,7 +1243,7 @@
             "type": "prometheus",
             "uid": "victoriametrics"
           },
-          "expr": "(100 * rate(node_tcp_lost_retransmit_total{instance=~\"$node\"}[1h]) / rate(node_netstat_Tcp_RetransSegs{instance=~\"$node\"}[1h])) and on (instance) xray_up{instance=~\"$node\"}",
+          "expr": "(100 * rate(node_tcp_lost_retransmit_total{instance=~\"$node\"}[1h]) / rate(node_tcp_retrans_segs_total{instance=~\"$node\"}[1h]) and increase(node_tcp_retrans_segs_total{instance=~\"$node\"}[1h]) > 1000) and on (instance) xray_up{instance=~\"$node\"}",
           "legendFormat": "{{instance}} · потерялся сам повтор",
           "refId": "B",
           "range": true
@@ -1657,7 +1657,7 @@
     "list": [
       {
         "name": "node",
-        "label": "Нода",
+        "label": "Node",
         "type": "query",
         "datasource": {
           "type": "prometheus",
