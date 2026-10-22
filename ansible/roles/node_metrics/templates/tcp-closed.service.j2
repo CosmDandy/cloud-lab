@@ -1,0 +1,24 @@
+# Managed by ansible (roles/node_metrics). Правки на хосте будут перезаписаны.
+[Unit]
+Description=Spool final TCP counters of client sockets as they close
+Documentation=file://{{ node_metrics_dir }}/tcp-quality.py
+
+[Service]
+# Таймер видит сокет раз в 30 секунд: короткое соединение целиком и хвост
+# длинного после последнего замера в счётчики не попадали. ss -E отдаёт
+# tcp_info в момент закрытия, следующий запуск таймера забирает спул.
+ExecStart=/usr/bin/python3 {{ node_metrics_dir }}/tcp-quality.py --events
+Restart=always
+RestartSec=5s
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=strict
+ProtectHome=true
+ReadWritePaths={{ node_metrics_state_dir }}
+ProtectKernelTunables=true
+ProtectControlGroups=true
+RestrictAddressFamilies=AF_NETLINK AF_UNIX
+MemoryMax=64M
+
+[Install]
+WantedBy=multi-user.target

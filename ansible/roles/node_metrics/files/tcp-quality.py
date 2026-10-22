@@ -22,21 +22,33 @@ says what is happening *now*:
     rate(vpn_client_tcp_retrans_bytes_total[10m])
       / rate(vpn_client_tcp_sent_bytes_total[10m])
 
-Sockets come and go; a socket seen for the first time contributes its full
-counters, since it was born between two samples. The previous sample is kept on
-disk because the collector runs as a timer and exits between runs — losing it
-would reset every counter every 30 seconds.
+The previous sample is kept on disk because the collector runs as a timer and
+exits between runs — losing it would reset every counter every 30 seconds.
+
+**Closed sockets.** A 30-second sample misses whatever a socket sent after its
+last sample, and the whole life of a socket shorter than one interval. Run with
+`--events`, this script instead stays up behind `ss -E`, which reports tcp_info
+as the kernel destroys each socket, and spools those final counters; every
+sample run folds the spool in against the socket's last sampled value.
+
+**Bounded state.** A pair not seen for KEEP_SECONDS is forgotten, and only the
+MAX_SERIES most recently active pairs are exported. Ranking by all-time bytes
+used to hide a client who was losing packets right now behind someone's
+download from last week.
 
 RTT and reordering stay gauges: they describe a state, not an accumulation.
 """
 
+import fcntl
 import json
 import os
 import re
 import subprocess
 import sys
 import tempfile
+import time
 from collections import defaultdict
+from contextlib import contextmanager
 
 # Inbound ports as configured in the panel's config profile. A port missing here
 # is simply not reported — node-to-internet sockets are not what we measure.
@@ -50,11 +62,19 @@ INBOUNDS = {
 }
 
 MAX_SERIES = 50
+KEEP_SECONDS = 7 * 86400
 STATE_PATH = "/var/lib/node-metrics/tcp-quality.state"
+SPOOL_PATH = "/var/lib/node-metrics/tcp-closed.jsonl"
+LOCK_PATH = "/var/lib/node-metrics/tcp-closed.lock"
+COUNTERS = ("sent", "retrans", "dsack", "retrans_pkts")
 
-SOCKET_HEAD = re.compile(
-    r"\[?(?:::ffff:)?([\d.]+)\]?:(\d+)\s+\[?(?:::ffff:)?([\d.]+)\]?:(\d+)"
-)
+# `ss -n` prints IPv4 bare, IPv6 in brackets, and a v4 client on a dual-stack
+# listener as [::ffff:a.b.c.d].
+SOCKET_HEAD = re.compile(r"(\[[^\]]+\]|[\d.]+):(\d+)\s+(\[[^\]]+\]|[\d.]+):(\d+)")
+
+
+def address(raw):
+    return raw.strip("[]").removeprefix("::ffff:")
 
 
 def field(pattern, line, default=0.0):
@@ -62,12 +82,84 @@ def field(pattern, line, default=0.0):
     return float(m.group(1)) if m else default
 
 
+def client_sockets(lines):
+    """(peer|inbound|rport, sample) for every inbound socket in `ss -tin` output."""
+    key = None
+    for line in lines:
+        head = SOCKET_HEAD.search(line)
+        if head and "bytes_sent" not in line:
+            port = int(head.group(2))
+            if port in INBOUNDS:
+                # Local and remote port together identify the connection; the
+                # pair is reused rarely enough that a stale match would have to
+                # be deliberate.
+                key = f"{address(head.group(3))}|{INBOUNDS[port]}|{head.group(4)}"
+            else:
+                key = None
+            continue
+        if key is None or "bytes_sent" not in line:
+            continue
+        yield (
+            key,
+            {
+                "sent": field(r"\bbytes_sent:(\d+)", line),
+                "retrans": field(r"\bbytes_retrans:(\d+)", line),
+                "dsack": field(r"\bdsack_dups:(\d+)", line),
+                "retrans_pkts": field(r"\bretrans:\d+/(\d+)", line),
+                "rtt": field(r"\brtt:([\d.]+)", line),
+                "minrtt": field(r"\bminrtt:([\d.]+)", line),
+                "reordering": field(r"\breordering:(\d+)", line),
+            },
+        )
+        key = None
+
+
+@contextmanager
+def spool_lock():
+    with open(LOCK_PATH, "a") as lock:
+        fcntl.flock(lock, fcntl.LOCK_EX)
+        yield
+
+
+def events():
+    """Daemon mode: spool the final counters of every client socket as it closes."""
+    os.makedirs(os.path.dirname(SPOOL_PATH), exist_ok=True)
+    # stdbuf: piped ss buffers its output, and an event that arrives after the
+    # next sample run has dropped the socket's baseline would be counted whole.
+    proc = subprocess.Popen(
+        ["stdbuf", "-oL", "ss", "-tinE"], stdout=subprocess.PIPE, text=True
+    )
+    for key, final in client_sockets(proc.stdout):
+        with spool_lock(), open(SPOOL_PATH, "a") as fh:
+            fh.write(json.dumps([key, final]) + "\n")
+    # ss exits only when its netlink socket breaks; systemd restarts us.
+    sys.exit(proc.wait() or 1)
+
+
+def take_closed():
+    with spool_lock():
+        try:
+            with open(SPOOL_PATH) as fh:
+                lines = fh.readlines()
+        except FileNotFoundError:
+            return []
+        os.truncate(SPOOL_PATH, 0)
+    closed = []
+    for line in lines:
+        try:
+            closed.append(json.loads(line))
+        except ValueError:
+            # A line torn by the daemon being killed mid-write.
+            continue
+    return closed
+
+
 def load_state():
     try:
         with open(STATE_PATH) as fh:
             return json.load(fh)
     except (OSError, ValueError):
-        return {"sockets": {}, "totals": {}}
+        return {}
 
 
 def save_state(state):
@@ -88,65 +180,73 @@ def collect():
     try:
         out = subprocess.run(
             ["ss", "-tin", "state", "established"],
-            capture_output=True, text=True, timeout=20, check=False,
+            capture_output=True,
+            text=True,
+            timeout=20,
+            check=False,
         ).stdout.splitlines()
     except (OSError, subprocess.SubprocessError) as exc:
         print(f"ss failed: {exc}", file=sys.stderr)
         return {}
-
-    sockets = {}
-    key = None
-    for line in out:
-        head = SOCKET_HEAD.search(line)
-        if head and "bytes_sent" not in line:
-            port = int(head.group(2))
-            if port in INBOUNDS:
-                # Local and remote port together identify the connection; the
-                # pair is reused rarely enough that a stale match would have to
-                # be deliberate.
-                key = (head.group(3), INBOUNDS[port], head.group(4))
-            else:
-                key = None
-            continue
-        if key is None or "bytes_sent" not in line:
-            continue
-        sockets["|".join(key)] = {
-            "sent": field(r"\bbytes_sent:(\d+)", line),
-            "retrans": field(r"\bbytes_retrans:(\d+)", line),
-            "dsack": field(r"\bdsack_dups:(\d+)", line),
-            "retrans_pkts": field(r"\bretrans:\d+/(\d+)", line),
-            "rtt": field(r"\brtt:([\d.]+)", line),
-            "minrtt": field(r"\bminrtt:([\d.]+)", line),
-            "reordering": field(r"\breordering:(\d+)", line),
-        }
-        key = None
-    return sockets
+    return dict(client_sockets(out))
 
 
-def accumulate(sockets, state):
+def accumulate(sockets, closed, state, now):
     """Fold per-socket growth into counters keyed by (peer, inbound)."""
-    previous = state.get("sockets", {})
+    # Sockets that vanished from the last sample stay a baseline for one more
+    # run, in case their close event reaches the spool only after this one.
+    baseline = {**state.get("gone", {}), **state.get("sockets", {})}
     totals = defaultdict(float, state.get("totals", {}))
+    seen = state.get("seen", {})
+    moved = defaultdict(float)
 
-    for sock_key, now in sockets.items():
+    def grow(sock_key, current, was):
         peer, inbound, _rport = sock_key.split("|")
-        was = previous.get(sock_key)
-        for field_name in ("sent", "retrans", "dsack", "retrans_pkts"):
-            current = now[field_name]
+        pair = f"{peer}|{inbound}"
+        for name in COUNTERS:
+            value = current[name]
             # A counter that went backwards means the port was reused by a new
             # connection: treat the whole current value as growth.
-            grew = current - was[field_name] if was and current >= was[field_name] else current
-            totals[f"{peer}|{inbound}|{field_name}"] += grew
+            grew = value - was[name] if was and value >= was[name] else value
+            totals[f"{pair}|{name}"] += grew
+            if name == "sent":
+                moved[pair] += grew
+        seen[pair] = now
 
-    state["sockets"] = sockets
+    for sock_key, sample in sockets.items():
+        grow(sock_key, sample, baseline.get(sock_key))
+    # A socket can close after `ss` sampled it but before the spool was read:
+    # its final value then counts from this run's sample, which is dropped.
+    live = dict(sockets)
+    for sock_key, final in closed:
+        grow(sock_key, final, live.pop(sock_key, None) or baseline.get(sock_key))
+    closed_keys = {k for k, _ in closed}
+
+    for pair in {k.rsplit("|", 1)[0] for k in totals}:
+        seen.setdefault(pair, now)
+    for pair, last in list(seen.items()):
+        if now - last > KEEP_SECONDS:
+            del seen[pair]
+            for name in COUNTERS:
+                totals.pop(f"{pair}|{name}", None)
+
+    state["gone"] = {
+        k: v
+        for k, v in state.get("sockets", {}).items()
+        if k not in sockets and k not in closed_keys
+    }
+    state["sockets"] = live
     state["totals"] = dict(totals)
-    return totals
+    state["seen"] = seen
+    state["closed_total"] = state.get("closed_total", 0) + len(closed)
+    return totals, seen, moved
 
 
 def gauges(sockets):
     """Live state per (peer, inbound): worst RTT inflation, sockets, reordering."""
-    live = defaultdict(lambda: {"sockets": 0, "rtt": 0.0, "rtt_n": 0,
-                                "minrtt": 0.0, "reordering": 0.0})
+    live = defaultdict(
+        lambda: {"sockets": 0, "rtt": 0.0, "rtt_n": 0, "minrtt": 0.0, "reordering": 0.0}
+    )
     for sock_key, s in sockets.items():
         peer, inbound, _ = sock_key.split("|")
         row = live[(peer, inbound)]
@@ -155,12 +255,14 @@ def gauges(sockets):
             row["rtt"] += s["rtt"]
             row["rtt_n"] += 1
         if s["minrtt"]:
-            row["minrtt"] = min(row["minrtt"], s["minrtt"]) if row["minrtt"] else s["minrtt"]
+            row["minrtt"] = (
+                min(row["minrtt"], s["minrtt"]) if row["minrtt"] else s["minrtt"]
+            )
         row["reordering"] = max(row["reordering"], s["reordering"])
     return live
 
 
-def render(totals, live):
+def render(totals, seen, moved, live, closed_total):
     lines = [
         "# HELP vpn_client_tcp_sent_bytes_total Bytes sent to a client, accumulated across sockets",
         "# TYPE vpn_client_tcp_sent_bytes_total counter",
@@ -178,6 +280,8 @@ def render(totals, live):
         "# TYPE vpn_client_tcp_rtt_inflation gauge",
         "# HELP vpn_client_tcp_reordering Kernel reordering estimate, 3 is the default",
         "# TYPE vpn_client_tcp_reordering gauge",
+        "# HELP vpn_client_tcp_closed_sockets_total Closed sockets folded in from the event spool",
+        "# TYPE vpn_client_tcp_closed_sockets_total counter",
     ]
 
     by_pair = defaultdict(dict)
@@ -185,7 +289,12 @@ def render(totals, live):
         peer, inbound, field_name = key.split("|")
         by_pair[(peer, inbound)][field_name] = value
 
-    ranked = sorted(by_pair.items(), key=lambda kv: -kv[1].get("sent", 0))[:MAX_SERIES]
+    def recency(item):
+        (peer, inbound), counters = item
+        pair = f"{peer}|{inbound}"
+        return (-seen.get(pair, 0), -moved.get(pair, 0), -counters.get("sent", 0))
+
+    ranked = sorted(by_pair.items(), key=recency)[:MAX_SERIES]
     for (peer, inbound), counters in ranked:
         tags = f'peer="{peer}",inbound="{inbound}"'
         lines += [
@@ -206,17 +315,26 @@ def render(totals, live):
             f"vpn_client_tcp_reordering{{{tags}}} {int(row['reordering'])}",
         ]
     lines.append(f"vpn_client_tcp_series_total {len(ranked)}")
+    lines.append(f"vpn_client_tcp_closed_sockets_total {closed_total}")
     return "\n".join(lines) + "\n"
 
 
 def main():
-    target = sys.argv[1] if len(sys.argv) > 1 else "/var/lib/node-exporter/textfile/tcp-quality.prom"
+    if sys.argv[1:] == ["--events"]:
+        events()
+        return
+    target = (
+        sys.argv[1]
+        if len(sys.argv) > 1
+        else "/var/lib/node-exporter/textfile/tcp-quality.prom"
+    )
 
     state = load_state()
     sockets = collect()
-    totals = accumulate(sockets, state)
+    closed = take_closed()
+    totals, seen, moved = accumulate(sockets, closed, state, time.time())
     save_state(state)
-    body = render(totals, gauges(sockets))
+    body = render(totals, seen, moved, gauges(sockets), state["closed_total"])
 
     directory = os.path.dirname(target)
     os.makedirs(directory, exist_ok=True)

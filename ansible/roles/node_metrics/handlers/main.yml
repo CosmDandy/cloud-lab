@@ -27,6 +27,13 @@
   ansible.builtin.systemd_service:
     daemon_reload: true
 
+- name: Restart closed-socket spooler
+  ansible.builtin.systemd_service:
+    name: tcp-closed.service
+    state: restarted
+    daemon_reload: true
+  when: not ansible_check_mode
+
 # Программа и обёртка читаются при старте, на лету не перечитываются.
 - name: Restart hy2 collector
   ansible.builtin.systemd_service:

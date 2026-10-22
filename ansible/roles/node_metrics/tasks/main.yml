@@ -67,6 +67,7 @@
         owner: "{{ node_metrics_owner }}"
         group: "{{ node_metrics_owner }}"
         mode: "0755"
+      notify: Restart closed-socket spooler
 
     - name: Install kernel counter collector
       ansible.builtin.copy:
@@ -95,17 +96,21 @@
       loop:
         - tcp-quality.service
         - tcp-quality.timer
+        - tcp-closed.service
       notify: Reload systemd
 
     # В check-режиме юнит на диск не попадает, и systemd о нём не знает —
     # задача упала бы на несуществующем сервисе, хотя в реальном прогоне
     # к этому моменту файл уже есть.
-    - name: Enable TCP quality timer
+    - name: Enable TCP quality timer and closed-socket spooler
       ansible.builtin.systemd_service:
-        name: tcp-quality.timer
+        name: "{{ item }}"
         enabled: true
         state: started
         daemon_reload: true
+      loop:
+        - tcp-quality.timer
+        - tcp-closed.service
       when: not ansible_check_mode
 
     # Без первого запуска файл появится только через интервал таймера, и до
