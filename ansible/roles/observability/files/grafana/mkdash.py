@@ -1014,6 +1014,69 @@ panels += [
     ),
 ]
 y += 7
+
+# HostHatch bills 1 TB a month per node and counts both directions on the
+# VM's interface, so this is rx + tx on the real interfaces, not the panel's
+# xray counter (which sees only the proxied payload, once). The panel's
+# "relative time" now/M makes $__range the month so far in the browser's
+# timezone; the hoster's month may start a few hours apart.
+IFACE = 'device!~"lo|docker.*|veth.*|br-.*|amn.*|awg.*|wg.*"'
+
+
+def iface_bytes(window):
+    return vpn_nodes(
+        f"sum by (instance) (increase(node_network_receive_bytes_total{{{IFACE}}}[{window}])"
+        f" + increase(node_network_transmit_bytes_total{{{IFACE}}}[{window}]))"
+    )
+
+
+HOSTER_LIMIT = 1e12
+month = stat(
+    9,
+    "Расход трафика с начала месяца (интерфейс, приём + отдача)",
+    0,
+    y,
+    12,
+    7,
+    [(iface_bytes("$__range"), "{{instance}}")],
+    unit="decbytes",
+    steps=[
+        {"color": "green", "value": None},
+        {"color": "yellow", "value": 0.8 * HOSTER_LIMIT},
+        {"color": "red", "value": HOSTER_LIMIT},
+    ],
+    instant=True,
+    desc="Столько насчитает хостер: каждый байт на интерфейсе ВМ, в обе стороны. "
+    "Лимит HostHatch — 1 ТБ в месяц на ноду: жёлтый с 800 ГБ, красный с 1 ТБ. "
+    "Счётчик панели remnawave меньше: он видит только трафик xray.",
+)
+month["type"] = "bargauge"
+month["timeFrom"] = "now/M"
+month["fieldConfig"]["defaults"].update({"min": 0, "max": HOSTER_LIMIT})
+month["options"] = {
+    "reduceOptions": {"calcs": ["lastNotNull"], "fields": "", "values": False},
+    "orientation": "horizontal",
+    "displayMode": "gradient",
+    "showUnfilled": True,
+}
+daily = panel(
+    10,
+    "Расход трафика по дням (интерфейс, приём + отдача)",
+    12,
+    y,
+    12,
+    7,
+    [(iface_bytes("1d"), "{{instance}}")],
+    unit="decbytes",
+    bars=True,
+    interval="1d",
+    calcs=("mean", "max", "sum"),
+    desc="Сутки по UTC. Чтобы уложиться в 1 ТБ за 30 дней, нужно в среднем "
+    "не больше 33 ГБ в сутки.",
+)
+daily["timeFrom"] = "30d"
+panels += [month, daily]
+y += 7
 panels.append(row(100, "Инфраструктура", y))
 y += 1
 panels += [

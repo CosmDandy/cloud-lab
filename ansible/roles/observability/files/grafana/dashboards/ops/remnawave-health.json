@@ -379,13 +379,139 @@
       ]
     },
     {
+      "id": 9,
+      "type": "bargauge",
+      "title": "Расход трафика с начала месяца (интерфейс, приём + отдача)",
+      "description": "Столько насчитает хостер: каждый байт на интерфейсе ВМ, в обе стороны. Лимит HostHatch — 1 ТБ в месяц на ноду: жёлтый с 800 ГБ, красный с 1 ТБ. Счётчик панели remnawave меньше: он видит только трафик xray.",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "victoriametrics"
+      },
+      "gridPos": {
+        "x": 0,
+        "y": 20,
+        "w": 12,
+        "h": 7
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "decbytes",
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              },
+              {
+                "color": "yellow",
+                "value": 800000000000.0
+              },
+              {
+                "color": "red",
+                "value": 1000000000000.0
+              }
+            ]
+          },
+          "min": 0,
+          "max": 1000000000000.0
+        },
+        "overrides": []
+      },
+      "options": {
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        },
+        "orientation": "horizontal",
+        "displayMode": "gradient",
+        "showUnfilled": true
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "victoriametrics"
+          },
+          "expr": "(sum by (instance) (increase(node_network_receive_bytes_total{device!~\"lo|docker.*|veth.*|br-.*|amn.*|awg.*|wg.*\"}[$__range]) + increase(node_network_transmit_bytes_total{instance=~\"$node\", device!~\"lo|docker.*|veth.*|br-.*|amn.*|awg.*|wg.*\"}[$__range]))) and on (instance) xray_up{instance=~\"$node\"}",
+          "legendFormat": "{{instance}}",
+          "refId": "A",
+          "range": false,
+          "instant": true
+        }
+      ],
+      "timeFrom": "now/M"
+    },
+    {
+      "id": 10,
+      "type": "timeseries",
+      "title": "Расход трафика по дням (интерфейс, приём + отдача)",
+      "description": "Сутки по UTC. Чтобы уложиться в 1 ТБ за 30 дней, нужно в среднем не больше 33 ГБ в сутки.",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "victoriametrics"
+      },
+      "gridPos": {
+        "x": 12,
+        "y": 20,
+        "w": 12,
+        "h": 7
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "decbytes",
+          "custom": {
+            "lineWidth": 1,
+            "fillOpacity": 80,
+            "showPoints": "never",
+            "spanNulls": 300000,
+            "drawStyle": "bars"
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "legend": {
+          "displayMode": "table",
+          "placement": "bottom",
+          "showLegend": true,
+          "calcs": [
+            "mean",
+            "max",
+            "sum"
+          ]
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "desc"
+        }
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "victoriametrics"
+          },
+          "expr": "(sum by (instance) (increase(node_network_receive_bytes_total{device!~\"lo|docker.*|veth.*|br-.*|amn.*|awg.*|wg.*\"}[1d]) + increase(node_network_transmit_bytes_total{instance=~\"$node\", device!~\"lo|docker.*|veth.*|br-.*|amn.*|awg.*|wg.*\"}[1d]))) and on (instance) xray_up{instance=~\"$node\"}",
+          "legendFormat": "{{instance}}",
+          "refId": "A",
+          "range": true,
+          "interval": "1d"
+        }
+      ],
+      "timeFrom": "30d"
+    },
+    {
       "id": 100,
       "type": "row",
       "title": "Инфраструктура",
       "collapsed": false,
       "gridPos": {
         "x": 0,
-        "y": 20,
+        "y": 27,
         "w": 24,
         "h": 1
       },
@@ -402,7 +528,7 @@
       },
       "gridPos": {
         "x": 0,
-        "y": 21,
+        "y": 28,
         "w": 24,
         "h": 7
       },
