@@ -17,7 +17,7 @@ Dashboards and alerts join on it:
 
 peer -> user comes from xray access logs in Loki; user -> username from the
 panel API. Exactly one series per peer: a household behind one NAT gets
-`username="A+B"` rather than two series, which would break `group_left`.
+`username="A, B"` rather than two series, which would break `group_left`.
 Every peer present in the client metrics gets a series, "?" when the logs
 have not named it yet — so a join never silently drops a client from an
 alert.
@@ -44,7 +44,7 @@ TTL = 7 * 86400
 
 ACCESS = (
     'sum by (peer, user) (count_over_time({job="xray"} |= "accepted"'
-    " | regexp `from (?:tcp:|udp:)?(?P<peer>[0-9.]+):[0-9]+ accepted"
+    " | regexp `from (?:tcp:|udp:)?\\[?(?:::ffff:)?(?P<peer>[0-9a-fA-F.:]+?)\\]?:[0-9]+ accepted"
     " .*email: (?P<user>[0-9]+)`"
     " [%s]))"
 )
@@ -95,15 +95,22 @@ def label(value):
     return value.replace("\\", "\\\\").replace('"', '\\"')
 
 
+def name_of(uid):
+    return names.get(uid, f"id{uid}")
+
+
 def render(peers):
     lines = [
         "# HELP vpn_peer_user Panel user behind a client IP, from xray access logs",
         "# TYPE vpn_peer_user gauge",
     ]
     for peer in sorted(peers | set(seen)):
-        users = sorted(seen.get(peer, {}).items(), key=lambda kv: -kv[1])
-        ids = "+".join(u for u, _ in users) if users else ""
-        who = "+".join(names.get(u, f"id{u}") for u, _ in users) if users else "?"
+        # Alphabetical, not by recency: the label is a series identity, and an
+        # order that flips whenever the other person connects last would split
+        # one household into two series and break every join on it.
+        users = sorted(seen.get(peer, {}), key=lambda u: (name_of(u).lower(), u))
+        ids = ",".join(users)
+        who = ", ".join(name_of(u) for u in users) if users else "?"
         tags = f'peer="{peer}",user="{ids}",username="{label(who)}"'
         lines.append(f"vpn_peer_user{{{tags}}} 1")
     lines += [
