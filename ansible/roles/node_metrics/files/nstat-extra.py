@@ -19,6 +19,12 @@ import tempfile
 # Счётчик -> (имя метрики, пояснение). Всё, что отсюда, — накопительные
 # счётчики ядра с момента загрузки.
 COUNTERS = {
+    # Same counter node-exporter exports as node_netstat_Tcp_RetransSegs, read
+    # here again so that shares like DSACK/retransmits divide two values taken
+    # in the same instant. With the numerator from this file and the
+    # denominator from node-exporter, a burst leaves a sliding window at two
+    # different moments and the share spikes to several hundred percent.
+    "TcpRetransSegs": ("tcp_retrans_segs_total", "Segments retransmitted"),
     # Сколько повторов оказалось лишними: пакет дошёл, отправитель зря решил,
     # что он потерян. Прямая мера того, насколько TCP ошибается на этом пути.
     "TcpExtTCPDSACKRecv": ("tcp_dsack_received_total", "Retransmits the peer reported as unnecessary"),
