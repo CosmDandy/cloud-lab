@@ -12,6 +12,24 @@ api:
   dashboard: false
 {% endif %}
 
+{% if edge_access_log_enabled %}
+# Только ошибки: 76 % ответов подписки 21.10 оказались 502, и узнать, кто их
+# получает, было не из чего — метрики дают число, а не адрес и роутер. В stdout,
+# дальше его забирает promtail вместе с остальными контейнерами.
+accessLog:
+  format: json
+  filters:
+    statusCodes:
+      - "400-599"
+  fields:
+    names:
+      # В пути подписки лежит её токен: с ним журнал стал бы списком готовых
+      # ссылок на конфиги пользователей.
+      RequestPath: drop
+    headers:
+      defaultMode: drop
+
+{% endif %}
 entryPoints:
   web:
     address: ":80"

@@ -62,3 +62,6 @@ edge_oidc_skip_ssl_verify: false
 # здесь только HTTP-сервисы контрольной машины.
 edge_metrics_enabled: true
 edge_metrics_port: 8082
+
+# Журнал запросов, закончившихся 4xx/5xx, в stdout traefik.
+edge_access_log_enabled: true
