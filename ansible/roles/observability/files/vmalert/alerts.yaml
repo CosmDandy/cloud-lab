@@ -226,9 +226,15 @@ groups:
       # Два прогона подряд без единого ответа, при живом прямом выходе из
       # офиса: когда лежит сам офисный канал, падает всё разом, и к VPN это
       # отношения не имеет.
+      # Fires on a change, not on a state: the host must have passed more than
+      # half of the probes in the day before. The office path cuts Vision and
+      # gRPC to several nodes for good (0-17 % of probes pass), and a rule on
+      # the state alone paged every few minutes about that. A host that stays
+      # dead resolves after about a day; the dashboard row still shows it.
       - alert: ProtocolDeadFromRussia
         expr: >-
           max_over_time(vpn_probe_success_ratio[12m]) == 0
+          and avg_over_time(vpn_probe_success_ratio[1d] offset 15m) > 0.5
           and on (instance) last_over_time(vpn_probe_direct_success[12m]) == 1
         for: 5m
         labels:
