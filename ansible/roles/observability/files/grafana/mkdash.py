@@ -10,9 +10,65 @@
 """
 
 import json
+import re
 
 DS = {"type": "prometheus", "uid": "victoriametrics"}
 OUT = "ansible/roles/observability/files/grafana/dashboards"
+
+# Metrics a VPN node pushes itself: `instance` is the node name, so the "Нода"
+# selector narrows them directly. The panel's remnawave_* series carry the node
+# only as node_name on remnawave_node_basic_info, and every one of them joins
+# through it. gatus, the probe and the peer-users lookups are not per node and
+# stay as they are.
+NODE_METRICS = {
+    "hy2_collector_up",
+    "hy2_drops_total",
+    "hy2_rx_bytes_total",
+    "hy2_tx_bytes_total",
+    "node_netstat_TcpExt_TCPSynRetrans",
+    "node_netstat_Tcp_OutSegs",
+    "node_netstat_Tcp_RetransSegs",
+    "node_netstat_Udp_RcvbufErrors",
+    "node_network_transmit_bytes_total",
+    "node_tcp_dsack_received_total",
+    "node_tcp_lost_retransmit_total",
+    "vpn_client_tcp_retrans_bytes_total",
+    "vpn_client_tcp_rtt_ms",
+    "vpn_client_tcp_sent_bytes_total",
+    "xray_inbound_traffic_bytes_total",
+    "xray_up",
+    "xray_user_traffic_bytes_total",
+}
+NODE_MATCHER = {m: 'instance=~"$node"' for m in NODE_METRICS}
+NODE_MATCHER["remnawave_node_basic_info"] = 'node_name=~"$node"'
+SELECTOR = re.compile(
+    r'(?<![\w"])(' + "|".join(sorted(NODE_MATCHER)) + r')(?![\w"])(\{[^}]*\})?'
+)
+
+NODE_VAR = {
+    "name": "node",
+    "label": "Нода",
+    "type": "query",
+    "datasource": DS,
+    "definition": "label_values(xray_up, instance)",
+    "query": {"query": "label_values(xray_up, instance)", "refId": "node"},
+    "multi": True,
+    "includeAll": True,
+    "current": {"selected": True, "text": ["All"], "value": ["$__all"]},
+    "refresh": 2,
+    "sort": 1,
+}
+
+
+def scoped(expr):
+    """Add the node selector to every per-node metric in expr."""
+
+    def add(m):
+        matcher = NODE_MATCHER[m.group(1)]
+        inner = (m.group(2) or "{}")[1:-1].strip()
+        return f"{m.group(1)}{{{matcher}{', ' + inner if inner else ''}}}"
+
+    return SELECTOR.sub(add, expr)
 
 # Same volume gate as the alerts in vmalert/alerts.yaml: below 64 KiB/s a
 # connection is mostly idle, and a share computed from a few retransmitted
@@ -290,6 +346,10 @@ def table(pid, title, x, y, w, h, columns, desc=""):
 
 
 def dump(name, dashboard):
+    for p in dashboard["panels"]:
+        for t in p.get("targets", []):
+            t["expr"] = scoped(t["expr"])
+    dashboard["templating"] = {"list": [NODE_VAR]}
     with open(f"{OUT}/{name}", "w", encoding="utf-8") as fh:
         json.dump(dashboard, fh, ensure_ascii=False, indent=2)
         fh.write("\n")
@@ -348,7 +408,13 @@ panels += [
         y,
         4,
         4,
-        [("sum(remnawave_node_online_users)", "онлайн")],
+        [
+            (
+                "sum(remnawave_node_online_users"
+                " * on (node_uuid) group_left remnawave_node_basic_info)",
+                "онлайн",
+            )
+        ],
         desc="По данным панели, со всех нод и всех транспортов, включая Hysteria2.",
     ),
     stat(
@@ -809,10 +875,10 @@ panels += [
 y += 13
 
 dump(
-    "vpn-traffic.json",
+    "network/vpn-traffic.json",
     {
         "uid": "vpn-traffic-quality",
-        "title": "VPN: трафик и качество",
+        "title": "VPN · трафик и качество",
         "description": "Кто подключён и как ему, трафик по транспортам и людям, недельная картина, "
         "Hysteria2 из eBPF, доступность.",
         "tags": ["vpn", "traffic"],
@@ -952,10 +1018,10 @@ panels += [
 y += 7
 
 dump(
-    "remnawave-health.json",
+    "ops/remnawave-health.json",
     {
         "uid": "remnawave-health",
-        "title": "VPN: здоровье нод",
+        "title": "Ноды · здоровье",
         "description": "Связь нод с панелью, онлайн, потери на нодах, трафик и память, сертификаты.",
         "tags": ["vpn", "remnawave"],
         "timezone": "browser",

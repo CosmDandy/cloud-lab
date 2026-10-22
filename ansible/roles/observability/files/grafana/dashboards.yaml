@@ -1,12 +1,31 @@
 apiVersion: 1
 
+# One provider per folder rather than foldersFromFilesStructure: the folder
+# title is free text here, and the directory names stay plain ASCII. A provider
+# walks its path recursively, so nothing may sit at the top of dashboards/
+# itself — it would not be loaded by any of them.
 providers:
-  - name: default
+  - name: ops
+    orgId: 1
+    folder: Ops
+    type: file
+    disableDeletion: false
+    updateIntervalSeconds: 30
+    options:
+      path: /var/lib/grafana/dashboards/ops
+  - name: network
+    orgId: 1
+    folder: Сеть и VPN
+    type: file
+    disableDeletion: false
+    updateIntervalSeconds: 30
+    options:
+      path: /var/lib/grafana/dashboards/network
+  - name: general
     orgId: 1
     folder: ""
     type: file
     disableDeletion: false
     updateIntervalSeconds: 30
     options:
-      path: /var/lib/grafana/dashboards
-      foldersFromFilesStructure: false
+      path: /var/lib/grafana/dashboards/general

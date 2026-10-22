@@ -1503,7 +1503,7 @@
   },
   "timepicker": {},
   "timezone": "",
-  "title": "Traefik",
+  "title": "Traefik · входящий трафик",
   "uid": "traefik-standalone",
   "version": 7,
   "weekStart": ""

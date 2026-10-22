@@ -1,6 +1,6 @@
 {
   "uid": "remnawave-health",
-  "title": "VPN: здоровье нод",
+  "title": "Ноды · здоровье",
   "description": "Связь нод с панелью, онлайн, потери на нодах, трафик и память, сертификаты.",
   "tags": [
     "vpn",
@@ -85,7 +85,7 @@
             "type": "prometheus",
             "uid": "victoriametrics"
           },
-          "expr": "remnawave_node_status * on (node_uuid) group_left (node_name) remnawave_node_basic_info",
+          "expr": "remnawave_node_status * on (node_uuid) group_left (node_name) remnawave_node_basic_info{node_name=~\"$node\"}",
           "legendFormat": "{{node_name}}",
           "refId": "A",
           "range": true
@@ -140,7 +140,7 @@
             "type": "prometheus",
             "uid": "victoriametrics"
           },
-          "expr": "remnawave_node_online_users * on (node_uuid) group_left (node_name) remnawave_node_basic_info",
+          "expr": "remnawave_node_online_users * on (node_uuid) group_left (node_name) remnawave_node_basic_info{node_name=~\"$node\"}",
           "legendFormat": "{{node_name}}",
           "refId": "A",
           "range": true
@@ -195,7 +195,7 @@
             "type": "prometheus",
             "uid": "victoriametrics"
           },
-          "expr": "(rate(node_netstat_Udp_RcvbufErrors[5m]) * 60) and on (instance) xray_up",
+          "expr": "(rate(node_netstat_Udp_RcvbufErrors{instance=~\"$node\"}[5m]) * 60) and on (instance) xray_up{instance=~\"$node\"}",
           "legendFormat": "{{instance}}",
           "refId": "A",
           "range": true
@@ -251,7 +251,7 @@
             "type": "prometheus",
             "uid": "victoriametrics"
           },
-          "expr": "(100 * rate(node_netstat_Tcp_RetransSegs[15m]) / rate(node_netstat_Tcp_OutSegs[15m]) and rate(node_netstat_Tcp_OutSegs[15m]) > 500) and on (instance) xray_up",
+          "expr": "(100 * rate(node_netstat_Tcp_RetransSegs{instance=~\"$node\"}[15m]) / rate(node_netstat_Tcp_OutSegs{instance=~\"$node\"}[15m]) and rate(node_netstat_Tcp_OutSegs{instance=~\"$node\"}[15m]) > 500) and on (instance) xray_up{instance=~\"$node\"}",
           "legendFormat": "{{instance}}",
           "refId": "A",
           "range": true
@@ -306,7 +306,7 @@
             "type": "prometheus",
             "uid": "victoriametrics"
           },
-          "expr": "remnawave_node_network_rx_bytes_per_sec * on (node_uuid) group_left (node_name) remnawave_node_basic_info",
+          "expr": "remnawave_node_network_rx_bytes_per_sec * on (node_uuid) group_left (node_name) remnawave_node_basic_info{node_name=~\"$node\"}",
           "legendFormat": "{{node_name}} ← приём",
           "refId": "A",
           "range": true
@@ -316,7 +316,7 @@
             "type": "prometheus",
             "uid": "victoriametrics"
           },
-          "expr": "remnawave_node_network_tx_bytes_per_sec * on (node_uuid) group_left (node_name) remnawave_node_basic_info",
+          "expr": "remnawave_node_network_tx_bytes_per_sec * on (node_uuid) group_left (node_name) remnawave_node_basic_info{node_name=~\"$node\"}",
           "legendFormat": "{{node_name}} → отдача",
           "refId": "B",
           "range": true
@@ -371,7 +371,7 @@
             "type": "prometheus",
             "uid": "victoriametrics"
           },
-          "expr": "remnawave_node_memory_free_bytes * on (node_uuid) group_left (node_name) remnawave_node_basic_info",
+          "expr": "remnawave_node_memory_free_bytes * on (node_uuid) group_left (node_name) remnawave_node_basic_info{node_name=~\"$node\"}",
           "legendFormat": "{{node_name}}",
           "refId": "A",
           "range": true
@@ -448,6 +448,34 @@
     }
   ],
   "templating": {
-    "list": []
+    "list": [
+      {
+        "name": "node",
+        "label": "Нода",
+        "type": "query",
+        "datasource": {
+          "type": "prometheus",
+          "uid": "victoriametrics"
+        },
+        "definition": "label_values(xray_up, instance)",
+        "query": {
+          "query": "label_values(xray_up, instance)",
+          "refId": "node"
+        },
+        "multi": true,
+        "includeAll": true,
+        "current": {
+          "selected": true,
+          "text": [
+            "All"
+          ],
+          "value": [
+            "$__all"
+          ]
+        },
+        "refresh": 2,
+        "sort": 1
+      }
+    ]
   }
 }
