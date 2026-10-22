@@ -436,7 +436,7 @@
             "type": "prometheus",
             "uid": "victoriametrics"
           },
-          "expr": "(sum by (instance) (increase(node_network_receive_bytes_total{device!~\"lo|docker.*|veth.*|br-.*|amn.*|awg.*|wg.*\"}[$__range]) + increase(node_network_transmit_bytes_total{instance=~\"$node\", device!~\"lo|docker.*|veth.*|br-.*|amn.*|awg.*|wg.*\"}[$__range]))) and on (instance) xray_up{instance=~\"$node\"}",
+          "expr": "(sum by (instance) (increase(node_network_receive_bytes_total{instance=~\"$node\", device!~\"lo|docker.*|veth.*|br-.*|amn.*|awg.*|wg.*\"}[$__range]) + increase(node_network_transmit_bytes_total{instance=~\"$node\", device!~\"lo|docker.*|veth.*|br-.*|amn.*|awg.*|wg.*\"}[$__range]))) and on (instance) xray_up{instance=~\"$node\"}",
           "legendFormat": "{{instance}}",
           "refId": "A",
           "range": false,
@@ -449,7 +449,7 @@
       "id": 10,
       "type": "timeseries",
       "title": "Расход трафика по дням (интерфейс, приём + отдача)",
-      "description": "Сутки по UTC. Чтобы уложиться в 1 ТБ за 30 дней, нужно в среднем не больше 33 ГБ в сутки.",
+      "description": "Календарные сутки в часовом поясе браузера; последний столбец — сегодня с полуночи. Чтобы уложиться в 1 ТБ за 30 дней, нужно в среднем не больше 33 ГБ в сутки.",
       "datasource": {
         "type": "prometheus",
         "uid": "victoriametrics"
@@ -495,7 +495,7 @@
             "type": "prometheus",
             "uid": "victoriametrics"
           },
-          "expr": "(sum by (instance) (increase(node_network_receive_bytes_total{device!~\"lo|docker.*|veth.*|br-.*|amn.*|awg.*|wg.*\"}[1d]) + increase(node_network_transmit_bytes_total{instance=~\"$node\", device!~\"lo|docker.*|veth.*|br-.*|amn.*|awg.*|wg.*\"}[1d]))) and on (instance) xray_up{instance=~\"$node\"}",
+          "expr": "(sum by (instance) (increase(node_network_receive_bytes_total{instance=~\"$node\", device!~\"lo|docker.*|veth.*|br-.*|amn.*|awg.*|wg.*\"}[1d] offset -1d) + increase(node_network_transmit_bytes_total{instance=~\"$node\", device!~\"lo|docker.*|veth.*|br-.*|amn.*|awg.*|wg.*\"}[1d] offset -1d))) and on (instance) xray_up{instance=~\"$node\"}",
           "legendFormat": "{{instance}}",
           "refId": "A",
           "range": true,

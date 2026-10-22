@@ -29,6 +29,7 @@ NODE_METRICS = {
     "node_netstat_Tcp_OutSegs",
     "node_netstat_Tcp_RetransSegs",
     "node_netstat_Udp_RcvbufErrors",
+    "node_network_receive_bytes_total",
     "node_network_transmit_bytes_total",
     "node_tcp_dsack_received_total",
     "node_tcp_lost_retransmit_total",
@@ -70,6 +71,7 @@ def scoped(expr):
         return f"{m.group(1)}{{{matcher}{', ' + inner if inner else ''}}}"
 
     return SELECTOR.sub(add, expr)
+
 
 # Same volume gate as the alerts in vmalert/alerts.yaml: below 64 KiB/s a
 # connection is mostly idle, and a share computed from a few retransmitted
@@ -1023,10 +1025,10 @@ y += 7
 IFACE = 'device!~"lo|docker.*|veth.*|br-.*|amn.*|awg.*|wg.*"'
 
 
-def iface_bytes(window):
+def iface_bytes(window, offset=""):
     return vpn_nodes(
-        f"sum by (instance) (increase(node_network_receive_bytes_total{{{IFACE}}}[{window}])"
-        f" + increase(node_network_transmit_bytes_total{{{IFACE}}}[{window}]))"
+        f"sum by (instance) (increase(node_network_receive_bytes_total{{{IFACE}}}[{window}]{offset})"
+        f" + increase(node_network_transmit_bytes_total{{{IFACE}}}[{window}]{offset}))"
     )
 
 
@@ -1059,6 +1061,10 @@ month["options"] = {
     "displayMode": "gradient",
     "showUnfilled": True,
 }
+# Grafana aligns the 1d points to midnight in the dashboard timezone, and
+# increase[1d] at a point looks back: the bar stamped 23.10 would be the whole
+# of 22.10. offset -1d turns the window forward so each bar is its own day and
+# today's bar is today so far.
 daily = panel(
     10,
     "Расход трафика по дням (интерфейс, приём + отдача)",
@@ -1066,12 +1072,13 @@ daily = panel(
     y,
     12,
     7,
-    [(iface_bytes("1d"), "{{instance}}")],
+    [(iface_bytes("1d", " offset -1d"), "{{instance}}")],
     unit="decbytes",
     bars=True,
     interval="1d",
     calcs=("mean", "max", "sum"),
-    desc="Сутки по UTC. Чтобы уложиться в 1 ТБ за 30 дней, нужно в среднем "
+    desc="Календарные сутки в часовом поясе браузера; последний столбец — "
+    "сегодня с полуночи. Чтобы уложиться в 1 ТБ за 30 дней, нужно в среднем "
     "не больше 33 ГБ в сутки.",
 )
 daily["timeFrom"] = "30d"
