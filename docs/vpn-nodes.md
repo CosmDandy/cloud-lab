@@ -506,3 +506,50 @@ v4»: российское напрямую (домены `.ru/.su/.рф`, на�
 из текущего шаблона. Двух списков Happ нет — у них нет sing-box-версии из
 доверенного источника: `antifilter-download-community` и
 `ru-available-only-inside`.
+
+## Happ: подписка и роутинг
+
+Happ берёт настройки из заголовков ответа подписки. Они лежат в
+`subscription-settings.customResponseHeaders` и уходят каждому клиенту:
+
+| заголовок | значение | что делает |
+|---|---|---|
+| `profile-update-interval` | `1` | обновлять подписку раз в час |
+| `subscription-auto-update-open-enable` | `1` | обновлять подписки при каждом открытии приложения |
+| `routing` | `happ://routing/onadd/<base64>` | профиль роутинга «Sigma Routing v6» |
+| `profile-title`, `announce`, `support-url`, `profile-web-page-url` | | название, объявление, ссылки |
+
+`subscription-auto-update-open-enable` в документации Happ значится среди
+настроек, требующих Provider ID. Provider ID у нас нет, так что Happ этот
+заголовок, скорее всего, пропускает. Остаётся обновление раз в час и
+обновление при запуске, если плановое было пропущено.
+
+**Профиль «Sigma Routing v6»** — это «Sigma Routing mac slim» с новым именем.
+Порядок `direct-block-proxy`:
+
+- напрямую — `100.64.0.0/10`, `fd7a:115c:a1e0::/48` (mesh), `geoip:ru`,
+  семь geosite (`category-ru`, `yandex`, `mailru`, `mailru-group`, `vk`,
+  `ru-available-only-inside`, `category-gov-ru`) и `domain:hltv.org`;
+- блок — `geosite:category-ads`;
+- в туннель — `geosite:antifilter-download-community`, `geoip:ru-blocked`
+  и всё остальное (`GlobalProxy`);
+- DNS: прямые домены — 77.88.8.8, остальное — DoH Cloudflare
+  (`cloudflare-dns.com` → 1.1.1.1 в `DnsHosts`); geo-файлы runetfreedom.
+
+Ссылка — компактный JSON (`separators=(",", ":")`, как `encode()` в
+`testbed/happ-routing.py`) в base64. Панель отдаёт заголовок без изменений:
+1333 символа, после декодирования совпадает с профилем (проверено
+25.10.2026).
+
+`onadd` добавляет профиль и сразу делает его активным, даже если активен
+другой; `add` только добавляет. Профиль с тем же именем оба перезаписывают.
+**`onadd` стоит до 01.11.2026**, чтобы v6 включился у всех, кто сидит на
+v4, v5 или mac slim. **01.11.2026 заменить на `add`**: иначе каждое
+обновление подписки снова включает v6 у тех, кто сознательно выбрал другой
+профиль.
+
+Android-Happ получает подписку в xray-json (см.
+[vpn-protocols.md](vpn-protocols.md#восстановление-после-сна)). Роутинг этой
+выдачи собран в шаблоне `xray-json` и совпадает с v6. Сделано это потому,
+что у JSON-подписки Happ свой режим роутинга: не больше одного профиля, и
+задаёт его провайдер.
