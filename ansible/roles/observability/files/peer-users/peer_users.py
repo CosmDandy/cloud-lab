@@ -9,6 +9,12 @@ the mapping is built here, next to the panel:
 
     vpn_peer_user{peer="1.2.3.4", user="2", username="CosmDandy"} 1
     vpn_user_info{user="2", username="CosmDandy"} 1
+    vpn_user_traffic_bytes_total{user="2"} 28649412222
+
+The traffic counter is the panel's lifetime total per user. xray's own
+per-user counters on the nodes cannot replace it: the panel reads them with
+reset, so a node-side exporter only ever sees the remainder since the last
+read.
 
 Dashboards and alerts join on it:
 
@@ -54,6 +60,7 @@ PEERS = (
 
 seen = {}  # peer -> {user: last seen, unix seconds}
 names = {}  # user id -> username
+traffic = {}  # user id -> lifetime bytes, both directions
 body = b""
 lock = threading.Lock()
 
@@ -79,10 +86,19 @@ def refresh_seen(window, at=None):
             del seen[peer]
 
 
-def refresh_names():
+def refresh_users():
     users = fetch(f"{API}/users?size=1000", {"Authorization": f"Bearer {TOKEN}"})
+    users = users["response"]["users"]
     names.clear()
-    names.update({str(u["id"]): u["username"] for u in users["response"]["users"]})
+    names.update({str(u["id"]): u["username"] for u in users})
+    traffic.clear()
+    traffic.update(
+        {
+            str(u["id"]): int(u["userTraffic"]["lifetimeUsedTrafficBytes"])
+            for u in users
+            if u.get("userTraffic")
+        }
+    )
 
 
 def live_peers():
@@ -119,6 +135,12 @@ def render(peers):
     ]
     for uid, name in sorted(names.items(), key=lambda kv: int(kv[0])):
         lines.append(f'vpn_user_info{{user="{uid}",username="{label(name)}"}} 1')
+    lines += [
+        "# HELP vpn_user_traffic_bytes_total Panel's lifetime traffic of a user",
+        "# TYPE vpn_user_traffic_bytes_total counter",
+    ]
+    for uid, used in sorted(traffic.items(), key=lambda kv: int(kv[0])):
+        lines.append(f'vpn_user_traffic_bytes_total{{user="{uid}"}} {used}')
     return ("\n".join(lines) + "\n").encode()
 
 
@@ -137,12 +159,9 @@ def bootstrap():
 def loop():
     global body
     bootstrap()
-    last_names = 0.0
     while True:
         try:
-            if time.time() - last_names > 600:
-                refresh_names()
-                last_names = time.time()
+            refresh_users()
             refresh_seen("10m")
             out = render(live_peers())
             with lock:

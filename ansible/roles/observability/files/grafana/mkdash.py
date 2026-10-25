@@ -286,11 +286,24 @@ EGRESS = f"rate(node_network_transmit_bytes_total{{{IFACE}}}[5m])"
 INGRESS = f"rate(node_network_receive_bytes_total{{{IFACE}}}[5m])"
 
 
+# The node agent reports the host's main interface counters (/proc/net/dev of
+# eth0) to the panel, which exports them. Same bytes as node-exporter, but the
+# panel has them from the minute a node is registered — node-exporter on
+# sto-03/04 started a day and a half later and the month came out 30 GB short
+# of the hoster's figure. Labelled `instance` like the node-exporter series.
+RW_NODE = "* on (node_uuid) group_left (node_name) remnawave_node_basic_info"
+
+
 def iface_bytes(window, offset=""):
-    return vpn_nodes(
-        f"sum by (instance) (increase(node_network_receive_bytes_total{{{IFACE}}}[{window}]{offset})"
-        f" + increase(node_network_transmit_bytes_total{{{IFACE}}}[{window}]{offset}))"
+    return label_instance(
+        f"sum by (node_uuid) (increase(remnawave_node_network_rx_bytes_total[{window}]"
+        f"{offset}) + increase(remnawave_node_network_tx_bytes_total[{window}]{offset}))"
+        f" {RW_NODE}"
     )
+
+
+def label_instance(expr):
+    return f'label_replace({expr}, "instance", "$1", "node_name", "(.*)")'
 
 
 HOSTER_LIMIT = 1e12
@@ -665,14 +678,25 @@ panels.append(row(101, "Трафик", y))
 y += 1
 
 
-# xray's "downlink" is towards the client (what we send), "uplink" is what the
-# client sends us.
+# Traffic comes from the panel, not from xray's counters on the node: the panel
+# reads those with reset every few seconds, so the node-side exporter sees
+# only what piled up since the last reset — about a third of the real volume.
+# The panel's totals update every two minutes, hence the 5m floor on these
+# panels. "download" is towards the client (what we send), "upload" is what
+# the client sends us.
+RW_INBOUND = {
+    "downlink": "remnawave_node_inbound_download_bytes",
+    "uplink": "remnawave_node_inbound_upload_bytes",
+}
+TRAFFIC_STEP = "5m"
+
+
 def by_tag(direction):
     return (
         "sum by (tag) ("
         + base_tag(
-            f'rate(xray_inbound_traffic_bytes_total{{direction="{direction}",'
-            'tag!="REMNAWAVE_API_INBOUND"}[$__rate_interval])'
+            f'rate({RW_INBOUND[direction]}{{tag!="REMNAWAVE_API_INBOUND"}}'
+            f"[$__rate_interval]) {RW_NODE}"
         )
         + ")"
     )
@@ -680,15 +704,15 @@ def by_tag(direction):
 
 def by_node(direction):
     return (
-        "sum by (instance) (rate(xray_inbound_traffic_bytes_total"
-        f'{{direction="{direction}"}}[$__rate_interval]))'
+        f"sum by (node_name) (rate({RW_INBOUND[direction]}[$__rate_interval])"
+        f" {RW_NODE})"
     )
 
 
-def by_user(direction):
+# Per user the panel keeps only one total, both directions together.
+def by_user():
     return named_user(
-        "sum by (user) (rate(xray_user_traffic_bytes_total"
-        f'{{direction="{direction}"}}[$__rate_interval])) > 0'
+        "sum by (user) (rate(vpn_user_traffic_bytes_total[$__rate_interval])) > 0"
     )
 
 
@@ -708,8 +732,11 @@ panels += [
             ],
             unit="Bps",
             stack=True,
-            desc=f"{MIRROR_NOTE} Счётчики самого xray, копии инбаундов выделенных нод "
-            "сложены с общими.",
+            interval=TRAFFIC_STEP,
+            desc=f"{MIRROR_NOTE} Счётчики панели по инбаундам, копии инбаундов "
+            "выделенных нод сложены с общими. Полезная нагрузка без заголовков: на "
+            "интерфейсе ноды байтов примерно вдвое больше — каждый байт входит из "
+            "интернета и выходит к клиенту.",
         )
     ),
     mirrored(
@@ -721,32 +748,28 @@ panels += [
             8,
             8,
             [
-                (by_node("downlink"), "{{instance}}"),
-                (by_node("uplink"), "{{instance}}" + RX),
+                (by_node("downlink"), "{{node_name}}"),
+                (by_node("uplink"), "{{node_name}}" + RX),
             ],
             unit="Bps",
             stack=True,
-            desc=MIRROR_NOTE,
+            interval=TRAFFIC_STEP,
+            desc=f"{MIRROR_NOTE} Счётчики панели, как в «По транспортам».",
         )
     ),
-    mirrored(
-        panel(
-            11,
-            "По пользователям",
-            16,
-            y,
-            8,
-            8,
-            [
-                (by_user("downlink"), "{{username}}"),
-                (by_user("uplink"), "{{username}}" + RX),
-            ],
-            unit="Bps",
-            stack=True,
-            desc=f"{MIRROR_NOTE} Имя берётся из панели по числовому id (поле email в "
-            "access.log). В легенде только отдача, приём виден на графике и в подсказке.",
-        ),
-        hide_legend=True,
+    panel(
+        11,
+        "По пользователям",
+        16,
+        y,
+        8,
+        8,
+        [(by_user(), "{{username}}")],
+        unit="Bps",
+        stack=True,
+        interval=TRAFFIC_STEP,
+        desc="Отдача и приём вместе: панель хранит по человеку только общий счётчик. "
+        "Все ноды сразу, фильтр Node сюда не действует.",
     ),
 ]
 y += 8
@@ -758,10 +781,9 @@ panels.append(row(107, "По людям за интервал", y))
 y += 1
 
 
-def user_bytes(direction):
+def user_bytes():
     return named_user(
-        "sum by (user) (increase(xray_user_traffic_bytes_total"
-        f'{{direction="{direction}"}}{BUCKET})) > 1e6'
+        f"sum by (user) (increase(vpn_user_traffic_bytes_total{BUCKET})) > 1e6"
     )
 
 
@@ -778,27 +800,21 @@ BUCKET_NOTE = (
 )
 panels += [
     bucketed(
-        mirrored(
-            panel(
-                13,
-                "Трафик по людям",
-                0,
-                y,
-                12,
-                8,
-                [
-                    (user_bytes("downlink"), "{{username}}"),
-                    (user_bytes("uplink"), "{{username}}" + RX),
-                ],
-                unit="bytes",
-                stack=True,
-                bars=True,
-                interval="5m",
-                calcs=("sum",),
-                desc=f"{MIRROR_NOTE} Все ноды и транспорты, включая Hysteria2. "
-                f"{BUCKET_NOTE} В легенде сумма отдачи за период.",
-            ),
-            hide_legend=True,
+        panel(
+            13,
+            "Трафик по людям",
+            0,
+            y,
+            12,
+            8,
+            [(user_bytes(), "{{username}}")],
+            unit="bytes",
+            stack=True,
+            bars=True,
+            interval="5m",
+            calcs=("sum",),
+            desc="Отдача и приём вместе, все ноды и транспорты, включая Hysteria2; "
+            f"счётчик панели. {BUCKET_NOTE} В легенде сумма за период.",
         )
     ),
     bucketed(
@@ -1081,10 +1097,16 @@ panels += [
         8,
         5,
         [
-            ("max(vpn_probe_direct_success)", "прямой выход"),
-            ("max(vpn_probe_subscription_success)", "подписка"),
+            (
+                "max(min_over_time(vpn_probe_direct_success[$__interval]))",
+                "прямой выход",
+            ),
+            (
+                "max(min_over_time(vpn_probe_subscription_success[$__interval]))",
+                "подписка",
+            ),
         ],
-        interval="5m",
+        interval=PROBE_STEP,
     ),
     panel(
         62,
@@ -1093,9 +1115,14 @@ panels += [
         y + 9,
         16,
         5,
-        [("avg by (node) (vpn_probe_latency_seconds)", "{{node}}")],
+        [
+            (
+                "avg by (node) (avg_over_time(vpn_probe_latency_seconds[$__interval]))",
+                "{{node}}",
+            )
+        ],
         unit="s",
-        interval="5m",
+        interval=PROBE_STEP,
         calcs=("mean", "max"),
         desc="Среднее по транспортам, только прошедшие запросы.",
     ),

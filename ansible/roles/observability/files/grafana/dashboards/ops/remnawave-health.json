@@ -450,7 +450,7 @@
             "type": "prometheus",
             "uid": "victoriametrics"
           },
-          "expr": "(sum by (instance) (increase(node_network_receive_bytes_total{instance=~\"$node\", device!~\"lo|docker.*|veth.*|br-.*|amn.*|awg.*|wg.*\"}[$__range]) + increase(node_network_transmit_bytes_total{instance=~\"$node\", device!~\"lo|docker.*|veth.*|br-.*|amn.*|awg.*|wg.*\"}[$__range]))) and on (instance) xray_up{instance=~\"$node\"}",
+          "expr": "label_replace(sum by (node_uuid) (increase(remnawave_node_network_rx_bytes_total[$__range]) + increase(remnawave_node_network_tx_bytes_total[$__range])) * on (node_uuid) group_left (node_name) remnawave_node_basic_info{node_name=~\"$node\"}, \"instance\", \"$1\", \"node_name\", \"(.*)\")",
           "legendFormat": "{{instance}}",
           "refId": "A",
           "range": false,
@@ -513,7 +513,7 @@
             "type": "prometheus",
             "uid": "victoriametrics"
           },
-          "expr": "(sum by (instance) (increase(node_network_receive_bytes_total{instance=~\"$node\", device!~\"lo|docker.*|veth.*|br-.*|amn.*|awg.*|wg.*\"}[1d] offset -1d) + increase(node_network_transmit_bytes_total{instance=~\"$node\", device!~\"lo|docker.*|veth.*|br-.*|amn.*|awg.*|wg.*\"}[1d] offset -1d))) and on (instance) xray_up{instance=~\"$node\"}",
+          "expr": "label_replace(sum by (node_uuid) (increase(remnawave_node_network_rx_bytes_total[1d] offset -1d) + increase(remnawave_node_network_tx_bytes_total[1d] offset -1d)) * on (node_uuid) group_left (node_name) remnawave_node_basic_info{node_name=~\"$node\"}, \"instance\", \"$1\", \"node_name\", \"(.*)\")",
           "legendFormat": "{{instance}}",
           "refId": "A",
           "range": true,

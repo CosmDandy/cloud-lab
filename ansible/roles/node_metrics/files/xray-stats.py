@@ -8,6 +8,12 @@ split by user *and* by inbound, sampled every 30 seconds instead of whatever
 the panel happens to persist, so a transport going quiet is visible as it
 happens rather than in yesterday's totals.
 
+NOTE: the Remnawave node reads the same counters through xray's stats API
+with reset, every few seconds. What this exporter sees is only the remainder
+since the last such read — roughly a third of the real volume. Fine for
+"is this inbound carrying anything", wrong for totals: dashboards take traffic
+volumes from the panel's own metrics instead.
+
 The user key is the panel's numeric user id — the same value that appears as
 `email: N` in access.log. Names stay in the panel on purpose: the node has no
 business holding them.

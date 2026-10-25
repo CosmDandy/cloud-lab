@@ -605,7 +605,7 @@
             "type": "prometheus",
             "uid": "victoriametrics"
           },
-          "expr": "sum((sum by (instance) (increase(node_network_receive_bytes_total{instance=~\"$node\", device!~\"lo|docker.*|veth.*|br-.*|amn.*|awg.*|wg.*\"}[$__range]) + increase(node_network_transmit_bytes_total{instance=~\"$node\", device!~\"lo|docker.*|veth.*|br-.*|amn.*|awg.*|wg.*\"}[$__range]))) and on (instance) xray_up{instance=~\"$node\"})",
+          "expr": "sum(label_replace(sum by (node_uuid) (increase(remnawave_node_network_rx_bytes_total[$__range]) + increase(remnawave_node_network_tx_bytes_total[$__range])) * on (node_uuid) group_left (node_name) remnawave_node_basic_info{node_name=~\"$node\"}, \"instance\", \"$1\", \"node_name\", \"(.*)\"))",
           "legendFormat": "сегодня",
           "refId": "A",
           "range": false,
@@ -671,7 +671,7 @@
             "type": "prometheus",
             "uid": "victoriametrics"
           },
-          "expr": "100 * max((sum by (instance) (increase(node_network_receive_bytes_total{instance=~\"$node\", device!~\"lo|docker.*|veth.*|br-.*|amn.*|awg.*|wg.*\"}[$__range]) + increase(node_network_transmit_bytes_total{instance=~\"$node\", device!~\"lo|docker.*|veth.*|br-.*|amn.*|awg.*|wg.*\"}[$__range]))) and on (instance) xray_up{instance=~\"$node\"}) / 1000000000000",
+          "expr": "100 * max(label_replace(sum by (node_uuid) (increase(remnawave_node_network_rx_bytes_total[$__range]) + increase(remnawave_node_network_tx_bytes_total[$__range])) * on (node_uuid) group_left (node_name) remnawave_node_basic_info{node_name=~\"$node\"}, \"instance\", \"$1\", \"node_name\", \"(.*)\")) / 1000000000000",
           "legendFormat": "лимит",
           "refId": "A",
           "range": false,
@@ -842,7 +842,7 @@
       "id": 10,
       "type": "timeseries",
       "title": "По транспортам",
-      "description": "Отдача клиентам — вверх от нуля, приём от клиентов — вниз. Счётчики самого xray, копии инбаундов выделенных нод сложены с общими.",
+      "description": "Отдача клиентам — вверх от нуля, приём от клиентов — вниз. Счётчики панели по инбаундам, копии инбаундов выделенных нод сложены с общими. Полезная нагрузка без заголовков: на интерфейсе ноды байтов примерно вдвое больше — каждый байт входит из интернета и выходит к клиенту.",
       "datasource": {
         "type": "prometheus",
         "uid": "victoriametrics"
@@ -910,20 +910,22 @@
             "type": "prometheus",
             "uid": "victoriametrics"
           },
-          "expr": "sum by (tag) (label_replace(rate(xray_inbound_traffic_bytes_total{instance=~\"$node\", direction=\"downlink\",tag!=\"REMNAWAVE_API_INBOUND\"}[$__rate_interval]), \"tag\", \"$1\", \"tag\", \"(.*?)(-STO[0-9]+)?\"))",
+          "expr": "sum by (tag) (label_replace(rate(remnawave_node_inbound_download_bytes{tag!=\"REMNAWAVE_API_INBOUND\"}[$__rate_interval]) * on (node_uuid) group_left (node_name) remnawave_node_basic_info{node_name=~\"$node\"}, \"tag\", \"$1\", \"tag\", \"(.*?)(-STO[0-9]+)?\"))",
           "legendFormat": "{{tag}}",
           "refId": "A",
-          "range": true
+          "range": true,
+          "interval": "5m"
         },
         {
           "datasource": {
             "type": "prometheus",
             "uid": "victoriametrics"
           },
-          "expr": "sum by (tag) (label_replace(rate(xray_inbound_traffic_bytes_total{instance=~\"$node\", direction=\"uplink\",tag!=\"REMNAWAVE_API_INBOUND\"}[$__rate_interval]), \"tag\", \"$1\", \"tag\", \"(.*?)(-STO[0-9]+)?\"))",
+          "expr": "sum by (tag) (label_replace(rate(remnawave_node_inbound_upload_bytes{tag!=\"REMNAWAVE_API_INBOUND\"}[$__rate_interval]) * on (node_uuid) group_left (node_name) remnawave_node_basic_info{node_name=~\"$node\"}, \"tag\", \"$1\", \"tag\", \"(.*?)(-STO[0-9]+)?\"))",
           "legendFormat": "{{tag}} · приём",
           "refId": "B",
-          "range": true
+          "range": true,
+          "interval": "5m"
         }
       ]
     },
@@ -931,7 +933,7 @@
       "id": 12,
       "type": "timeseries",
       "title": "По нодам",
-      "description": "Отдача клиентам — вверх от нуля, приём от клиентов — вниз.",
+      "description": "Отдача клиентам — вверх от нуля, приём от клиентов — вниз. Счётчики панели, как в «По транспортам».",
       "datasource": {
         "type": "prometheus",
         "uid": "victoriametrics"
@@ -999,20 +1001,22 @@
             "type": "prometheus",
             "uid": "victoriametrics"
           },
-          "expr": "sum by (instance) (rate(xray_inbound_traffic_bytes_total{instance=~\"$node\", direction=\"downlink\"}[$__rate_interval]))",
-          "legendFormat": "{{instance}}",
+          "expr": "sum by (node_name) (rate(remnawave_node_inbound_download_bytes[$__rate_interval]) * on (node_uuid) group_left (node_name) remnawave_node_basic_info{node_name=~\"$node\"})",
+          "legendFormat": "{{node_name}}",
           "refId": "A",
-          "range": true
+          "range": true,
+          "interval": "5m"
         },
         {
           "datasource": {
             "type": "prometheus",
             "uid": "victoriametrics"
           },
-          "expr": "sum by (instance) (rate(xray_inbound_traffic_bytes_total{instance=~\"$node\", direction=\"uplink\"}[$__rate_interval]))",
-          "legendFormat": "{{instance}} · приём",
+          "expr": "sum by (node_name) (rate(remnawave_node_inbound_upload_bytes[$__rate_interval]) * on (node_uuid) group_left (node_name) remnawave_node_basic_info{node_name=~\"$node\"})",
+          "legendFormat": "{{node_name}} · приём",
           "refId": "B",
-          "range": true
+          "range": true,
+          "interval": "5m"
         }
       ]
     },
@@ -1020,7 +1024,7 @@
       "id": 11,
       "type": "timeseries",
       "title": "По пользователям",
-      "description": "Отдача клиентам — вверх от нуля, приём от клиентов — вниз. Имя берётся из панели по числовому id (поле email в access.log). В легенде только отдача, приём виден на графике и в подсказке.",
+      "description": "Отдача и приём вместе: панель хранит по человеку только общий счётчик. Все ноды сразу, фильтр Node сюда не действует.",
       "datasource": {
         "type": "prometheus",
         "uid": "victoriametrics"
@@ -1045,35 +1049,7 @@
             }
           }
         },
-        "overrides": [
-          {
-            "matcher": {
-              "id": "byRegexp",
-              "options": ".* · приём$"
-            },
-            "properties": [
-              {
-                "id": "custom.transform",
-                "value": "negative-Y"
-              },
-              {
-                "id": "custom.stacking",
-                "value": {
-                  "mode": "normal",
-                  "group": "B"
-                }
-              },
-              {
-                "id": "custom.hideFrom",
-                "value": {
-                  "legend": true,
-                  "tooltip": false,
-                  "viz": false
-                }
-              }
-            ]
-          }
-        ]
+        "overrides": []
       },
       "options": {
         "legend": {
@@ -1096,20 +1072,11 @@
             "type": "prometheus",
             "uid": "victoriametrics"
           },
-          "expr": "(sum by (user) (rate(xray_user_traffic_bytes_total{instance=~\"$node\", direction=\"downlink\"}[$__rate_interval])) > 0) * on (user) group_left (username) vpn_user_info or ((sum by (user) (rate(xray_user_traffic_bytes_total{instance=~\"$node\", direction=\"downlink\"}[$__rate_interval])) > 0) unless on (user) vpn_user_info)",
+          "expr": "(sum by (user) (rate(vpn_user_traffic_bytes_total[$__rate_interval])) > 0) * on (user) group_left (username) vpn_user_info or ((sum by (user) (rate(vpn_user_traffic_bytes_total[$__rate_interval])) > 0) unless on (user) vpn_user_info)",
           "legendFormat": "{{username}}",
           "refId": "A",
-          "range": true
-        },
-        {
-          "datasource": {
-            "type": "prometheus",
-            "uid": "victoriametrics"
-          },
-          "expr": "(sum by (user) (rate(xray_user_traffic_bytes_total{instance=~\"$node\", direction=\"uplink\"}[$__rate_interval])) > 0) * on (user) group_left (username) vpn_user_info or ((sum by (user) (rate(xray_user_traffic_bytes_total{instance=~\"$node\", direction=\"uplink\"}[$__rate_interval])) > 0) unless on (user) vpn_user_info)",
-          "legendFormat": "{{username}} · приём",
-          "refId": "B",
-          "range": true
+          "range": true,
+          "interval": "5m"
         }
       ]
     },
@@ -1130,7 +1097,7 @@
       "id": 13,
       "type": "timeseries",
       "title": "Трафик по людям",
-      "description": "Отдача клиентам — вверх от нуля, приём от клиентов — вниз. Все ноды и транспорты, включая Hysteria2. Ширина столбца зависит от выбранного периода: на 6 часах около 5 минут, на неделе около 2 часов. Столбец подписан началом своего интервала. В легенде сумма отдачи за период.",
+      "description": "Отдача и приём вместе, все ноды и транспорты, включая Hysteria2; счётчик панели. Ширина столбца зависит от выбранного периода: на 6 часах около 5 минут, на неделе около 2 часов. Столбец подписан началом своего интервала. В легенде сумма за период.",
       "datasource": {
         "type": "prometheus",
         "uid": "victoriametrics"
@@ -1156,35 +1123,7 @@
             }
           }
         },
-        "overrides": [
-          {
-            "matcher": {
-              "id": "byRegexp",
-              "options": ".* · приём$"
-            },
-            "properties": [
-              {
-                "id": "custom.transform",
-                "value": "negative-Y"
-              },
-              {
-                "id": "custom.stacking",
-                "value": {
-                  "mode": "normal",
-                  "group": "B"
-                }
-              },
-              {
-                "id": "custom.hideFrom",
-                "value": {
-                  "legend": true,
-                  "tooltip": false,
-                  "viz": false
-                }
-              }
-            ]
-          }
-        ]
+        "overrides": []
       },
       "options": {
         "legend": {
@@ -1206,20 +1145,9 @@
             "type": "prometheus",
             "uid": "victoriametrics"
           },
-          "expr": "(sum by (user) (increase(xray_user_traffic_bytes_total{instance=~\"$node\", direction=\"downlink\"}[$__interval] offset -$__interval)) > 1e6) * on (user) group_left (username) vpn_user_info or ((sum by (user) (increase(xray_user_traffic_bytes_total{instance=~\"$node\", direction=\"downlink\"}[$__interval] offset -$__interval)) > 1e6) unless on (user) vpn_user_info)",
+          "expr": "(sum by (user) (increase(vpn_user_traffic_bytes_total[$__interval] offset -$__interval)) > 1e6) * on (user) group_left (username) vpn_user_info or ((sum by (user) (increase(vpn_user_traffic_bytes_total[$__interval] offset -$__interval)) > 1e6) unless on (user) vpn_user_info)",
           "legendFormat": "{{username}}",
           "refId": "A",
-          "range": true,
-          "interval": "5m"
-        },
-        {
-          "datasource": {
-            "type": "prometheus",
-            "uid": "victoriametrics"
-          },
-          "expr": "(sum by (user) (increase(xray_user_traffic_bytes_total{instance=~\"$node\", direction=\"uplink\"}[$__interval] offset -$__interval)) > 1e6) * on (user) group_left (username) vpn_user_info or ((sum by (user) (increase(xray_user_traffic_bytes_total{instance=~\"$node\", direction=\"uplink\"}[$__interval] offset -$__interval)) > 1e6) unless on (user) vpn_user_info)",
-          "legendFormat": "{{username}} · приём",
-          "refId": "B",
           "range": true,
           "interval": "5m"
         }
@@ -2018,22 +1946,22 @@
             "type": "prometheus",
             "uid": "victoriametrics"
           },
-          "expr": "max(vpn_probe_direct_success)",
+          "expr": "max(min_over_time(vpn_probe_direct_success[$__interval]))",
           "legendFormat": "прямой выход",
           "refId": "A",
           "range": true,
-          "interval": "5m"
+          "interval": "10m"
         },
         {
           "datasource": {
             "type": "prometheus",
             "uid": "victoriametrics"
           },
-          "expr": "max(vpn_probe_subscription_success)",
+          "expr": "max(min_over_time(vpn_probe_subscription_success[$__interval]))",
           "legendFormat": "подписка",
           "refId": "B",
           "range": true,
-          "interval": "5m"
+          "interval": "10m"
         }
       ]
     },
@@ -2085,11 +2013,11 @@
             "type": "prometheus",
             "uid": "victoriametrics"
           },
-          "expr": "avg by (node) (vpn_probe_latency_seconds)",
+          "expr": "avg by (node) (avg_over_time(vpn_probe_latency_seconds[$__interval]))",
           "legendFormat": "{{node}}",
           "refId": "A",
           "range": true,
-          "interval": "5m"
+          "interval": "10m"
         }
       ]
     },
