@@ -989,6 +989,10 @@ y += 8
 # time per node and per transport.
 panels.append(row(108, "Из России (проба из офиса)", y))
 y += 1
+# The timer is OnUnitInactiveSec=5min, so runs land every 5 min plus the
+# run itself: a 5m window is regularly empty and the lane breaks. 10m always
+# holds a run; a gap then means the probe really did not run.
+PROBE_STEP = "10m"
 PROBE_OK = "avg_over_time(vpn_probe_success_ratio[$__interval])"
 probe_now = {
     "id": 64,
@@ -1039,7 +1043,7 @@ probe_now = {
                 "rowField": "transport",
                 "valueField": "Value",
             },
-        }
+        },
     ],
 }
 panels += [
@@ -1052,7 +1056,7 @@ panels += [
         16,
         4,
         [(f"avg by (node) ({PROBE_OK})", "{{node}}")],
-        interval="5m",
+        interval=PROBE_STEP,
         desc="Средняя доля прошедших запросов по всем транспортам ноды. Жёлтый у ноды, "
         "на которой из офиса не проходят Vision и gRPC, — постоянный фон, а не авария. "
         "Серый — проба не работала (тестбед выключен).",
@@ -1065,7 +1069,7 @@ panels += [
         16,
         5,
         [(f"avg by (transport) ({PROBE_OK})", "{{transport}}")],
-        interval="5m",
+        interval=PROBE_STEP,
         desc="Средняя доля прошедших запросов по всем нодам. Красное у всех разом при "
         "красном «прямой выход» — лёг офисный канал, а не VPN.",
     ),

@@ -1896,7 +1896,7 @@
           "legendFormat": "{{node}}",
           "refId": "A",
           "range": true,
-          "interval": "5m"
+          "interval": "10m"
         }
       ]
     },
@@ -1959,7 +1959,7 @@
           "legendFormat": "{{transport}}",
           "refId": "A",
           "range": true,
-          "interval": "5m"
+          "interval": "10m"
         }
       ]
     },
