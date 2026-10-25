@@ -41,9 +41,17 @@
   loop:
     - grafana/datasources.yaml
     - grafana/dashboards.yaml
-    - promtail/config.yaml
     - vmalert/alerts.yaml
     - peer-users/peer_users.py
+  notify: Restart observability stack
+
+- name: Render promtail config
+  ansible.builtin.template:
+    src: promtail-config.yaml.j2
+    dest: "{{ observability_dir }}/promtail/config.yaml"
+    owner: "{{ observability_owner }}"
+    group: "{{ observability_owner }}"
+    mode: "0644"
   notify: Restart observability stack
 
 # Каталогом, а не через loop: дашборды добавляются и удаляются, и держать

@@ -31,4 +31,7 @@ atuin_open_registration: false
 # плюс сервис postgres в шаблоне compose.
 atuin_db_uri: "sqlite:///config/atuin.db"
 
-atuin_log_level: "info,atuin_server=info"
+# At info the server logs only warnings: the request log of tower-http's
+# TraceLayer sits at debug. on_response alone gives one line per request
+# with status and latency; all of tower_http=debug would double it.
+atuin_log_level: "info,atuin_server=info,tower_http::trace::on_response=debug"
