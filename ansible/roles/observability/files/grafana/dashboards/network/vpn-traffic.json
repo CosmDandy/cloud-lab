@@ -1,12 +1,13 @@
 {
   "uid": "vpn-traffic-quality",
   "title": "VPN · traffic & quality",
-  "description": "Кто подключён и как ему, трафик по транспортам и людям, недельная картина, Hysteria2 из eBPF, доступность.",
+  "description": "Сводка, трафик по транспортам, нодам и людям, качество TCP и Hysteria2, проба из России, доступность VPN.",
   "tags": [
     "vpn",
     "traffic"
   ],
   "timezone": "browser",
+  "graphTooltip": 1,
   "schemaVersion": 39,
   "version": 2,
   "refresh": "1m",
@@ -42,7 +43,7 @@
         "x": 0,
         "y": 1,
         "w": 4,
-        "h": 4
+        "h": 6
       },
       "fieldConfig": {
         "defaults": {
@@ -88,7 +89,7 @@
       "id": 2,
       "type": "stat",
       "title": "Трафик наружу",
-      "description": "Сумма исходящего трафика всех VPN-нод.",
+      "description": "Сумма исходящего трафика всех VPN-нод на интерфейсах.",
       "datasource": {
         "type": "prometheus",
         "uid": "victoriametrics"
@@ -97,7 +98,7 @@
         "x": 4,
         "y": 1,
         "w": 4,
-        "h": 4
+        "h": 3
       },
       "fieldConfig": {
         "defaults": {
@@ -140,9 +141,64 @@
       ]
     },
     {
+      "id": 8,
+      "type": "stat",
+      "title": "Трафик внутрь",
+      "description": "Сумма входящего трафика всех VPN-нод на интерфейсах.",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "victoriametrics"
+      },
+      "gridPos": {
+        "x": 4,
+        "y": 4,
+        "w": 4,
+        "h": 3
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "Bps",
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              }
+            ]
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        },
+        "textMode": "auto",
+        "colorMode": "background",
+        "graphMode": "area"
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "victoriametrics"
+          },
+          "expr": "sum((rate(node_network_receive_bytes_total{instance=~\"$node\", device!~\"lo|docker.*|veth.*|br-.*|amn.*|awg.*|wg.*\"}[5m])) and on (instance) xray_up{instance=~\"$node\"})",
+          "legendFormat": "входящий",
+          "refId": "A",
+          "range": true
+        }
+      ]
+    },
+    {
       "id": 3,
       "type": "stat",
-      "title": "Худшая доля потерь",
+      "title": "Худшая доля потерь, TCP",
       "description": "Самый пострадавший клиент за 10 минут, среди тех, кому отдаётся больше 64 КиБ/с. Порог алерта — 10 %.",
       "datasource": {
         "type": "prometheus",
@@ -152,7 +208,7 @@
         "x": 8,
         "y": 1,
         "w": 4,
-        "h": 4
+        "h": 3
       },
       "fieldConfig": {
         "defaults": {
@@ -204,6 +260,65 @@
       ]
     },
     {
+      "id": 9,
+      "type": "stat",
+      "title": "UDP сброшено нодами, в минуту",
+      "description": "Ближайшее к «потерям» для Hysteria2, что видно с ноды: датаграммы, которые выбросило само ядро. Потери по пути не видны — QUIC их шифрует.",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "victoriametrics"
+      },
+      "gridPos": {
+        "x": 8,
+        "y": 4,
+        "w": 4,
+        "h": 3
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              },
+              {
+                "color": "yellow",
+                "value": 100
+              }
+            ]
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        },
+        "textMode": "auto",
+        "colorMode": "background",
+        "graphMode": "area"
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "victoriametrics"
+          },
+          "expr": "((sum(rate(hy2_drops_total{instance=~\"$node\"}[10m])) or vector(0)) + (sum((rate(node_netstat_Udp_RcvbufErrors{instance=~\"$node\"}[10m])) and on (instance) xray_up{instance=~\"$node\"}) or vector(0))) * 60",
+          "legendFormat": "датаграмм",
+          "refId": "A",
+          "range": true
+        }
+      ]
+    },
+    {
       "id": 4,
       "type": "stat",
       "title": "Повторов SYN в секунду",
@@ -216,7 +331,7 @@
         "x": 12,
         "y": 1,
         "w": 4,
-        "h": 4
+        "h": 3
       },
       "fieldConfig": {
         "defaults": {
@@ -263,19 +378,19 @@
       ]
     },
     {
-      "id": 5,
+      "id": 15,
       "type": "stat",
-      "title": "Сборщиков не работает",
-      "description": "Экспорт счётчиков xray и eBPF по Hysteria2 на каждой ноде панели. Нода, которая перестала присылать метрики совсем, тоже считается. 0 — все живы.",
+      "title": "Хостов пропало из России",
+      "description": "Хосты подписки, которые из офиса работали, а теперь не проходят — то же условие, что у алерта ProtocolDeadFromRussia. Хосты, которые из офиса не проходят постоянно, сюда не попадают.",
       "datasource": {
         "type": "prometheus",
         "uid": "victoriametrics"
       },
       "gridPos": {
-        "x": 16,
-        "y": 1,
+        "x": 12,
+        "y": 4,
         "w": 4,
-        "h": 4
+        "h": 3
       },
       "fieldConfig": {
         "defaults": {
@@ -314,8 +429,8 @@
             "type": "prometheus",
             "uid": "victoriametrics"
           },
-          "expr": "(count(remnawave_node_basic_info{node_name=~\"$node\"}) - (count(xray_up{instance=~\"$node\"} == 1) or vector(0))) + (count(remnawave_node_basic_info{node_name=~\"$node\"}) - (count(hy2_collector_up{instance=~\"$node\"} == 1) or vector(0)))",
-          "legendFormat": "сборщиков",
+          "expr": "count(max_over_time(vpn_probe_success_ratio[12m]) == 0 and avg_over_time(vpn_probe_success_ratio[1d] offset 15m) > 0.5 and on (instance) last_over_time(vpn_probe_direct_success[12m]) == 1) or vector(0)",
+          "legendFormat": "хостов",
           "refId": "A",
           "range": false,
           "instant": true
@@ -332,10 +447,10 @@
         "uid": "victoriametrics"
       },
       "gridPos": {
-        "x": 20,
+        "x": 16,
         "y": 1,
         "w": 4,
-        "h": 4
+        "h": 3
       },
       "fieldConfig": {
         "defaults": {
@@ -383,13 +498,196 @@
       ]
     },
     {
+      "id": 5,
+      "type": "stat",
+      "title": "Сборщиков не работает",
+      "description": "Экспорт счётчиков xray и eBPF по Hysteria2 на каждой ноде панели. Нода, которая перестала присылать метрики совсем, тоже считается. 0 — все живы.",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "victoriametrics"
+      },
+      "gridPos": {
+        "x": 16,
+        "y": 4,
+        "w": 4,
+        "h": 3
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              },
+              {
+                "color": "red",
+                "value": 1
+              }
+            ]
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        },
+        "textMode": "auto",
+        "colorMode": "background",
+        "graphMode": "none"
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "victoriametrics"
+          },
+          "expr": "(count(remnawave_node_basic_info{node_name=~\"$node\"}) - (count(xray_up{instance=~\"$node\"} == 1) or vector(0))) + (count(remnawave_node_basic_info{node_name=~\"$node\"}) - (count(hy2_collector_up{instance=~\"$node\"} == 1) or vector(0)))",
+          "legendFormat": "сборщиков",
+          "refId": "A",
+          "range": false,
+          "instant": true
+        }
+      ]
+    },
+    {
+      "id": 16,
+      "type": "stat",
+      "title": "Трафик за сегодня",
+      "description": "Все VPN-ноды, приём и отдача на интерфейсах, с полуночи по времени браузера.",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "victoriametrics"
+      },
+      "gridPos": {
+        "x": 20,
+        "y": 1,
+        "w": 4,
+        "h": 3
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "decbytes",
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              }
+            ]
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        },
+        "textMode": "auto",
+        "colorMode": "background",
+        "graphMode": "none"
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "victoriametrics"
+          },
+          "expr": "sum((sum by (instance) (increase(node_network_receive_bytes_total{instance=~\"$node\", device!~\"lo|docker.*|veth.*|br-.*|amn.*|awg.*|wg.*\"}[$__range]) + increase(node_network_transmit_bytes_total{instance=~\"$node\", device!~\"lo|docker.*|veth.*|br-.*|amn.*|awg.*|wg.*\"}[$__range]))) and on (instance) xray_up{instance=~\"$node\"})",
+          "legendFormat": "сегодня",
+          "refId": "A",
+          "range": false,
+          "instant": true
+        }
+      ],
+      "timeFrom": "now/d"
+    },
+    {
+      "id": 17,
+      "type": "stat",
+      "title": "Худшая нода, % лимита месяца",
+      "description": "Сколько от 1 ТБ хостера израсходовала с начала месяца самая загруженная нода.",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "victoriametrics"
+      },
+      "gridPos": {
+        "x": 20,
+        "y": 4,
+        "w": 4,
+        "h": 3
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "percent",
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              },
+              {
+                "color": "yellow",
+                "value": 80
+              },
+              {
+                "color": "red",
+                "value": 100
+              }
+            ]
+          },
+          "decimals": 0
+        },
+        "overrides": []
+      },
+      "options": {
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        },
+        "textMode": "auto",
+        "colorMode": "background",
+        "graphMode": "none"
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "victoriametrics"
+          },
+          "expr": "100 * max((sum by (instance) (increase(node_network_receive_bytes_total{instance=~\"$node\", device!~\"lo|docker.*|veth.*|br-.*|amn.*|awg.*|wg.*\"}[$__range]) + increase(node_network_transmit_bytes_total{instance=~\"$node\", device!~\"lo|docker.*|veth.*|br-.*|amn.*|awg.*|wg.*\"}[$__range]))) and on (instance) xray_up{instance=~\"$node\"}) / 1000000000000",
+          "legendFormat": "лимит",
+          "refId": "A",
+          "range": false,
+          "instant": true
+        }
+      ],
+      "timeFrom": "now/M"
+    },
+    {
       "id": 106,
       "type": "row",
       "title": "Кто сейчас подключён",
       "collapsed": false,
       "gridPos": {
         "x": 0,
-        "y": 5,
+        "y": 7,
         "w": 24,
         "h": 1
       },
@@ -406,7 +704,7 @@
       },
       "gridPos": {
         "x": 0,
-        "y": 6,
+        "y": 8,
         "w": 24,
         "h": 8
       },
@@ -534,7 +832,7 @@
       "collapsed": false,
       "gridPos": {
         "x": 0,
-        "y": 14,
+        "y": 16,
         "w": 24,
         "h": 1
       },
@@ -543,15 +841,15 @@
     {
       "id": 10,
       "type": "timeseries",
-      "title": "По транспортам, отдача клиентам",
-      "description": "Счётчики самого xray, копии инбаундов выделенных нод сложены с общими.",
+      "title": "По транспортам",
+      "description": "Отдача клиентам — вверх от нуля, приём от клиентов — вниз. Счётчики самого xray, копии инбаундов выделенных нод сложены с общими.",
       "datasource": {
         "type": "prometheus",
         "uid": "victoriametrics"
       },
       "gridPos": {
         "x": 0,
-        "y": 15,
+        "y": 17,
         "w": 8,
         "h": 8
       },
@@ -569,7 +867,27 @@
             }
           }
         },
-        "overrides": []
+        "overrides": [
+          {
+            "matcher": {
+              "id": "byRegexp",
+              "options": ".* · приём$"
+            },
+            "properties": [
+              {
+                "id": "custom.transform",
+                "value": "negative-Y"
+              },
+              {
+                "id": "custom.stacking",
+                "value": {
+                  "mode": "normal",
+                  "group": "B"
+                }
+              }
+            ]
+          }
+        ]
       },
       "options": {
         "legend": {
@@ -596,21 +914,31 @@
           "legendFormat": "{{tag}}",
           "refId": "A",
           "range": true
+        },
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "victoriametrics"
+          },
+          "expr": "sum by (tag) (label_replace(rate(xray_inbound_traffic_bytes_total{instance=~\"$node\", direction=\"uplink\",tag!=\"REMNAWAVE_API_INBOUND\"}[$__rate_interval]), \"tag\", \"$1\", \"tag\", \"(.*?)(-STO[0-9]+)?\"))",
+          "legendFormat": "{{tag}} · приём",
+          "refId": "B",
+          "range": true
         }
       ]
     },
     {
       "id": 12,
       "type": "timeseries",
-      "title": "По нодам, отдача клиентам",
-      "description": "",
+      "title": "По нодам",
+      "description": "Отдача клиентам — вверх от нуля, приём от клиентов — вниз.",
       "datasource": {
         "type": "prometheus",
         "uid": "victoriametrics"
       },
       "gridPos": {
         "x": 8,
-        "y": 15,
+        "y": 17,
         "w": 8,
         "h": 8
       },
@@ -628,7 +956,27 @@
             }
           }
         },
-        "overrides": []
+        "overrides": [
+          {
+            "matcher": {
+              "id": "byRegexp",
+              "options": ".* · приём$"
+            },
+            "properties": [
+              {
+                "id": "custom.transform",
+                "value": "negative-Y"
+              },
+              {
+                "id": "custom.stacking",
+                "value": {
+                  "mode": "normal",
+                  "group": "B"
+                }
+              }
+            ]
+          }
+        ]
       },
       "options": {
         "legend": {
@@ -655,6 +1003,16 @@
           "legendFormat": "{{instance}}",
           "refId": "A",
           "range": true
+        },
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "victoriametrics"
+          },
+          "expr": "sum by (instance) (rate(xray_inbound_traffic_bytes_total{instance=~\"$node\", direction=\"uplink\"}[$__rate_interval]))",
+          "legendFormat": "{{instance}} · приём",
+          "refId": "B",
+          "range": true
         }
       ]
     },
@@ -662,14 +1020,14 @@
       "id": 11,
       "type": "timeseries",
       "title": "По пользователям",
-      "description": "Имя берётся из панели по числовому id (поле email в access.log).",
+      "description": "Отдача клиентам — вверх от нуля, приём от клиентов — вниз. Имя берётся из панели по числовому id (поле email в access.log). В легенде только отдача, приём виден на графике и в подсказке.",
       "datasource": {
         "type": "prometheus",
         "uid": "victoriametrics"
       },
       "gridPos": {
         "x": 16,
-        "y": 15,
+        "y": 17,
         "w": 8,
         "h": 8
       },
@@ -687,7 +1045,35 @@
             }
           }
         },
-        "overrides": []
+        "overrides": [
+          {
+            "matcher": {
+              "id": "byRegexp",
+              "options": ".* · приём$"
+            },
+            "properties": [
+              {
+                "id": "custom.transform",
+                "value": "negative-Y"
+              },
+              {
+                "id": "custom.stacking",
+                "value": {
+                  "mode": "normal",
+                  "group": "B"
+                }
+              },
+              {
+                "id": "custom.hideFrom",
+                "value": {
+                  "legend": true,
+                  "tooltip": false,
+                  "viz": false
+                }
+              }
+            ]
+          }
+        ]
       },
       "options": {
         "legend": {
@@ -714,17 +1100,27 @@
           "legendFormat": "{{username}}",
           "refId": "A",
           "range": true
+        },
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "victoriametrics"
+          },
+          "expr": "(sum by (user) (rate(xray_user_traffic_bytes_total{instance=~\"$node\", direction=\"uplink\"}[$__rate_interval])) > 0) * on (user) group_left (username) vpn_user_info or ((sum by (user) (rate(xray_user_traffic_bytes_total{instance=~\"$node\", direction=\"uplink\"}[$__rate_interval])) > 0) unless on (user) vpn_user_info)",
+          "legendFormat": "{{username}} · приём",
+          "refId": "B",
+          "range": true
         }
       ]
     },
     {
       "id": 107,
       "type": "row",
-      "title": "По дням и по людям",
+      "title": "По людям за интервал",
       "collapsed": false,
       "gridPos": {
         "x": 0,
-        "y": 23,
+        "y": 25,
         "w": 24,
         "h": 1
       },
@@ -733,15 +1129,15 @@
     {
       "id": 13,
       "type": "timeseries",
-      "title": "Трафик за сутки",
-      "description": "Отдача и приём вместе, все ноды и транспорты, включая Hysteria2.",
+      "title": "Трафик по людям",
+      "description": "Отдача клиентам — вверх от нуля, приём от клиентов — вниз. Все ноды и транспорты, включая Hysteria2. Ширина столбца зависит от выбранного периода: на 6 часах около 5 минут, на неделе около 2 часов. Столбец подписан началом своего интервала. В легенде сумма отдачи за период.",
       "datasource": {
         "type": "prometheus",
         "uid": "victoriametrics"
       },
       "gridPos": {
         "x": 0,
-        "y": 24,
+        "y": 26,
         "w": 12,
         "h": 8
       },
@@ -760,7 +1156,35 @@
             }
           }
         },
-        "overrides": []
+        "overrides": [
+          {
+            "matcher": {
+              "id": "byRegexp",
+              "options": ".* · приём$"
+            },
+            "properties": [
+              {
+                "id": "custom.transform",
+                "value": "negative-Y"
+              },
+              {
+                "id": "custom.stacking",
+                "value": {
+                  "mode": "normal",
+                  "group": "B"
+                }
+              },
+              {
+                "id": "custom.hideFrom",
+                "value": {
+                  "legend": true,
+                  "tooltip": false,
+                  "viz": false
+                }
+              }
+            ]
+          }
+        ]
       },
       "options": {
         "legend": {
@@ -782,26 +1206,38 @@
             "type": "prometheus",
             "uid": "victoriametrics"
           },
-          "expr": "(sum by (user) (increase(xray_user_traffic_bytes_total{instance=~\"$node\"}[1d])) > 1e6) * on (user) group_left (username) vpn_user_info or ((sum by (user) (increase(xray_user_traffic_bytes_total{instance=~\"$node\"}[1d])) > 1e6) unless on (user) vpn_user_info)",
+          "expr": "(sum by (user) (increase(xray_user_traffic_bytes_total{instance=~\"$node\", direction=\"downlink\"}[$__interval] offset -$__interval)) > 1e6) * on (user) group_left (username) vpn_user_info or ((sum by (user) (increase(xray_user_traffic_bytes_total{instance=~\"$node\", direction=\"downlink\"}[$__interval] offset -$__interval)) > 1e6) unless on (user) vpn_user_info)",
           "legendFormat": "{{username}}",
           "refId": "A",
           "range": true,
-          "interval": "1d"
+          "interval": "5m"
+        },
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "victoriametrics"
+          },
+          "expr": "(sum by (user) (increase(xray_user_traffic_bytes_total{instance=~\"$node\", direction=\"uplink\"}[$__interval] offset -$__interval)) > 1e6) * on (user) group_left (username) vpn_user_info or ((sum by (user) (increase(xray_user_traffic_bytes_total{instance=~\"$node\", direction=\"uplink\"}[$__interval] offset -$__interval)) > 1e6) unless on (user) vpn_user_info)",
+          "legendFormat": "{{username}} · приём",
+          "refId": "B",
+          "range": true,
+          "interval": "5m"
         }
-      ]
+      ],
+      "maxDataPoints": 72
     },
     {
       "id": 14,
       "type": "timeseries",
-      "title": "Потери за сутки",
-      "description": "Доля повторно отправленных байтов за сутки, TCP-транспорты, только при отдаче больше 50 МБ за день. Это главный ответ на «было ли плохо на этой неделе».",
+      "title": "Потери по людям",
+      "description": "Доля повторно отправленных байтов за интервал, TCP-транспорты, только при отдаче в среднем больше 2 КиБ/с. Ширина столбца зависит от выбранного периода: на 6 часах около 5 минут, на неделе около 2 часов. Столбец подписан началом своего интервала.",
       "datasource": {
         "type": "prometheus",
         "uid": "victoriametrics"
       },
       "gridPos": {
         "x": 12,
-        "y": 24,
+        "y": 26,
         "w": 12,
         "h": 8
       },
@@ -840,22 +1276,23 @@
             "type": "prometheus",
             "uid": "victoriametrics"
           },
-          "expr": "100 * sum by (username) ((increase(vpn_client_tcp_retrans_bytes_total{instance=~\"$node\"}[1d])) * on (peer) group_left (username) vpn_peer_user or ((increase(vpn_client_tcp_retrans_bytes_total{instance=~\"$node\"}[1d])) unless on (peer) vpn_peer_user)) / sum by (username) ((increase(vpn_client_tcp_sent_bytes_total{instance=~\"$node\"}[1d])) * on (peer) group_left (username) vpn_peer_user or ((increase(vpn_client_tcp_sent_bytes_total{instance=~\"$node\"}[1d])) unless on (peer) vpn_peer_user)) and sum by (username) ((increase(vpn_client_tcp_sent_bytes_total{instance=~\"$node\"}[1d])) * on (peer) group_left (username) vpn_peer_user or ((increase(vpn_client_tcp_sent_bytes_total{instance=~\"$node\"}[1d])) unless on (peer) vpn_peer_user)) > 5e7",
+          "expr": "100 * sum by (username) ((increase(vpn_client_tcp_retrans_bytes_total{instance=~\"$node\"}[$__interval] offset -$__interval)) * on (peer) group_left (username) vpn_peer_user or ((increase(vpn_client_tcp_retrans_bytes_total{instance=~\"$node\"}[$__interval] offset -$__interval)) unless on (peer) vpn_peer_user)) / sum by (username) ((increase(vpn_client_tcp_sent_bytes_total{instance=~\"$node\"}[$__interval] offset -$__interval)) * on (peer) group_left (username) vpn_peer_user or ((increase(vpn_client_tcp_sent_bytes_total{instance=~\"$node\"}[$__interval] offset -$__interval)) unless on (peer) vpn_peer_user)) and sum by (username) ((increase(vpn_client_tcp_sent_bytes_total{instance=~\"$node\"}[$__interval] offset -$__interval)) * on (peer) group_left (username) vpn_peer_user or ((increase(vpn_client_tcp_sent_bytes_total{instance=~\"$node\"}[$__interval] offset -$__interval)) unless on (peer) vpn_peer_user)) > 2048 * $__interval_ms / 1000",
           "legendFormat": "{{username}}",
           "refId": "A",
           "range": true,
-          "interval": "1d"
+          "interval": "5m"
         }
-      ]
+      ],
+      "maxDataPoints": 72
     },
     {
       "id": 102,
       "type": "row",
-      "title": "Качество связи по клиентам",
+      "title": "TCP-транспорты (Vision, gRPC, XHTTP): качество по клиентам",
       "collapsed": false,
       "gridPos": {
         "x": 0,
-        "y": 32,
+        "y": 34,
         "w": 24,
         "h": 1
       },
@@ -872,7 +1309,7 @@
       },
       "gridPos": {
         "x": 0,
-        "y": 33,
+        "y": 35,
         "w": 12,
         "h": 8
       },
@@ -929,7 +1366,7 @@
       },
       "gridPos": {
         "x": 12,
-        "y": 33,
+        "y": 35,
         "w": 12,
         "h": 8
       },
@@ -977,11 +1414,11 @@
     {
       "id": 103,
       "type": "row",
-      "title": "Hysteria2 (eBPF)",
+      "title": "Hysteria2 (UDP, eBPF)",
       "collapsed": false,
       "gridPos": {
         "x": 0,
-        "y": 41,
+        "y": 43,
         "w": 24,
         "h": 1
       },
@@ -991,14 +1428,14 @@
       "id": 30,
       "type": "timeseries",
       "title": "Hysteria2 по нодам",
-      "description": "Для UDP ядро не хранит состояния потока, поэтому данные снимаются пробами eBPF на udp_queue_rcv_one_skb и udp_send_skb.",
+      "description": "Отдача клиентам — вверх от нуля, приём от клиентов — вниз. Для UDP ядро не хранит состояния потока, поэтому данные снимаются пробами eBPF на udp_queue_rcv_one_skb и udp_send_skb.",
       "datasource": {
         "type": "prometheus",
         "uid": "victoriametrics"
       },
       "gridPos": {
         "x": 0,
-        "y": 42,
+        "y": 44,
         "w": 12,
         "h": 8
       },
@@ -1012,7 +1449,20 @@
             "spanNulls": 300000
           }
         },
-        "overrides": []
+        "overrides": [
+          {
+            "matcher": {
+              "id": "byRegexp",
+              "options": ".* · приём$"
+            },
+            "properties": [
+              {
+                "id": "custom.transform",
+                "value": "negative-Y"
+              }
+            ]
+          }
+        ]
       },
       "options": {
         "legend": {
@@ -1036,7 +1486,7 @@
             "uid": "victoriametrics"
           },
           "expr": "sum by (instance) (rate(hy2_tx_bytes_total{instance=~\"$node\"}[$__rate_interval])) * 8",
-          "legendFormat": "{{instance}} → отдача",
+          "legendFormat": "{{instance}}",
           "refId": "A",
           "range": true
         },
@@ -1046,7 +1496,7 @@
             "uid": "victoriametrics"
           },
           "expr": "sum by (instance) (rate(hy2_rx_bytes_total{instance=~\"$node\"}[$__rate_interval])) * 8",
-          "legendFormat": "{{instance}} ← приём",
+          "legendFormat": "{{instance}} · приём",
           "refId": "B",
           "range": true
         }
@@ -1056,14 +1506,14 @@
       "id": 32,
       "type": "timeseries",
       "title": "Hysteria2 по людям",
-      "description": "",
+      "description": "Отдача клиентам — вверх от нуля, приём от клиентов — вниз.",
       "datasource": {
         "type": "prometheus",
         "uid": "victoriametrics"
       },
       "gridPos": {
         "x": 12,
-        "y": 42,
+        "y": 44,
         "w": 8,
         "h": 8
       },
@@ -1081,7 +1531,35 @@
             }
           }
         },
-        "overrides": []
+        "overrides": [
+          {
+            "matcher": {
+              "id": "byRegexp",
+              "options": ".* · приём$"
+            },
+            "properties": [
+              {
+                "id": "custom.transform",
+                "value": "negative-Y"
+              },
+              {
+                "id": "custom.stacking",
+                "value": {
+                  "mode": "normal",
+                  "group": "B"
+                }
+              },
+              {
+                "id": "custom.hideFrom",
+                "value": {
+                  "legend": true,
+                  "tooltip": false,
+                  "viz": false
+                }
+              }
+            ]
+          }
+        ]
       },
       "options": {
         "legend": {
@@ -1108,6 +1586,16 @@
           "legendFormat": "{{username}}",
           "refId": "A",
           "range": true
+        },
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "victoriametrics"
+          },
+          "expr": "sum by (username) ((rate(hy2_rx_bytes_total{instance=~\"$node\"}[$__rate_interval])) * on (peer) group_left (username) vpn_peer_user or ((rate(hy2_rx_bytes_total{instance=~\"$node\"}[$__rate_interval])) unless on (peer) vpn_peer_user)) * 8 > 0",
+          "legendFormat": "{{username}} · приём",
+          "refId": "B",
+          "range": true
         }
       ]
     },
@@ -1122,7 +1610,7 @@
       },
       "gridPos": {
         "x": 20,
-        "y": 42,
+        "y": 44,
         "w": 4,
         "h": 8
       },
@@ -1178,7 +1666,7 @@
       "collapsed": false,
       "gridPos": {
         "x": 0,
-        "y": 50,
+        "y": 52,
         "w": 24,
         "h": 1
       },
@@ -1188,14 +1676,14 @@
       "id": 40,
       "type": "timeseries",
       "title": "Доля лишних и потерянных повторов",
-      "description": "Доля от всех повторов ноды за час. Первая линия — насколько TCP ошибается, принимая задержку за потерю; вторая — признак тяжёлых потерь на пути. Рисуется, только когда повторов за час больше тысячи: на меньшем числе доля скачет выше 100 % и ничего не значит.",
+      "description": "Доля от всех повторов ноды за час. Первая линия — насколько TCP ошибается, принимая задержку за потерю; вторая — признак тяжёлых потерь на пути. Рисуется, только когда повторов за час больше тысячи: на меньшем числе доля скачет и ничего не значит. Первая линия выше 100 % — клиенты получили больше дубликатов, чем мы повторили: пакеты дублирует сам путь (переупорядочивание, сеть провайдера), а не наш TCP. Вреда нет, клиент выбрасывает копии.",
       "datasource": {
         "type": "prometheus",
         "uid": "victoriametrics"
       },
       "gridPos": {
         "x": 0,
-        "y": 51,
+        "y": 53,
         "w": 24,
         "h": 8
       },
@@ -1257,26 +1745,112 @@
       "collapsed": false,
       "gridPos": {
         "x": 0,
-        "y": 59,
+        "y": 61,
         "w": 24,
         "h": 1
       },
       "panels": []
     },
     {
-      "id": 60,
-      "type": "state-timeline",
-      "title": "Хосты подписки",
-      "description": "Доля запросов, прошедших через хост, по каждому прогону пробы из офиса. Серый — проба не работала (тестбед выключен). Красная полоса у всех разом при красном «прямой выход» — лёг офисный канал, а не VPN.",
+      "id": 64,
+      "type": "table",
+      "title": "Сейчас: транспорт × нода",
+      "description": "Доля запросов, прошедших через хост, по последнему прогону пробы. Пусто — такого хоста в подписке нет.",
       "datasource": {
         "type": "prometheus",
         "uid": "victoriametrics"
       },
       "gridPos": {
         "x": 0,
-        "y": 60,
+        "y": 62,
+        "w": 8,
+        "h": 9
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "percentunit",
+          "decimals": 0,
+          "custom": {
+            "align": "center",
+            "cellOptions": {
+              "type": "color-background"
+            }
+          },
+          "color": {
+            "mode": "thresholds"
+          },
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "red",
+                "value": null
+              },
+              {
+                "color": "yellow",
+                "value": 0.5
+              },
+              {
+                "color": "green",
+                "value": 0.99
+              }
+            ]
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "showHeader": true,
+        "cellHeight": "sm"
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "victoriametrics"
+          },
+          "expr": "max by (transport, node) (last_over_time(vpn_probe_success_ratio[15m]))",
+          "refId": "A",
+          "instant": true,
+          "range": false,
+          "format": "table"
+        }
+      ],
+      "transformations": [
+        {
+          "id": "labelsToFields",
+          "options": {
+            "mode": "columns"
+          }
+        },
+        {
+          "id": "merge",
+          "options": {}
+        },
+        {
+          "id": "groupingToMatrix",
+          "options": {
+            "columnField": "node",
+            "rowField": "transport",
+            "valueField": "Value"
+          }
+        }
+      ]
+    },
+    {
+      "id": 60,
+      "type": "state-timeline",
+      "title": "По нодам",
+      "description": "Средняя доля прошедших запросов по всем транспортам ноды. Жёлтый у ноды, на которой из офиса не проходят Vision и gRPC, — постоянный фон, а не авария. Серый — проба не работала (тестбед выключен).",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "victoriametrics"
+      },
+      "gridPos": {
+        "x": 8,
+        "y": 62,
         "w": 16,
-        "h": 10
+        "h": 4
       },
       "fieldConfig": {
         "defaults": {
@@ -1318,8 +1892,71 @@
             "type": "prometheus",
             "uid": "victoriametrics"
           },
-          "expr": "max by (host) (vpn_probe_success_ratio)",
-          "legendFormat": "{{host}}",
+          "expr": "avg by (node) (avg_over_time(vpn_probe_success_ratio[$__interval]))",
+          "legendFormat": "{{node}}",
+          "refId": "A",
+          "range": true,
+          "interval": "5m"
+        }
+      ]
+    },
+    {
+      "id": 63,
+      "type": "state-timeline",
+      "title": "По транспортам",
+      "description": "Средняя доля прошедших запросов по всем нодам. Красное у всех разом при красном «прямой выход» — лёг офисный канал, а не VPN.",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "victoriametrics"
+      },
+      "gridPos": {
+        "x": 8,
+        "y": 66,
+        "w": 16,
+        "h": 5
+      },
+      "fieldConfig": {
+        "defaults": {
+          "mappings": [],
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "red",
+                "value": null
+              },
+              {
+                "color": "yellow",
+                "value": 0.5
+              },
+              {
+                "color": "green",
+                "value": 0.99
+              }
+            ]
+          },
+          "color": {
+            "mode": "thresholds"
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "showValue": "never",
+        "mergeValues": true,
+        "rowHeight": 0.8,
+        "legend": {
+          "showLegend": false
+        }
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "victoriametrics"
+          },
+          "expr": "avg by (transport) (avg_over_time(vpn_probe_success_ratio[$__interval]))",
+          "legendFormat": "{{transport}}",
           "refId": "A",
           "range": true,
           "interval": "5m"
@@ -1336,8 +1973,8 @@
         "uid": "victoriametrics"
       },
       "gridPos": {
-        "x": 16,
-        "y": 60,
+        "x": 0,
+        "y": 71,
         "w": 8,
         "h": 5
       },
@@ -1403,16 +2040,16 @@
     {
       "id": 62,
       "type": "timeseries",
-      "title": "Время ответа через хост",
-      "description": "",
+      "title": "Время ответа через ноду",
+      "description": "Среднее по транспортам, только прошедшие запросы.",
       "datasource": {
         "type": "prometheus",
         "uid": "victoriametrics"
       },
       "gridPos": {
-        "x": 16,
-        "y": 65,
-        "w": 8,
+        "x": 8,
+        "y": 71,
+        "w": 16,
         "h": 5
       },
       "fieldConfig": {
@@ -1448,8 +2085,8 @@
             "type": "prometheus",
             "uid": "victoriametrics"
           },
-          "expr": "max by (host) (vpn_probe_latency_seconds)",
-          "legendFormat": "{{host}}",
+          "expr": "avg by (node) (vpn_probe_latency_seconds)",
+          "legendFormat": "{{node}}",
           "refId": "A",
           "range": true,
           "interval": "5m"
@@ -1463,7 +2100,7 @@
       "collapsed": false,
       "gridPos": {
         "x": 0,
-        "y": 70,
+        "y": 76,
         "w": 24,
         "h": 1
       },
@@ -1473,15 +2110,15 @@
       "id": 50,
       "type": "stat",
       "title": "Худшая доступность за период",
-      "description": "Самая проблемная проверка gatus за выбранный период. Проверки идут из Швеции и видят только доступность адреса, а не работу протоколов из России.",
+      "description": "Самая проблемная VPN-проверка gatus за выбранный период. Проверки идут из Швеции и видят только доступность адреса, а не работу протоколов из России.",
       "datasource": {
         "type": "prometheus",
         "uid": "victoriametrics"
       },
       "gridPos": {
         "x": 0,
-        "y": 71,
-        "w": 6,
+        "y": 77,
+        "w": 4,
         "h": 6
       },
       "fieldConfig": {
@@ -1526,7 +2163,7 @@
             "type": "prometheus",
             "uid": "victoriametrics"
           },
-          "expr": "min(100 * (sum by (name) (increase(gatus_results_total{success=\"true\"}[$__range]))) / (sum by (name) (increase(gatus_results_total[$__range]))))",
+          "expr": "min(100 * (sum by (name) (increase(gatus_results_total{group=~\"vpn|vpn nodes\", success=\"true\"}[$__range]))) / (sum by (name) (increase(gatus_results_total{group=~\"vpn|vpn nodes\"}[$__range]))))",
           "legendFormat": "минимум",
           "refId": "A",
           "range": false,
@@ -1537,16 +2174,16 @@
     {
       "id": 51,
       "type": "state-timeline",
-      "title": "Проверки по часам",
-      "description": "Доля успешных проверок за каждый час: зелёный — все, жёлтый — часть, красный — большинство упало.",
+      "title": "Проверки",
+      "description": "Нода — худшее из трёх её проверок: ping, TCP-подключение и связь с панелью. Зелёный — все прошли, жёлтый — часть, красный — большинство упало.",
       "datasource": {
         "type": "prometheus",
         "uid": "victoriametrics"
       },
       "gridPos": {
-        "x": 6,
-        "y": 71,
-        "w": 18,
+        "x": 4,
+        "y": 77,
+        "w": 20,
         "h": 6
       },
       "fieldConfig": {
@@ -1589,27 +2226,38 @@
             "type": "prometheus",
             "uid": "victoriametrics"
           },
-          "expr": "avg by (name) (avg_over_time(gatus_results_endpoint_success[1h]))",
-          "legendFormat": "{{name}}",
+          "expr": "min by (node) (label_replace(avg_over_time(gatus_results_endpoint_success{group=\"vpn nodes\"}[$__interval]), \"node\", \"$1\", \"name\", \"(hhh-[a-z]+-[0-9]+)-.*\"))",
+          "legendFormat": "{{node}}",
           "refId": "A",
           "range": true,
-          "interval": "1h"
+          "interval": "5m"
+        },
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "victoriametrics"
+          },
+          "expr": "avg by (name) (avg_over_time(gatus_results_endpoint_success{group=\"vpn\"}[$__interval]))",
+          "legendFormat": "{{name}}",
+          "refId": "B",
+          "range": true,
+          "interval": "5m"
         }
       ]
     },
     {
       "id": 52,
       "type": "timeseries",
-      "title": "Время отклика проверок",
-      "description": "Сколько занимает сама проверка. Рост до того, как она начнёт падать, — самый ранний признак беды.",
+      "title": "TCP-подключение к нодам",
+      "description": "Время установки TCP-соединения из Швеции, только удачные проверки: неудачная рисовалась бы таймаутом в 10 с и сплющивала график.",
       "datasource": {
         "type": "prometheus",
         "uid": "victoriametrics"
       },
       "gridPos": {
         "x": 0,
-        "y": 77,
-        "w": 24,
+        "y": 83,
+        "w": 12,
         "h": 7
       },
       "fieldConfig": {
@@ -1645,7 +2293,62 @@
             "type": "prometheus",
             "uid": "victoriametrics"
           },
-          "expr": "gatus_results_duration_seconds",
+          "expr": "label_replace(max by (name) (gatus_results_duration_seconds{group=\"vpn nodes\", type=\"TCP\"}) and on (name) (gatus_results_endpoint_success == 1), \"node\", \"$1\", \"name\", \"(hhh-[a-z]+-[0-9]+)-.*\")",
+          "legendFormat": "{{node}}",
+          "refId": "A",
+          "range": true
+        }
+      ]
+    },
+    {
+      "id": 53,
+      "type": "timeseries",
+      "title": "Ответ панели и подписки",
+      "description": "Полный HTTP-запрос из Швеции, только удачные проверки. Рост до того, как проверка начнёт падать, — самый ранний признак беды.",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "victoriametrics"
+      },
+      "gridPos": {
+        "x": 12,
+        "y": 83,
+        "w": 12,
+        "h": 7
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "s",
+          "custom": {
+            "lineWidth": 1,
+            "fillOpacity": 8,
+            "showPoints": "never",
+            "spanNulls": 300000
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "legend": {
+          "displayMode": "table",
+          "placement": "bottom",
+          "showLegend": true,
+          "calcs": [
+            "mean",
+            "max"
+          ]
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "desc"
+        }
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "victoriametrics"
+          },
+          "expr": "max by (name) (gatus_results_duration_seconds{group=\"vpn\"}) and on (name) (gatus_results_endpoint_success == 1)",
           "legendFormat": "{{name}}",
           "refId": "A",
           "range": true

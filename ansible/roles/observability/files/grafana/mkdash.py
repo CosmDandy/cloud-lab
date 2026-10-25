@@ -279,10 +279,56 @@ def vpn_nodes(expr):
 
 RETRANS_ENOUGH = "increase(node_tcp_retrans_segs_total[1h]) > 1000"
 
-EGRESS = (
-    "rate(node_network_transmit_bytes_total"
-    '{device!~"lo|docker.*|veth.*|br-.*|amn.*|awg.*|wg.*"}[5m])'
-)
+# The VM's real interfaces: what the hoster sees and bills. Container, bridge
+# and tunnel devices would count the same bytes a second time.
+IFACE = 'device!~"lo|docker.*|veth.*|br-.*|amn.*|awg.*|wg.*"'
+EGRESS = f"rate(node_network_transmit_bytes_total{{{IFACE}}}[5m])"
+INGRESS = f"rate(node_network_receive_bytes_total{{{IFACE}}}[5m])"
+
+
+def iface_bytes(window, offset=""):
+    return vpn_nodes(
+        f"sum by (instance) (increase(node_network_receive_bytes_total{{{IFACE}}}[{window}]{offset})"
+        f" + increase(node_network_transmit_bytes_total{{{IFACE}}}[{window}]{offset}))"
+    )
+
+
+HOSTER_LIMIT = 1e12
+
+# Receive series carry this legend suffix; mirrored() draws them below zero.
+RX = " · приём"
+
+
+def mirrored(p, hide_legend=False):
+    """Send above zero, receive below it, each in its own stack."""
+    props = [{"id": "custom.transform", "value": "negative-Y"}]
+    if p["fieldConfig"]["defaults"]["custom"].get("stacking"):
+        props.append(
+            {"id": "custom.stacking", "value": {"mode": "normal", "group": "B"}}
+        )
+    if hide_legend:
+        props.append(
+            {
+                "id": "custom.hideFrom",
+                "value": {"legend": True, "tooltip": False, "viz": False},
+            }
+        )
+    p["fieldConfig"]["overrides"].append(
+        {"matcher": {"id": "byRegexp", "options": f".*{RX}$"}, "properties": props}
+    )
+    return p
+
+
+# Bars over the dashboard's own range instead of fixed days: a 6 h window gets
+# 5-minute buckets, a week about 2-hour ones. Grafana stamps a bar at the start
+# of its bucket and increase[] looks back, so the window is turned forward.
+BUCKET = "[$__interval] offset -$__interval"
+BUCKETS = 72
+
+
+def bucketed(p):
+    p["maxDataPoints"] = BUCKETS
+    return p
 
 
 # Counted against the panel's node list, so a node that stopped pushing
@@ -405,6 +451,40 @@ def loss(w):
 # --- Сводка -------------------------------------------------------------
 panels.append(row(100, "Сводка", y))
 y += 1
+# Six columns, a pair of related tiles in each: what to compare sits one
+# above the other.
+today = stat(
+    16,
+    "Трафик за сегодня",
+    20,
+    y,
+    4,
+    3,
+    [(f"sum({iface_bytes('$__range')})", "сегодня")],
+    unit="decbytes",
+    instant=True,
+    desc="Все VPN-ноды, приём и отдача на интерфейсах, с полуночи по времени браузера.",
+)
+today["timeFrom"] = "now/d"
+month_share = stat(
+    17,
+    "Худшая нода, % лимита месяца",
+    20,
+    y + 3,
+    4,
+    3,
+    [(f"100 * max({iface_bytes('$__range')}) / {HOSTER_LIMIT:.0f}", "лимит")],
+    unit="percent",
+    decimals=0,
+    steps=[
+        {"color": "green", "value": None},
+        {"color": "yellow", "value": 80},
+        {"color": "red", "value": 100},
+    ],
+    instant=True,
+    desc="Сколько от 1 ТБ хостера израсходовала с начала месяца самая загруженная нода.",
+)
+month_share["timeFrom"] = "now/M"
 panels += [
     stat(
         1,
@@ -412,7 +492,7 @@ panels += [
         0,
         y,
         4,
-        4,
+        6,
         [
             (
                 "sum(remnawave_node_online_users"
@@ -428,18 +508,29 @@ panels += [
         4,
         y,
         4,
-        4,
+        3,
         [(f"sum({vpn_nodes(EGRESS)})", "исходящий")],
         unit="Bps",
-        desc="Сумма исходящего трафика всех VPN-нод.",
+        desc="Сумма исходящего трафика всех VPN-нод на интерфейсах.",
+    ),
+    stat(
+        8,
+        "Трафик внутрь",
+        4,
+        y + 3,
+        4,
+        3,
+        [(f"sum({vpn_nodes(INGRESS)})", "входящий")],
+        unit="Bps",
+        desc="Сумма входящего трафика всех VPN-нод на интерфейсах.",
     ),
     stat(
         3,
-        "Худшая доля потерь",
+        "Худшая доля потерь, TCP",
         8,
         y,
         4,
-        4,
+        3,
         [(f"max({loss('10m')})", "потери")],
         unit="percent",
         steps=LOSS_STEPS,
@@ -448,12 +539,31 @@ panels += [
         f"{ACTIVE_BPS // 1024} КиБ/с. Порог алерта — 10 %.",
     ),
     stat(
+        9,
+        "UDP сброшено нодами, в минуту",
+        8,
+        y + 3,
+        4,
+        3,
+        [
+            (
+                "((sum(rate(hy2_drops_total[10m])) or vector(0))"
+                f" + (sum({vpn_nodes('rate(node_netstat_Udp_RcvbufErrors[10m])')})"
+                " or vector(0))) * 60",
+                "датаграмм",
+            )
+        ],
+        steps=[{"color": "green", "value": None}, {"color": "yellow", "value": 100}],
+        desc="Ближайшее к «потерям» для Hysteria2, что видно с ноды: датаграммы, которые "
+        "выбросило само ядро. Потери по пути не видны — QUIC их шифрует.",
+    ),
+    stat(
         4,
         "Повторов SYN в секунду",
         12,
         y,
         4,
-        4,
+        3,
         [
             (
                 f"sum({vpn_nodes('rate(node_netstat_TcpExt_TCPSynRetrans[10m])')})",
@@ -464,12 +574,45 @@ panels += [
         desc="Клиенты не могут установить соединение. Порог алерта — 10/с.",
     ),
     stat(
-        5,
-        "Сборщиков не работает",
+        15,
+        "Хостов пропало из России",
+        12,
+        y + 3,
+        4,
+        3,
+        [
+            (
+                "count(max_over_time(vpn_probe_success_ratio[12m]) == 0"
+                " and avg_over_time(vpn_probe_success_ratio[1d] offset 15m) > 0.5"
+                " and on (instance) last_over_time(vpn_probe_direct_success[12m]) == 1)"
+                " or vector(0)",
+                "хостов",
+            )
+        ],
+        steps=BAD_IF_ANY,
+        instant=True,
+        desc="Хосты подписки, которые из офиса работали, а теперь не проходят — то же "
+        "условие, что у алерта ProtocolDeadFromRussia. Хосты, которые из офиса не "
+        "проходят постоянно, сюда не попадают.",
+    ),
+    stat(
+        7,
+        "Алертов горит",
         16,
         y,
         4,
+        3,
+        [('count(ALERTS{alertstate="firing"}) or vector(0)', "алертов")],
+        steps=BAD_IF_ANY,
+        instant=True,
+    ),
+    stat(
+        5,
+        "Сборщиков не работает",
+        16,
+        y + 3,
         4,
+        3,
         [
             (
                 f"{nodes_without('xray_up')} + {nodes_without('hy2_collector_up')}",
@@ -481,19 +624,10 @@ panels += [
         desc="Экспорт счётчиков xray и eBPF по Hysteria2 на каждой ноде панели. Нода, которая "
         "перестала присылать метрики совсем, тоже считается. 0 — все живы.",
     ),
-    stat(
-        7,
-        "Алертов горит",
-        20,
-        y,
-        4,
-        4,
-        [('count(ALERTS{alertstate="firing"}) or vector(0)', "алертов")],
-        steps=BAD_IF_ANY,
-        instant=True,
-    ),
+    today,
+    month_share,
 ]
-y += 4
+y += 6
 
 # --- Кто сейчас ---------------------------------------------------------
 panels.append(row(106, "Кто сейчас подключён", y))
@@ -529,122 +663,175 @@ y += 8
 # --- Трафик -------------------------------------------------------------
 panels.append(row(101, "Трафик", y))
 y += 1
+
+
+# xray's "downlink" is towards the client (what we send), "uplink" is what the
+# client sends us.
+def by_tag(direction):
+    return (
+        "sum by (tag) ("
+        + base_tag(
+            f'rate(xray_inbound_traffic_bytes_total{{direction="{direction}",'
+            'tag!="REMNAWAVE_API_INBOUND"}[$__rate_interval])'
+        )
+        + ")"
+    )
+
+
+def by_node(direction):
+    return (
+        "sum by (instance) (rate(xray_inbound_traffic_bytes_total"
+        f'{{direction="{direction}"}}[$__rate_interval]))'
+    )
+
+
+def by_user(direction):
+    return named_user(
+        "sum by (user) (rate(xray_user_traffic_bytes_total"
+        f'{{direction="{direction}"}}[$__rate_interval])) > 0'
+    )
+
+
+MIRROR_NOTE = "Отдача клиентам — вверх от нуля, приём от клиентов — вниз."
 panels += [
-    panel(
-        10,
-        "По транспортам, отдача клиентам",
-        0,
-        y,
-        8,
-        8,
-        [
-            (
-                "sum by (tag) ("
-                + base_tag(
-                    'rate(xray_inbound_traffic_bytes_total{direction="downlink",tag!="REMNAWAVE_API_INBOUND"}[$__rate_interval])'
-                )
-                + ")",
-                "{{tag}}",
-            )
-        ],
-        unit="Bps",
-        stack=True,
-        desc="Счётчики самого xray, копии инбаундов выделенных нод сложены с общими.",
+    mirrored(
+        panel(
+            10,
+            "По транспортам",
+            0,
+            y,
+            8,
+            8,
+            [
+                (by_tag("downlink"), "{{tag}}"),
+                (by_tag("uplink"), "{{tag}}" + RX),
+            ],
+            unit="Bps",
+            stack=True,
+            desc=f"{MIRROR_NOTE} Счётчики самого xray, копии инбаундов выделенных нод "
+            "сложены с общими.",
+        )
     ),
-    panel(
-        12,
-        "По нодам, отдача клиентам",
-        8,
-        y,
-        8,
-        8,
-        [
-            (
-                'sum by (instance) (rate(xray_inbound_traffic_bytes_total{direction="downlink"}[$__rate_interval]))',
-                "{{instance}}",
-            )
-        ],
-        unit="Bps",
-        stack=True,
+    mirrored(
+        panel(
+            12,
+            "По нодам",
+            8,
+            y,
+            8,
+            8,
+            [
+                (by_node("downlink"), "{{instance}}"),
+                (by_node("uplink"), "{{instance}}" + RX),
+            ],
+            unit="Bps",
+            stack=True,
+            desc=MIRROR_NOTE,
+        )
     ),
-    panel(
-        11,
-        "По пользователям",
-        16,
-        y,
-        8,
-        8,
-        [
-            (
-                named_user(
-                    'sum by (user) (rate(xray_user_traffic_bytes_total{direction="downlink"}[$__rate_interval])) > 0'
-                ),
-                "{{username}}",
-            )
-        ],
-        unit="Bps",
-        stack=True,
-        desc="Имя берётся из панели по числовому id (поле email в access.log).",
+    mirrored(
+        panel(
+            11,
+            "По пользователям",
+            16,
+            y,
+            8,
+            8,
+            [
+                (by_user("downlink"), "{{username}}"),
+                (by_user("uplink"), "{{username}}" + RX),
+            ],
+            unit="Bps",
+            stack=True,
+            desc=f"{MIRROR_NOTE} Имя берётся из панели по числовому id (поле email в "
+            "access.log). В легенде только отдача, приём виден на графике и в подсказке.",
+        ),
+        hide_legend=True,
     ),
 ]
 y += 8
 
-# --- Неделя по пользователям ---------------------------------------------
-# Daily buckets answer "was it bad for someone this week" without the per-IP
-# noise of the live graphs: one bar per person per day.
-panels.append(row(107, "По дням и по людям", y))
+# --- По людям за интервал -------------------------------------------------
+# Bars per person per bucket answer "was it bad for someone" without the
+# per-IP noise of the live graphs; the bucket follows the chosen range.
+panels.append(row(107, "По людям за интервал", y))
 y += 1
+
+
+def user_bytes(direction):
+    return named_user(
+        "sum by (user) (increase(xray_user_traffic_bytes_total"
+        f'{{direction="{direction}"}}{BUCKET})) > 1e6'
+    )
+
+
+def client_bytes(metric):
+    return f"sum by (username) ({named(f'increase({metric}{BUCKET})')})"
+
+
+# A share needs volume behind it: on average 2 KiB/s over the bucket, i.e.
+# about 180 MB a day or 600 KB in 5 minutes.
+LOSS_FLOOR = "2048 * $__interval_ms / 1000"
+BUCKET_NOTE = (
+    "Ширина столбца зависит от выбранного периода: на 6 часах около 5 минут, на неделе "
+    "около 2 часов. Столбец подписан началом своего интервала."
+)
 panels += [
-    panel(
-        13,
-        "Трафик за сутки",
-        0,
-        y,
-        12,
-        8,
-        [
-            (
-                named_user(
-                    "sum by (user) (increase(xray_user_traffic_bytes_total[1d])) > 1e6"
-                ),
-                "{{username}}",
-            )
-        ],
-        unit="bytes",
-        stack=True,
-        bars=True,
-        interval="1d",
-        calcs=("sum",),
-        desc="Отдача и приём вместе, все ноды и транспорты, включая Hysteria2.",
+    bucketed(
+        mirrored(
+            panel(
+                13,
+                "Трафик по людям",
+                0,
+                y,
+                12,
+                8,
+                [
+                    (user_bytes("downlink"), "{{username}}"),
+                    (user_bytes("uplink"), "{{username}}" + RX),
+                ],
+                unit="bytes",
+                stack=True,
+                bars=True,
+                interval="5m",
+                calcs=("sum",),
+                desc=f"{MIRROR_NOTE} Все ноды и транспорты, включая Hysteria2. "
+                f"{BUCKET_NOTE} В легенде сумма отдачи за период.",
+            ),
+            hide_legend=True,
+        )
     ),
-    panel(
-        14,
-        "Потери за сутки",
-        12,
-        y,
-        12,
-        8,
-        [
-            (
-                f"100 * sum by (username) ({named('increase(vpn_client_tcp_retrans_bytes_total[1d])')})"
-                f" / sum by (username) ({named('increase(vpn_client_tcp_sent_bytes_total[1d])')})"
-                f" and sum by (username) ({named('increase(vpn_client_tcp_sent_bytes_total[1d])')}) > 5e7",
-                "{{username}}",
-            )
-        ],
-        unit="percent",
-        bars=True,
-        interval="1d",
-        calcs=("mean", "max"),
-        decimals=1,
-        desc="Доля повторно отправленных байтов за сутки, TCP-транспорты, только при отдаче "
-        "больше 50 МБ за день. Это главный ответ на «было ли плохо на этой неделе».",
+    bucketed(
+        panel(
+            14,
+            "Потери по людям",
+            12,
+            y,
+            12,
+            8,
+            [
+                (
+                    f"100 * {client_bytes('vpn_client_tcp_retrans_bytes_total')}"
+                    f" / {client_bytes('vpn_client_tcp_sent_bytes_total')}"
+                    f" and {client_bytes('vpn_client_tcp_sent_bytes_total')}"
+                    f" > {LOSS_FLOOR}",
+                    "{{username}}",
+                )
+            ],
+            unit="percent",
+            bars=True,
+            interval="5m",
+            calcs=("mean", "max"),
+            decimals=1,
+            desc="Доля повторно отправленных байтов за интервал, TCP-транспорты, только "
+            f"при отдаче в среднем больше 2 КиБ/с. {BUCKET_NOTE}",
+        )
     ),
 ]
 y += 8
 
 # --- Качество -----------------------------------------------------------
-panels.append(row(102, "Качество связи по клиентам", y))
+panels.append(row(102, "TCP-транспорты (Vision, gRPC, XHTTP): качество по клиентам", y))
 y += 1
 panels += [
     panel(
@@ -683,45 +870,55 @@ panels += [
 y += 8
 
 # --- Hysteria2 ----------------------------------------------------------
-panels.append(row(103, "Hysteria2 (eBPF)", y))
+panels.append(row(103, "Hysteria2 (UDP, eBPF)", y))
 y += 1
+
+
+def hy2_by_user(metric):
+    return f"sum by (username) ({named(f'rate({metric}[$__rate_interval])')}) * 8 > 0"
+
+
 panels += [
-    panel(
-        30,
-        "Hysteria2 по нодам",
-        0,
-        y,
-        12,
-        8,
-        [
-            (
-                "sum by (instance) (rate(hy2_tx_bytes_total[$__rate_interval])) * 8",
-                "{{instance}} → отдача",
-            ),
-            (
-                "sum by (instance) (rate(hy2_rx_bytes_total[$__rate_interval])) * 8",
-                "{{instance}} ← приём",
-            ),
-        ],
-        unit="bps",
-        desc="Для UDP ядро не хранит состояния потока, поэтому данные снимаются пробами eBPF "
-        "на udp_queue_rcv_one_skb и udp_send_skb.",
+    mirrored(
+        panel(
+            30,
+            "Hysteria2 по нодам",
+            0,
+            y,
+            12,
+            8,
+            [
+                (
+                    "sum by (instance) (rate(hy2_tx_bytes_total[$__rate_interval])) * 8",
+                    "{{instance}}",
+                ),
+                (
+                    "sum by (instance) (rate(hy2_rx_bytes_total[$__rate_interval])) * 8",
+                    "{{instance}}" + RX,
+                ),
+            ],
+            unit="bps",
+            desc=f"{MIRROR_NOTE} Для UDP ядро не хранит состояния потока, поэтому данные "
+            "снимаются пробами eBPF на udp_queue_rcv_one_skb и udp_send_skb.",
+        )
     ),
-    panel(
-        32,
-        "Hysteria2 по людям",
-        12,
-        y,
-        8,
-        8,
-        [
-            (
-                f"sum by (username) ({named('rate(hy2_tx_bytes_total[$__rate_interval])')}) * 8 > 0",
-                "{{username}}",
-            )
-        ],
-        unit="bps",
-        stack=True,
+    mirrored(
+        panel(
+            32,
+            "Hysteria2 по людям",
+            12,
+            y,
+            8,
+            8,
+            [
+                (hy2_by_user("hy2_tx_bytes_total"), "{{username}}"),
+                (hy2_by_user("hy2_rx_bytes_total"), "{{username}}" + RX),
+            ],
+            unit="bps",
+            stack=True,
+            desc=MIRROR_NOTE,
+        ),
+        hide_legend=True,
     ),
     stat(
         31,
@@ -778,36 +975,105 @@ panels += [
         desc="Доля от всех повторов ноды за час. Первая линия — насколько TCP ошибается, "
         "принимая задержку за потерю; вторая — признак тяжёлых потерь на пути. "
         "Рисуется, только когда повторов за час больше тысячи: на меньшем числе "
-        "доля скачет выше 100 % и ничего не значит.",
+        "доля скачет и ничего не значит. Первая линия выше 100 % — клиенты получили "
+        "больше дубликатов, чем мы повторили: пакеты дублирует сам путь (переупорядочивание, "
+        "сеть провайдера), а не наш TCP. Вреда нет, клиент выбрасывает копии.",
     ),
 ]
 y += 8
 
 # --- Из России ----------------------------------------------------------
 # roles/vpn_probe on the office testbed: every subscription host, the way a
-# user connects, every five minutes. Lanes are hosts, colour is the share of
-# requests that got through.
+# user connects, every five minutes. 24 hosts in one timeline were unreadable,
+# so the same data is cut three ways: now as a transport x node grid, and over
+# time per node and per transport.
 panels.append(row(108, "Из России (проба из офиса)", y))
 y += 1
+PROBE_OK = "avg_over_time(vpn_probe_success_ratio[$__interval])"
+probe_now = {
+    "id": 64,
+    "type": "table",
+    "title": "Сейчас: транспорт × нода",
+    "description": "Доля запросов, прошедших через хост, по последнему прогону пробы. "
+    "Пусто — такого хоста в подписке нет.",
+    "datasource": DS,
+    "gridPos": {"x": 0, "y": y, "w": 8, "h": 9},
+    "fieldConfig": {
+        "defaults": {
+            "unit": "percentunit",
+            "decimals": 0,
+            "custom": {"align": "center", "cellOptions": {"type": "color-background"}},
+            "color": {"mode": "thresholds"},
+            "thresholds": {
+                "mode": "absolute",
+                "steps": [
+                    {"color": "red", "value": None},
+                    {"color": "yellow", "value": 0.5},
+                    {"color": "green", "value": 0.99},
+                ],
+            },
+        },
+        "overrides": [],
+    },
+    "options": {"showHeader": True, "cellHeight": "sm"},
+    "targets": [
+        {
+            "datasource": DS,
+            "expr": "max by (transport, node) "
+            "(last_over_time(vpn_probe_success_ratio[15m]))",
+            "refId": "A",
+            "instant": True,
+            "range": False,
+            "format": "table",
+        }
+    ],
+    # The backend answers one frame per series with node and transport as
+    # labels; they become columns of one table before the matrix is built.
+    "transformations": [
+        {"id": "labelsToFields", "options": {"mode": "columns"}},
+        {"id": "merge", "options": {}},
+        {
+            "id": "groupingToMatrix",
+            "options": {
+                "columnField": "node",
+                "rowField": "transport",
+                "valueField": "Value",
+            },
+        }
+    ],
+}
 panels += [
+    probe_now,
     timeline(
         60,
-        "Хосты подписки",
-        0,
+        "По нодам",
+        8,
         y,
         16,
-        10,
-        [("max by (host) (vpn_probe_success_ratio)", "{{host}}")],
+        4,
+        [(f"avg by (node) ({PROBE_OK})", "{{node}}")],
         interval="5m",
-        desc="Доля запросов, прошедших через хост, по каждому прогону пробы из офиса. "
-        "Серый — проба не работала (тестбед выключен). Красная полоса у всех разом при "
+        desc="Средняя доля прошедших запросов по всем транспортам ноды. Жёлтый у ноды, "
+        "на которой из офиса не проходят Vision и gRPC, — постоянный фон, а не авария. "
+        "Серый — проба не работала (тестбед выключен).",
+    ),
+    timeline(
+        63,
+        "По транспортам",
+        8,
+        y + 4,
+        16,
+        5,
+        [(f"avg by (transport) ({PROBE_OK})", "{{transport}}")],
+        interval="5m",
+        desc="Средняя доля прошедших запросов по всем нодам. Красное у всех разом при "
         "красном «прямой выход» — лёг офисный канал, а не VPN.",
     ),
     timeline(
         61,
         "Прямой выход и подписка",
-        16,
-        y,
+        0,
+        y + 9,
         8,
         5,
         [
@@ -818,34 +1084,50 @@ panels += [
     ),
     panel(
         62,
-        "Время ответа через хост",
-        16,
-        y + 5,
+        "Время ответа через ноду",
         8,
+        y + 9,
+        16,
         5,
-        [("max by (host) (vpn_probe_latency_seconds)", "{{host}}")],
+        [("avg by (node) (vpn_probe_latency_seconds)", "{{node}}")],
         unit="s",
         interval="5m",
         calcs=("mean", "max"),
+        desc="Среднее по транспортам, только прошедшие запросы.",
     ),
 ]
-y += 10
+y += 14
 
 # --- Доступность -------------------------------------------------------
 # Gatus probes from the control plane in Sweden: TCP connect, ICMP and the
 # panel's view of the node. It cannot see a protocol-level failure or the
-# Russian path — that is what the probe from the office is for.
+# Russian path — that is what the probe from the office is for. Only the VPN
+# checks live here; the rest of the services sit on Nodes · health.
 panels.append(row(105, "Доступность (SLA)", y))
 y += 1
-SLA_OK = 'sum by (name) (increase(gatus_results_total{success="true"}[$__range]))'
-SLA_ALL = "sum by (name) (increase(gatus_results_total[$__range]))"
+VPN_CHECKS = 'group=~"vpn|vpn nodes"'
+SLA_OK = (
+    f'sum by (name) (increase(gatus_results_total{{{VPN_CHECKS}, success="true"}}'
+    "[$__range]))"
+)
+SLA_ALL = f"sum by (name) (increase(gatus_results_total{{{VPN_CHECKS}}}[$__range]))"
+GATUS_OK = "avg_over_time(gatus_results_endpoint_success{%s}[$__interval])"
+NODE_CHECKS_OK = GATUS_OK % 'group="vpn nodes"'
+PANEL_CHECKS_OK = GATUS_OK % 'group="vpn"'
+
+
+def per_node(expr):
+    """hhh-sto-03-icmp, -tcp and -panel become one node=hhh-sto-03."""
+    return f'label_replace({expr}, "node", "$1", "name", "(hhh-[a-z]+-[0-9]+)-.*")'
+
+
 panels += [
     stat(
         50,
         "Худшая доступность за период",
         0,
         y,
-        6,
+        4,
         6,
         [(f"min(100 * ({SLA_OK}) / ({SLA_ALL}))", "минимум")],
         unit="percent",
@@ -856,37 +1138,63 @@ panels += [
             {"color": "yellow", "value": 99.5},
             {"color": "green", "value": 99.9},
         ],
-        desc="Самая проблемная проверка gatus за выбранный период. Проверки идут из Швеции и "
-        "видят только доступность адреса, а не работу протоколов из России.",
+        desc="Самая проблемная VPN-проверка gatus за выбранный период. Проверки идут из "
+        "Швеции и видят только доступность адреса, а не работу протоколов из России.",
     ),
     timeline(
         51,
-        "Проверки по часам",
-        6,
+        "Проверки",
+        4,
         y,
-        18,
+        20,
         6,
         [
-            (
-                "avg by (name) (avg_over_time(gatus_results_endpoint_success[1h]))",
-                "{{name}}",
-            )
+            (f"min by (node) ({per_node(NODE_CHECKS_OK)})", "{{node}}"),
+            (f"avg by (name) ({PANEL_CHECKS_OK})", "{{name}}"),
         ],
-        interval="1h",
-        desc="Доля успешных проверок за каждый час: зелёный — все, жёлтый — часть, красный — "
-        "большинство упало.",
+        interval="5m",
+        desc="Нода — худшее из трёх её проверок: ping, TCP-подключение и связь с "
+        "панелью. Зелёный — все прошли, жёлтый — часть, красный — большинство упало.",
     ),
     panel(
         52,
-        "Время отклика проверок",
+        "TCP-подключение к нодам",
         0,
         y + 6,
-        24,
+        12,
         7,
-        [("gatus_results_duration_seconds", "{{name}}")],
+        [
+            (
+                per_node(
+                    'max by (name) (gatus_results_duration_seconds{group="vpn nodes",'
+                    ' type="TCP"}) and on (name) (gatus_results_endpoint_success == 1)'
+                ),
+                "{{node}}",
+            )
+        ],
         unit="s",
-        desc="Сколько занимает сама проверка. Рост до того, как она начнёт падать, — самый "
-        "ранний признак беды.",
+        calcs=("mean", "max"),
+        desc="Время установки TCP-соединения из Швеции, только удачные проверки: "
+        "неудачная рисовалась бы таймаутом в 10 с и сплющивала график.",
+    ),
+    panel(
+        53,
+        "Ответ панели и подписки",
+        12,
+        y + 6,
+        12,
+        7,
+        [
+            (
+                'max by (name) (gatus_results_duration_seconds{group="vpn"})'
+                " and on (name) (gatus_results_endpoint_success == 1)",
+                "{{name}}",
+            )
+        ],
+        unit="s",
+        calcs=("mean", "max"),
+        desc="Полный HTTP-запрос из Швеции, только удачные проверки. Рост до того, как "
+        "проверка начнёт падать, — самый ранний признак беды.",
     ),
 ]
 y += 13
@@ -896,10 +1204,11 @@ dump(
     {
         "uid": "vpn-traffic-quality",
         "title": "VPN · traffic & quality",
-        "description": "Кто подключён и как ему, трафик по транспортам и людям, недельная картина, "
-        "Hysteria2 из eBPF, доступность.",
+        "description": "Сводка, трафик по транспортам, нодам и людям, качество TCP и "
+        "Hysteria2, проба из России, доступность VPN.",
         "tags": ["vpn", "traffic"],
         "timezone": "browser",
+        "graphTooltip": 1,
         "schemaVersion": 39,
         "version": 2,
         "refresh": "1m",
@@ -984,24 +1293,24 @@ panels += [
 ]
 y += 7
 panels += [
-    panel(
-        6,
-        "Трафик нод",
-        0,
-        y,
-        12,
-        7,
-        [
-            (
-                f"remnawave_node_network_rx_bytes_per_sec {NODE}",
-                "{{node_name}} ← приём",
-            ),
-            (
-                f"remnawave_node_network_tx_bytes_per_sec {NODE}",
-                "{{node_name}} → отдача",
-            ),
-        ],
-        unit="Bps",
+    mirrored(
+        panel(
+            6,
+            "Трафик нод",
+            0,
+            y,
+            12,
+            7,
+            [
+                (f"remnawave_node_network_tx_bytes_per_sec {NODE}", "{{node_name}}"),
+                (
+                    f"remnawave_node_network_rx_bytes_per_sec {NODE}",
+                    "{{node_name}}" + RX,
+                ),
+            ],
+            unit="Bps",
+            desc="Отдача — вверх от нуля, приём — вниз.",
+        )
     ),
     panel(
         7,
@@ -1022,17 +1331,6 @@ y += 7
 # xray counter (which sees only the proxied payload, once). The panel's
 # "relative time" now/M makes $__range the month so far in the browser's
 # timezone; the hoster's month may start a few hours apart.
-IFACE = 'device!~"lo|docker.*|veth.*|br-.*|amn.*|awg.*|wg.*"'
-
-
-def iface_bytes(window, offset=""):
-    return vpn_nodes(
-        f"sum by (instance) (increase(node_network_receive_bytes_total{{{IFACE}}}[{window}]{offset})"
-        f" + increase(node_network_transmit_bytes_total{{{IFACE}}}[{window}]{offset}))"
-    )
-
-
-HOSTER_LIMIT = 1e12
 month = stat(
     9,
     "Расход трафика с начала месяца (интерфейс, приём + отдача)",
@@ -1090,12 +1388,30 @@ y += 7
 panels.append(row(100, "Инфраструктура", y))
 y += 1
 panels += [
+    timeline(
+        11,
+        "Сервисы (gatus из Швеции)",
+        0,
+        y,
+        12,
+        7,
+        [
+            (
+                "avg by (name) (avg_over_time(gatus_results_endpoint_success"
+                '{group!~"vpn.*"}[$__interval]))',
+                "{{name}}",
+            )
+        ],
+        interval="5m",
+        desc="Проверки всего, кроме VPN: VPN-проверки — на дашборде VPN · traffic & "
+        "quality. Зелёный — все прошли, жёлтый — часть, красный — большинство упало.",
+    ),
     panel(
         8,
         "Дней до истечения сертификатов",
-        0,
+        12,
         y,
-        24,
+        12,
         7,
         [("gatus_results_certificate_expiration_seconds / 86400", "{{name}}")],
         unit="d",
@@ -1110,9 +1426,11 @@ dump(
     {
         "uid": "remnawave-health",
         "title": "Nodes · health",
-        "description": "Связь нод с панелью, онлайн, потери на нодах, трафик и память, сертификаты.",
+        "description": "Связь нод с панелью, онлайн, потери на нодах, трафик и память, "
+        "сервисы и сертификаты.",
         "tags": ["vpn", "remnawave"],
         "timezone": "browser",
+        "graphTooltip": 1,
         "schemaVersion": 39,
         "version": 2,
         "refresh": "1m",
