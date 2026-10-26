@@ -1,0 +1,21 @@
+remark=🇳🇴 HHH-OSL · HY2 Hop
+node=hhh-osl-01.vpn.cosmdandy.dev
+parallel=1
+baseline_direct_bytes_s=33319288
+variant=hhh-osl-hy2-hop
+timestamp=2026-09-11T18:50:40+00:00
+handshake_raw=tcp=0.000143 tls=0.000000 ttfb=0.033692 total=0.034257 httpcode=200
+dl_run_1=36337374
+dl_run_2=35701892
+dl_avg_bytes_s=36019633
+dl_max_bytes_s=36337374
+dl_fails=0
+ul_run_1=32968282
+ul_run_2=35297174
+ul_avg_bytes_s=34132728
+ul_max_bytes_s=35297174
+ul_fails=0
+cf_meta={"origin":"local","note":"transport overhead bench, no external path"} 
+freeze_5000=ok
+freeze_16000=ok
+freeze_50000=ok

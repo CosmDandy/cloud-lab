@@ -9,7 +9,19 @@ set -euo pipefail
 VARIANT="${1:?variant name required}"
 PROXY="${PROXY:-socks5h://127.0.0.1:10808}"
 URL="${URL:-https://speed.cloudflare.com}"
-DL_BYTES="${DOWNLOAD_BYTES:-200000000}"
+# Приёмник загрузки может отличаться от источника скачивания: публичные
+# зеркала отдают файлы, но не принимают POST. Без замера upload не отличить
+# XHTTP stream-up от packet-up — а различаются они именно им.
+UP_URL="${UP_URL:-$URL}"
+# Сколько одновременных соединений держать при замере скорости.
+# 1 мерит транспорт: один поток упирается в окно/RTT, а не в канал, и
+# протоколы сравниваются на равных. Больше — мерит канал так, как его
+# видит браузер, который открывает соединения десятками.
+PARALLEL="${PARALLEL:-1}"
+# 25 МБ, а не 200: 11.09.2026 speed.cloudflare.com стал отвечать 403 на
+# /__down с bytes больше ~26 МБ. Прежний дефолт не падал, а тихо возвращал
+# нулевую скорость — весь прогон выглядел рабочим и мерил мусор.
+DL_BYTES="${DOWNLOAD_BYTES:-26214400}"
 UL_BYTES="${UPLOAD_BYTES:-50000000}"
 REPEATS="${REPEATS:-3}"
 
@@ -34,12 +46,49 @@ emit "handshake_raw" "$HS"
 DL_TOTAL=0
 DL_MAX=0
 DL_FAILS=0
+# Код ответа проверяется наравне со скоростью: speed.cloudflare.com отдаёт
+# 429 Too Many Requests при серийных запросах, и это выглядит как «загрузка
+# со скоростью 9 байт в секунду» — curl отработал без ошибки, тело в 1 байт.
+# 11.09.2026 так терялось до пяти замеров из шести, а разброс внутри одного
+# варианта доходил до 91 %: сравнивались не транспорты, а везение.
+#
+# DL_GAP — пауза между прогонами, чтобы не выбирать лимит.
+DL_GAP="${DL_GAP:-10}"
+
+# Один прогон = PARALLEL одновременных скачиваний, скорости складываются.
+# Печатает суммарные байты/с либо причину отказа: одно отвергнутое соединение
+# портит весь прогон, потому что остальные поделят между собой канал, который
+# должен был делиться на всех.
+dl_once() {
+    local dir j
+    dir=$(mktemp -d)
+    for j in $(seq 1 "$PARALLEL"); do
+        (
+            $C -o /dev/null -w "%{speed_download} %{http_code} %{size_download}" \
+                "$URL/__down?bytes=$DL_BYTES" 2>/dev/null > "$dir/$j" || echo "0 000 0" > "$dir/$j"
+        ) &
+    done
+    wait
+    awk -v want="$DL_BYTES" '
+        { if ($2 != "200" || $3 + 0 < want) { bad = $2 "-" $3 "B" } ; sum += $1 }
+        END { if (bad != "") print "rejected-http" bad; else printf "%.0f\n", sum }
+    ' "$dir"/*
+    rm -rf "$dir"
+}
+
 for i in $(seq 1 "$REPEATS"); do
-    SPEED=$($C -o /dev/null -w "%{speed_download}" "$URL/__down?bytes=$DL_BYTES" 2>/dev/null) || { DL_FAILS=$((DL_FAILS+1)); continue; }
-    SPEED_INT=$(printf "%.0f" "$SPEED")
-    emit "dl_run_$i" "$SPEED_INT"
-    DL_TOTAL=$((DL_TOTAL + SPEED_INT))
-    [ "$SPEED_INT" -gt "$DL_MAX" ] && DL_MAX=$SPEED_INT
+    [ "$i" -gt 1 ] && [ "$DL_GAP" != "0" ] && sleep "$DL_GAP"
+    RESULT=$(dl_once)
+    case "$RESULT" in
+        rejected-*)
+            DL_FAILS=$((DL_FAILS+1))
+            emit "dl_run_$i" "$RESULT"
+            continue
+            ;;
+    esac
+    emit "dl_run_$i" "$RESULT"
+    DL_TOTAL=$((DL_TOTAL + RESULT))
+    [ "$RESULT" -gt "$DL_MAX" ] && DL_MAX=$RESULT
 done
 GOOD_DL=$((REPEATS - DL_FAILS))
 if [ "$GOOD_DL" -gt 0 ]; then
@@ -54,12 +103,36 @@ UL_MAX=0
 UL_FAILS=0
 TMPFILE=$(mktemp)
 head -c "$UL_BYTES" /dev/urandom > "$TMPFILE"
+
+ul_once() {
+    local dir j
+    dir=$(mktemp -d)
+    for j in $(seq 1 "$PARALLEL"); do
+        (
+            $C -X POST --data-binary "@$TMPFILE" -o /dev/null -w "%{speed_upload} %{http_code}" \
+                "$UP_URL/__up" 2>/dev/null > "$dir/$j" || echo "0 000" > "$dir/$j"
+        ) &
+    done
+    wait
+    awk '
+        { if ($2 != "200") { bad = $2 } ; sum += $1 }
+        END { if (bad != "") print "rejected-http" bad; else printf "%.0f\n", sum }
+    ' "$dir"/*
+    rm -rf "$dir"
+}
+
 for i in $(seq 1 "$REPEATS"); do
-    SPEED=$($C -X POST --data-binary "@$TMPFILE" -o /dev/null -w "%{speed_upload}" "$URL/__up" 2>/dev/null) || { UL_FAILS=$((UL_FAILS+1)); continue; }
-    SPEED_INT=$(printf "%.0f" "$SPEED")
-    emit "ul_run_$i" "$SPEED_INT"
-    UL_TOTAL=$((UL_TOTAL + SPEED_INT))
-    [ "$SPEED_INT" -gt "$UL_MAX" ] && UL_MAX=$SPEED_INT
+    RESULT=$(ul_once)
+    case "$RESULT" in
+        rejected-*)
+            UL_FAILS=$((UL_FAILS+1))
+            emit "ul_run_$i" "$RESULT"
+            continue
+            ;;
+    esac
+    emit "ul_run_$i" "$RESULT"
+    UL_TOTAL=$((UL_TOTAL + RESULT))
+    [ "$RESULT" -gt "$UL_MAX" ] && UL_MAX=$RESULT
 done
 rm -f "$TMPFILE"
 GOOD_UL=$((REPEATS - UL_FAILS))

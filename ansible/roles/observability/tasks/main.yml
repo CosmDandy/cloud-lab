@@ -32,7 +32,6 @@
   loop:
     - grafana/datasources.yaml
     - grafana/dashboards.yaml
-    - loki/config.yaml
     - promtail/config.yaml
     - vmalert/alerts.yaml
   notify: Restart observability stack
@@ -47,6 +46,31 @@
     owner: "{{ observability_owner }}"
     group: "{{ observability_owner }}"
     mode: "0644"
+  notify: Restart observability stack
+
+# 0644 по той же причине, что и статические конфиги: loki работает не от root.
+- name: Render loki config
+  ansible.builtin.template:
+    src: loki-config.yaml.j2
+    dest: "{{ observability_dir }}/loki/config.yaml"
+    owner: "{{ observability_owner }}"
+    group: "{{ observability_owner }}"
+    mode: "0644"
+  notify: Restart observability stack
+
+# no_log: в конфиге лежит токен бота. Владелец — uid процесса в контейнере
+# (alertmanager работает от nobody), потому что 0644 сделал бы токен читаемым
+# любому пользователю хоста, а от 0640 root-овского файла контейнер получает
+# permission denied.
+- name: Render alertmanager config
+  ansible.builtin.template:
+    src: alertmanager.yml.j2
+    dest: "{{ observability_dir }}/alertmanager.yml"
+    owner: "{{ observability_alertmanager_uid }}"
+    group: "{{ observability_alertmanager_uid }}"
+    mode: "0640"
+  no_log: true
+  when: observability_alerting_enabled
   notify: Restart observability stack
 
 - name: Render scrape config

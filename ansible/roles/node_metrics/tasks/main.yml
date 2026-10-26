@@ -38,6 +38,10 @@
     mode: "0644"
   notify: Restart node metrics
 
+- name: Configure log shipping and rotation
+  ansible.builtin.import_tasks: logs.yaml
+  tags: [logs]
+
 - name: Render compose file
   ansible.builtin.template:
     src: docker-compose.yaml.j2
@@ -69,7 +73,35 @@
       http://127.0.0.1:8429/metrics
   register: node_metrics_vmagent_self
   changed_when: false
+  # Read-only проверка, поэтому выполняется и в check-режиме: иначе command
+  # пропускается, register остаётся пустым, until крутит все попытки впустую
+  # и валит dry-run на ровном месте.
+  check_mode: false
   retries: 6
   delay: 10
   until: >-
     'vmagent_remotewrite_requests_total' in node_metrics_vmagent_self.stdout
+
+# Здесь, в отличие от vmagent, проверяются найденные цели, а не доставка:
+# контейнеры ноды молчат сутками (у xray loglevel warning), и счётчик
+# отправленных строк остаётся нулевым, даже когда всё исправно. Нулевое
+# число целей, наоборот, означает, что promtail не видит docker.sock.
+# С хоста, а не docker exec: в образе promtail нет ни shell, ни wget —
+# проверять живость изнутри нечем.
+- name: Verify promtail discovered container targets
+  ansible.builtin.uri:
+    url: "http://127.0.0.1:{{ node_metrics_promtail_port }}/metrics"
+    return_content: true
+  register: node_metrics_promtail_self
+  changed_when: false
+  check_mode: false
+  retries: 6
+  delay: 10
+  # docker_sd не заполняет promtail_targets_active_total — она про file-based
+  # цели и на ноде всегда ноль. Счётчик прочитанного с docker-целей растёт
+  # только когда promtail действительно добрался до docker.sock и читает.
+  until: >-
+    node_metrics_promtail_self.content | default('')
+    is search('promtail_docker_target_entries_total [1-9]')
+  when: node_metrics_logs_enabled
+  tags: [logs]

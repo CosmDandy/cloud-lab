@@ -32,3 +32,10 @@ remnanode_nofile: 1048576
 remnanode_porthop_range: "47000-47100"
 remnanode_porthop_target: 47824
 remnanode_porthop_rules: /etc/nftables.d/hyhop.nft
+
+# Каталог логов xray. Через docker logs их не увидеть: rw-node забирает
+# stdout ядра себе и наружу не отдаёт, поэтому xray пишет их в файлы —
+# пути задаются в секции log конфиг-профиля панели, а каталог должен быть
+# смонтирован внутрь. Ротация обязательна: у ноды диск 8.8 ГБ, а access-лог
+# на loglevel info — строка на каждое соединение.
+remnanode_log_dir: /var/log/remnanode

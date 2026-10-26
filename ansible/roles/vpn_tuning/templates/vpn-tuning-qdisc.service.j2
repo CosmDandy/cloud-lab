@@ -1,0 +1,20 @@
+# Managed by ansible (roles/vpn_tuning). Правки на хосте будут перезаписаны.
+#
+# net.core.default_qdisc применяется в момент поднятия интерфейса, а на
+# загрузке systemd-networkd поднимает {{ vpn_tuning_iface }} раньше, чем
+# systemd-sysctl читает /etc/sysctl.d. Без этого юнита корневой qdisc после
+# каждой перезагрузки возвращается к pfifo_fast, и BBR остаётся без pacing,
+# ради которого fq и ставится.
+[Unit]
+Description=Apply root qdisc {{ vpn_tuning_sysctl['net.core.default_qdisc'] }} to {{ vpn_tuning_iface }}
+After=network-online.target
+Wants=network-online.target
+ConditionPathExists=/sys/class/net/{{ vpn_tuning_iface }}
+
+[Service]
+Type=oneshot
+RemainAfterExit=yes
+ExecStart={{ vpn_tuning_tc_path }} qdisc replace dev {{ vpn_tuning_iface }} root {{ vpn_tuning_sysctl['net.core.default_qdisc'] }}
+
+[Install]
+WantedBy=multi-user.target

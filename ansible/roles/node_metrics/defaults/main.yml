@@ -21,7 +21,43 @@ node_metrics_instance: "{{ inventory_hostname }}"
 node_metrics_exporter_listen: "127.0.0.1:9100"
 node_metrics_scrape_interval: 30s
 
+# vmagent в host-сети: без явного адреса он слушает все интерфейсы.
+node_metrics_vmagent_listen: "127.0.0.1:8429"
+
 # Буфер на диске, из которого vmagent досылает данные после обрыва связи.
 # Инцидент 14.08 в Осло длился десять минут — при pull это была бы дыра
 # в графиках, здесь метрики догонятся.
 node_metrics_max_disk_usage: 512MB
+
+# --- Логи ---------------------------------------------------------------
+# Promtail шлёт логи контейнеров ноды в loki на control-plane. Модель та же,
+# что у метрик: соединение инициирует нода, наружу не открывается ничего.
+node_metrics_logs_enabled: false
+node_metrics_loki_url: ""
+node_metrics_promtail_image: grafana/promtail:3.6.11
+node_metrics_promtail_port: 9080
+node_metrics_promtail_grpc_port: 9095
+
+# Логи xray. Пути внутри контейнера задаёт конфиг-профиль панели, каталог
+# наружу отдаёт роль remnanode — здесь он только читается.
+node_metrics_xray_logs_enabled: true
+node_metrics_xray_log_dir: /var/log/remnanode
+
+# Ротация docker-логов. До неё json-файлы росли без потолка: xray сейчас
+# молчит, но стоит поднять ему loglevel — и 8.8-гигабайтный диск ноды
+# кончится незаметно. 50 МБ × 3 = 150 МБ на контейнер.
+#
+# Применяется двумя путями, и оба нужны: daemon.json действует только на
+# контейнеры, созданные после него, а remnanode пересоздавать ради ротации
+# нельзя — это разрыв всех пользователей. Уже работающие контейнеры режет
+# logrotate с copytruncate.
+node_metrics_log_rotation_enabled: true
+node_metrics_log_max_size: 50m
+node_metrics_log_max_file: "3"
+
+# Потолок journald. По умолчанию его нет вовсе — журнал берёт до 10 % раздела,
+# и на hhh-ams-01 он вырос до 903 МБ из 8.8-гигабайтного диска. Растёт он не
+# от работы ноды: 24 531 запись за сутки — это неудачные попытки входа по ssh
+# (см. docs/vpn-nodes.md, «Брутфорс»). Потолок не лечит причину, но не даёт
+# ей съесть диск.
+node_metrics_journal_max_use: 200M

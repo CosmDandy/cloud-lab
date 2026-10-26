@@ -1,0 +1,58 @@
+# Managed by ansible (roles/node_metrics). Правки на хосте будут перезаписаны.
+server:
+  # Только петля: контейнер в host-сети, и 0.0.0.0 выставил бы метрики
+  # promtail в интернет.
+  http_listen_address: 127.0.0.1
+  http_listen_port: {{ node_metrics_promtail_port }}
+  # gRPC по умолчанию слушает 0.0.0.0:9095 — в host-сети это открытый в
+  # интернет порт. Никто по нему к promtail не ходит, но закрыть надо явно:
+  # умолчание здесь смотрит наружу.
+  grpc_listen_address: 127.0.0.1
+  grpc_listen_port: {{ node_metrics_promtail_grpc_port }}
+  # Логи самого promtail на уровне info — это строка на каждую отправку;
+  # при обрыве связи с loki важны как раз warn и error.
+  log_level: warn
+
+positions:
+  filename: /tmp/positions.yaml
+
+clients:
+  - url: {{ node_metrics_loki_url }}
+    basic_auth:
+      username: {{ node_metrics_remote_write_user }}
+      # Файлом, а не значением: конфиг читаемый, пароль — нет.
+      password_file: /etc/promtail/password
+    # Нода может остаться без control-plane на минуты: инцидент 14.08 в Осло
+    # длился десять. Backoff досылает накопленное вместо того, чтобы бросить.
+    backoff_config:
+      min_period: 500ms
+      max_period: 5m
+      max_retries: 20
+
+scrape_configs:
+  - job_name: docker
+    docker_sd_configs:
+      - host: unix:///var/run/docker.sock
+        refresh_interval: 5s
+    relabel_configs:
+      - source_labels: ["__meta_docker_container_name"]
+        target_label: container
+        regex: /(.+)
+      - source_labels: ["__meta_docker_container_log_stream"]
+        target_label: stream
+      # Без него логи трёх нод сольются в один поток — ровно та же ошибка,
+      # что с instance у метрик.
+      - target_label: host
+        replacement: {{ node_metrics_instance }}
+{% if node_metrics_xray_logs_enabled %}
+
+  # Файловые логи xray. Отдельным job, потому что docker_sd их не видит:
+  # ядро пишет не в stdout, а в файлы, смонтированные снаружи.
+  - job_name: xray
+    static_configs:
+      - targets: ["localhost"]
+        labels:
+          job: xray
+          host: {{ node_metrics_instance }}
+          __path__: {{ node_metrics_xray_log_dir }}/*.log
+{% endif %}

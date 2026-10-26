@@ -17,3 +17,6 @@ services:
       - .env
     volumes:
       - {{ remnanode_tls_dir }}:{{ remnanode_tls_dir }}:ro
+      # Логи xray: пути внутри задаёт конфиг-профиль панели, наружу их
+      # отдаёт только этот том.
+      - {{ remnanode_log_dir }}:{{ remnanode_log_dir }}

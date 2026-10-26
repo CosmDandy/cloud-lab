@@ -18,9 +18,19 @@ def main():
     ap.add_argument("server_dir")
     ap.add_argument("--server-host", default=os.environ.get("SERVER_HOST", "127.0.0.1"))
     ap.add_argument("--socks-port", type=int, default=10808)
-    ap.add_argument("--public-key", default=os.environ.get(
-        "REALITY_PUBLIC_KEY", "SZAv4bBy7hbanAfsRQkiHYOpYdwNPEUj4HUnWRzTwSQ"))
+    # Без дефолтного ключа: чужой публичный ключ не ломает прогон явно —
+    # сервер просто не признаёт клиента и проксирует его на настоящий сайт
+    # маскировки. Клиент видит «REALITY: received real certificate», а в
+    # отчёте все метрики оказываются прочерками при нулевом числе ошибок.
+    # Проверка на пустоту — ниже, сразу после разбора аргументов.
+    ap.add_argument("--public-key", default=os.environ.get("REALITY_PUBLIC_KEY", ""))
     args = ap.parse_args()
+    if not args.public_key:
+        raise SystemExit(
+            'REALITY_PUBLIC_KEY не задан. Возьмите его из приватного ключа:\n'
+            '  docker run --rm ghcr.io/xtls/xray-core:<tag> x25519 -i "$REALITY_PRIVATE_KEY"'
+        )
+
 
     cfg_path = Path(args.server_dir) / "config.json"
     if not cfg_path.exists():

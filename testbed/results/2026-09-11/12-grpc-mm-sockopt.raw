@@ -1,0 +1,19 @@
+variant=12-grpc-mm-sockopt
+timestamp=2026-09-11T19:37:17+00:00
+handshake_raw=tcp=0.000144 tls=0.000000 ttfb=0.002055 total=0.002248 httpcode=200
+dl_run_1=203455485
+dl_run_2=289194134
+dl_run_3=293755384
+dl_avg_bytes_s=262135001
+dl_max_bytes_s=293755384
+dl_fails=0
+ul_run_1=227189080
+ul_run_2=258558279
+ul_run_3=249813888
+ul_avg_bytes_s=245187082
+ul_max_bytes_s=258558279
+ul_fails=0
+cf_meta={"origin":"local","note":"transport overhead bench, no external path"} 
+freeze_5000=ok
+freeze_16000=ok
+freeze_50000=ok

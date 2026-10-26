@@ -6,3 +6,37 @@
   roles:
     - role: vpn_tuning
       tags: [tuning]
+
+# Отдельной игрой и только sshd-частью base: остальное из этой роли нодам не
+# нужно, а сама она предупреждает, что трогает живую машину. Здесь же взяты
+# её defaults — набор параметров hardening один на весь парк.
+- name: Harden sshd on VPN nodes
+  hosts: vpn_nodes
+  become: true
+  gather_facts: false
+  tags: [sshd]
+
+  tasks:
+    # Сначала убеждаемся, что ключи на месте: выключать пароль на машине, куда
+    # пускает только он, — способ остаться снаружи.
+    - name: Ensure root has authorized keys
+      ansible.builtin.command:
+        cmd: ssh-keygen -lf /root/.ssh/authorized_keys
+      register: vpn_node_authorized_keys
+      changed_when: false
+      check_mode: false
+      failed_when: vpn_node_authorized_keys.rc != 0
+
+    - name: Apply sshd hardening
+      ansible.builtin.include_role:
+        name: base
+        tasks_from: sshd
+
+- name: Firewall on VPN nodes
+  hosts: vpn_nodes
+  become: true
+  gather_facts: false
+  tags: [firewall]
+
+  roles:
+    - role: firewall

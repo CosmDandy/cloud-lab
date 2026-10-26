@@ -1,0 +1,21 @@
+remark=🇳🇱 HHH-AMS · gRPC
+node=85.155.190.66
+parallel=1
+baseline_direct_bytes_s=25309948
+variant=hhh-ams-grpc
+timestamp=2026-09-11T18:50:25+00:00
+handshake_raw=tcp=0.000156 tls=0.000000 ttfb=0.066843 total=0.066889 httpcode=200
+dl_run_1=17740721
+dl_run_2=24161071
+dl_avg_bytes_s=20950896
+dl_max_bytes_s=24161071
+dl_fails=0
+ul_run_1=6457418
+ul_run_2=9157805
+ul_avg_bytes_s=7807611
+ul_max_bytes_s=9157805
+ul_fails=0
+cf_meta={"origin":"local","note":"transport overhead bench, no external path"} 
+freeze_5000=ok
+freeze_16000=ok
+freeze_50000=ok

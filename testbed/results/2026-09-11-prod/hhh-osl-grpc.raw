@@ -1,0 +1,13 @@
+remark=🇳🇴 HHH-OSL · gRPC
+status=proxy-down
+xray_log:
+2026/09/11 18:54:07.063573 from tcp:127.0.0.1:57408 accepted tcp:91.190.155.237:18080 [socks-in >> proxy]
+2026/09/11 18:54:09.576989 from tcp:127.0.0.1:57424 accepted tcp:91.190.155.237:18080 [socks-in >> proxy]
+2026/09/11 18:54:12.089755 from tcp:127.0.0.1:57432 accepted tcp:91.190.155.237:18080 [socks-in >> proxy]
+2026/09/11 18:54:14.602387 from tcp:127.0.0.1:56478 accepted tcp:91.190.155.237:18080 [socks-in >> proxy]
+2026/09/11 18:54:17.115040 from tcp:127.0.0.1:56488 accepted tcp:91.190.155.237:18080 [socks-in >> proxy]
+2026/09/11 18:54:19.627618 from tcp:127.0.0.1:56498 accepted tcp:91.190.155.237:18080 [socks-in >> proxy]
+2026/09/11 18:54:22.140680 from tcp:127.0.0.1:56500 accepted tcp:91.190.155.237:18080 [socks-in >> proxy]
+2026/09/11 18:54:24.653598 from tcp:127.0.0.1:60838 accepted tcp:91.190.155.237:18080 [socks-in >> proxy]
+2026/09/11 18:54:27.165373 from tcp:127.0.0.1:60850 accepted tcp:91.190.155.237:18080 [socks-in >> proxy]
+2026/09/11 18:54:29.677578 from tcp:127.0.0.1:60856 accepted tcp:91.190.155.237:18080 [socks-in >> proxy]

@@ -1,0 +1,21 @@
+remark=🇸🇪 HHH-STO · HY2 Masq
+node=hhh-sto-01.vpn.cosmdandy.dev
+parallel=1
+baseline_direct_bytes_s=56970115
+variant=hhh-sto-hy2-masq
+timestamp=2026-09-11T18:49:59+00:00
+handshake_raw=tcp=0.000121 tls=0.000000 ttfb=0.031640 total=0.031681 httpcode=200
+dl_run_1=53043950
+dl_run_2=29066765
+dl_avg_bytes_s=41055357
+dl_max_bytes_s=53043950
+dl_fails=0
+ul_run_1=32221839
+ul_run_2=43857177
+ul_avg_bytes_s=38039508
+ul_max_bytes_s=43857177
+ul_fails=0
+cf_meta={"origin":"local","note":"transport overhead bench, no external path"} 
+freeze_5000=ok
+freeze_16000=ok
+freeze_50000=ok

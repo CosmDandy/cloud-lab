@@ -1,0 +1,64 @@
+---
+- name: Validate port lists
+  ansible.builtin.assert:
+    that:
+      - (firewall_tcp_ports | length + firewall_restricted | length) > 0
+    fail_msg: >-
+      Ни одного разрешённого tcp-порта: с policy drop это отрежет и ssh.
+      Задайте firewall_tcp_ports хотя бы с 22.
+
+- name: Ensure ssh port stays open
+  ansible.builtin.assert:
+    that:
+      - 22 in firewall_tcp_ports
+    fail_msg: >-
+      В firewall_tcp_ports нет 22 — применение оставит машину без ssh.
+      Если порт изменён намеренно, добавьте его в список явно.
+
+- name: Create ruleset directory
+  ansible.builtin.file:
+    path: "{{ firewall_ruleset_file | dirname }}"
+    state: directory
+    owner: root
+    group: root
+    mode: "0755"
+
+# validate обязателен: синтаксическая ошибка в правилах при policy drop
+# означает машину без сети и без ssh.
+- name: Render ruleset
+  ansible.builtin.template:
+    src: vpn-firewall.nft.j2
+    dest: "{{ firewall_ruleset_file }}"
+    owner: root
+    group: root
+    mode: "0644"
+    validate: nft -c -f %s
+  notify: Reload firewall
+
+- name: Install firewall unit
+  ansible.builtin.template:
+    src: vpn-firewall.service.j2
+    dest: "/etc/systemd/system/{{ firewall_unit }}"
+    owner: root
+    group: root
+    mode: "0644"
+  notify: Reload firewall
+
+- name: Enable firewall unit
+  ansible.builtin.systemd_service:
+    name: "{{ firewall_unit }}"
+    enabled: true
+    state: started
+    daemon_reload: true
+  when: not ansible_check_mode
+
+# Проверяется факт, а не код возврата: юнит с RemainAfterExit числится
+# запущенным и тогда, когда таблицу кто-то снёс после его старта.
+- name: Verify table is loaded
+  ansible.builtin.command:
+    cmd: nft list table inet {{ firewall_table }}
+  register: firewall_table_state
+  changed_when: false
+  # В check-режиме таблицу никто не создавал — проверять нечего.
+  when: not ansible_check_mode
+  failed_when: "'chain input' not in firewall_table_state.stdout"

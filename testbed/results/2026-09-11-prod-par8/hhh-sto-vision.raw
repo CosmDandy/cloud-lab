@@ -1,0 +1,21 @@
+remark=🇸🇪 HHH-STO · Vision
+node=167.104.104.131
+parallel=8
+baseline_direct_bytes_s=51487657
+variant=hhh-sto-vision
+timestamp=2026-09-11T19:47:25+00:00
+handshake_raw=tcp=0.000137 tls=0.000000 ttfb=0.107873 total=0.107928 httpcode=200
+dl_run_1=29296829
+dl_run_2=25226413
+dl_avg_bytes_s=27261621
+dl_max_bytes_s=29296829
+dl_fails=0
+ul_run_1=27394908
+ul_run_2=33053614
+ul_avg_bytes_s=30224261
+ul_max_bytes_s=33053614
+ul_fails=0
+cf_meta={"origin":"local","note":"transport overhead bench, no external path"} 
+freeze_5000=ok
+freeze_16000=ok
+freeze_50000=ok

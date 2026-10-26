@@ -18,6 +18,38 @@
     group: "{{ remnanode_owner }}"
     mode: "0750"
 
+# 0755 и root: внутрь контейнера xray пишет от root, а снаружи каталог читает
+# promtail. Создаётся до compose — иначе docker сделает его сам и владельцем
+# станет тот, кого назначит рантайм.
+- name: Create xray log directory
+  ansible.builtin.file:
+    path: "{{ remnanode_log_dir }}"
+    state: directory
+    owner: root
+    group: root
+    mode: "0755"
+
+# Без ротации access-лог на loglevel info съедает 8.8-гигабайтный диск ноды
+# за считанные дни. copytruncate: xray держит файл открытым и не понимает
+# сигнала переоткрыть его.
+- name: Install logrotate rule for xray logs
+  ansible.builtin.copy:
+    dest: /etc/logrotate.d/remnanode-xray
+    content: |
+      # Managed by ansible (roles/remnanode). Правки будут перезаписаны.
+      {{ remnanode_log_dir }}/*.log {
+        rotate 3
+        size 50M
+        copytruncate
+        missingok
+        notifempty
+        compress
+        delaycompress
+      }
+    owner: root
+    group: root
+    mode: "0644"
+
 - name: Render environment file
   ansible.builtin.template:
     src: env.j2

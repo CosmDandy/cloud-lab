@@ -1,0 +1,31 @@
+# Managed by ansible (roles/observability). Правки на хосте будут перезаписаны.
+#
+# Зачем он вообще: vmalert умеет отправлять только в alertmanager, а до этого
+# его notifier.url смотрел на саму victoriametrics — правила исправно
+# срабатывали и не доходили ни до кого.
+global:
+  resolve_timeout: 5m
+
+route:
+  receiver: telegram
+  # Группировка по алерту и хосту: три ноды, потерявшие связь одновременно,
+  # придут одним сообщением, а не тремя.
+  group_by: ["alertname", "instance"]
+  group_wait: 30s
+  group_interval: 5m
+  # Повтор раз в 12 часов: чаще — и на молчаливую проблему перестанут смотреть.
+  repeat_interval: 12h
+
+receivers:
+  - name: telegram
+    telegram_configs:
+      - bot_token: "{{ observability_telegram_token }}"
+        chat_id: {{ observability_telegram_chat_id }}
+        parse_mode: HTML
+        send_resolved: true
+        message: |
+          <b>{{ '{{' }} if eq .Status "firing" {{ '}}' }}🔥{{ '{{' }} else {{ '}}' }}✅{{ '{{' }} end {{ '}}' }} {{ '{{' }} .CommonLabels.alertname {{ '}}' }}</b>
+          {{ '{{' }} range .Alerts {{ '}}' }}
+          {{ '{{' }} .Annotations.summary {{ '}}' }}
+          {{ '{{' }} .Annotations.description {{ '}}' }}
+          {{ '{{' }} end {{ '}}' }}
