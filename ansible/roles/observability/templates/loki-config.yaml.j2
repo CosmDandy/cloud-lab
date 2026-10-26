@@ -3,6 +3,9 @@ auth_enabled: false
 
 server:
   http_listen_port: 3100
+  # At info loki logs every query and every table lookup: about 150k lines
+  # a day, nine of every ten lines in the store, all of it about itself.
+  log_level: warn
 
 common:
   path_prefix: /loki

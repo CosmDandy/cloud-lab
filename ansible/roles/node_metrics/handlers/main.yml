@@ -20,3 +20,25 @@
   ansible.builtin.systemd_service:
     name: systemd-journald
     state: restarted
+
+# Юниты сборщика правятся шаблоном; без перечитывания systemd продолжит
+# работать по старой копии до следующей перезагрузки.
+- name: Reload systemd
+  ansible.builtin.systemd_service:
+    daemon_reload: true
+
+- name: Restart closed-socket spooler
+  ansible.builtin.systemd_service:
+    name: tcp-closed.service
+    state: restarted
+    daemon_reload: true
+  when: not ansible_check_mode
+
+# Программа и обёртка читаются при старте, на лету не перечитываются.
+- name: Restart hy2 collector
+  ansible.builtin.systemd_service:
+    name: hy2-stats.service
+    state: restarted
+    daemon_reload: true
+  # В check-режиме юнит на диск не попал, и systemd о нём не знает.
+  when: not ansible_check_mode

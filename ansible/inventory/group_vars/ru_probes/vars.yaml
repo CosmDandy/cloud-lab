@@ -1,0 +1,5 @@
+---
+# Тот же пользователь и пароль приёма, что у нод: отдельная учётка ради
+# одного текстового файла раз в пять минут — ещё один секрет без пользы.
+vpn_probe_push_password: >-
+  {{ hostvars[groups['vpn_nodes'][0]].node_metrics_remote_write_password }}

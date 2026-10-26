@@ -1,0 +1,34 @@
+# Managed by ansible (roles/node_metrics). Правки на хосте будут перезаписаны.
+[Unit]
+Description=Hysteria2 per-client counters from eBPF
+Documentation=file://{{ node_metrics_dir }}/hy2-ebpf.bt
+After=network-online.target
+
+[Service]
+Type=simple
+ExecStart=/usr/bin/python3 {{ node_metrics_dir }}/hy2-stats.py
+Restart=always
+RestartSec=30s
+
+# bpftrace грузит программу в ядро и читает perf-буфер: без этих двух
+# возможностей он не стартует, а больше ему ничего и не нужно.
+# Карты BPF живут в заблокированной памяти; со стандартным лимитом bpftrace
+# ругается на RLIMIT_MEMLOCK и может не загрузить программу.
+LimitMEMLOCK=infinity
+AmbientCapabilities=CAP_BPF CAP_PERFMON
+CapabilityBoundingSet=CAP_BPF CAP_PERFMON
+NoNewPrivileges=true
+ProtectSystem=strict
+ProtectHome=true
+ReadWritePaths={{ node_metrics_textfile_dir }}
+PrivateTmp=true
+MemoryMax=256M
+
+# Программа сидит на горячем пути kfree_skb. Вес одной пробы невелик, но
+# вытеснить ею обслуживание трафика было бы обидно, поэтому отдаём ей
+# остаток процессора, а не соревнуемся с xray.
+Nice=10
+CPUWeight=20
+
+[Install]
+WantedBy=multi-user.target

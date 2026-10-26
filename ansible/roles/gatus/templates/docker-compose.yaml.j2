@@ -2,7 +2,11 @@
 name: {{ gatus_instance }}
 
 services:
-  gatus:
+  # Имя сервиса, а не только container_name: compose заводит сетевой алиас по
+  # имени сервиса, и при двух экземплярах роли оба получали алиас «gatus».
+  # DNS отдавал два адреса по кругу, половина скрейпов уходила в экземпляр без
+  # /metrics и возвращала 404 — цель выглядела мигающей.
+  {{ gatus_instance }}:
     image: {{ gatus_image }}
     container_name: {{ gatus_instance }}
     restart: unless-stopped

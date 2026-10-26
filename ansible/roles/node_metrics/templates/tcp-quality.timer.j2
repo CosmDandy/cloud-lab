@@ -1,0 +1,14 @@
+# Managed by ansible (roles/node_metrics). Правки на хосте будут перезаписаны.
+[Unit]
+Description=Refresh per-client TCP quality and xray counters
+
+[Timer]
+# От старта таймера, а не от завершения прошлого запуска: иначе шаг плывёт
+# на время работы сборщика и ряд получается неравномерным.
+OnBootSec=1min
+OnUnitActiveSec={{ node_metrics_tcp_quality_interval }}
+AccuracySec=1s
+Unit=tcp-quality.service
+
+[Install]
+WantedBy=timers.target

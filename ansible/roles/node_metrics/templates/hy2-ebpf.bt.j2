@@ -1,0 +1,95 @@
+#!/usr/bin/env bpftrace
+// Managed by ansible (roles/node_metrics). Правки на хосте будут перезаписаны.
+//
+// Счётчики Hysteria2 из ядра. Нужны потому, что для UDP ядро не хранит
+// состояния потока: ss показывает только серверный сокет, conntrack на нодах
+// нет, а /proc/net/nf_conntrack не отдаётся. В результате по HY2 не видно
+// ничего, кроме общего объёма датаграмм на весь хост — ни клиента, ни потерь.
+//
+// Здесь ровно три вещи, и каждая отвечает на свой вопрос:
+//   rx/tx   — ходит ли трафик этого клиента и в какую сторону;
+//   drops   — теряем ли мы его пакеты сами, и по какой причине;
+//   qdrops  — не переполняется ли приёмная очередь конкретного сокета.
+//
+// Карты печатаются раз в {{ node_metrics_hy2_interval }} с и очищаются:
+// накопление делает обёртка, иначе карта растёт без границ, а bpftrace
+// хранит её целиком в памяти ядра.
+
+kprobe:udp_queue_rcv_one_skb
+{
+    $sk = (struct sock *)arg0;
+    $lport = $sk->__sk_common.skc_num;
+    // Порты инбаундов и диапазон порт-хоппинга. Всё остальное — чужой UDP,
+    // DNS в первую очередь, и считать его здесь незачем.
+    if (($lport >= {{ node_metrics_hy2_port_lo }} && $lport <= {{ node_metrics_hy2_port_hi }})
+     || ($lport >= {{ node_metrics_hy2_hop_lo }} && $lport <= {{ node_metrics_hy2_hop_hi }})) {
+        $skb = (struct sk_buff *)arg1;
+        $iph = (struct iphdr *)($skb->head + $skb->network_header);
+        @rx_pkts[ntop($iph->saddr), $lport] = count();
+        @rx_bytes[ntop($iph->saddr), $lport] = sum($skb->len);
+    }
+}
+
+kprobe:udp_send_skb
+{
+    $skb = (struct sk_buff *)arg0;
+    $sk = $skb->sk;
+    $lport = $sk->__sk_common.skc_num;
+    if (($lport >= {{ node_metrics_hy2_port_lo }} && $lport <= {{ node_metrics_hy2_port_hi }})
+     || ($lport >= {{ node_metrics_hy2_hop_lo }} && $lport <= {{ node_metrics_hy2_hop_hi }})) {
+        // Адрес назначения берём из flowi4: на этой стадии skb ещё может не
+        // иметь собранного IP-заголовка, а маршрут уже выбран.
+        $fl4 = (struct flowi4 *)arg1;
+        @tx_pkts[ntop($fl4->daddr), $lport] = count();
+        @tx_bytes[ntop($fl4->daddr), $lport] = sum($skb->len);
+    }
+}
+
+// Дроп с причиной — то, чего нет ни в одном другом источнике. Счётчик
+// Udp_RcvbufErrors говорит «потеряли N датаграмм на хосте», а здесь видно,
+// чьи именно и почему: фильтр, отсутствие сокета, переполнение очереди.
+tracepoint:skb:kfree_skb
+{
+    if (args.protocol == 2048) {  // ETH_P_IP
+        $skb = (struct sk_buff *)args.skbaddr;
+        $iph = (struct iphdr *)($skb->head + $skb->network_header);
+        if ($iph->protocol == 17) {  // IPPROTO_UDP
+            // Смещение считаем от IP-заголовка: transport_header на момент
+            // освобождения может быть не выставлен.
+            $udph = (struct udphdr *)((uint64)$iph + (($iph->ihl & 0x0f) * 4));
+            $dport = ($udph->dest >> 8) | (($udph->dest << 8) & 0xff00);
+            $sport = ($udph->source >> 8) | (($udph->source << 8) & 0xff00);
+            if (($dport >= {{ node_metrics_hy2_port_lo }} && $dport <= {{ node_metrics_hy2_port_hi }})
+             || ($dport >= {{ node_metrics_hy2_hop_lo }} && $dport <= {{ node_metrics_hy2_hop_hi }})) {
+                @drop_in[ntop($iph->saddr), $dport, args.reason] = count();
+            }
+            if (($sport >= {{ node_metrics_hy2_port_lo }} && $sport <= {{ node_metrics_hy2_port_hi }})
+             || ($sport >= {{ node_metrics_hy2_hop_lo }} && $sport <= {{ node_metrics_hy2_hop_hi }})) {
+                @drop_out[ntop($iph->daddr), $sport, args.reason] = count();
+            }
+        }
+    }
+}
+
+// Отдельная проба: сюда ядро приходит, когда датаграмма не влезла в приёмный
+// буфер сокета. Именно этот случай мы поднимали sysctl'ами в июне, и до сих
+// пор он был виден только суммой по хосту.
+tracepoint:udp:udp_fail_queue_rcv_skb
+{
+    // Поля здесь уже в host order, разворачивать порядок байт не нужно.
+    if ((args.dport >= {{ node_metrics_hy2_port_lo }} && args.dport <= {{ node_metrics_hy2_port_hi }})
+     || (args.dport >= {{ node_metrics_hy2_hop_lo }} && args.dport <= {{ node_metrics_hy2_hop_hi }})) {
+        @queue_drops[args.dport] = count();
+    }
+}
+
+interval:s:{{ node_metrics_hy2_interval }}
+{
+    print(@rx_pkts); clear(@rx_pkts);
+    print(@rx_bytes); clear(@rx_bytes);
+    print(@tx_pkts); clear(@tx_pkts);
+    print(@tx_bytes); clear(@tx_bytes);
+    print(@drop_in); clear(@drop_in);
+    print(@drop_out); clear(@drop_out);
+    print(@queue_drops); clear(@queue_drops);
+}

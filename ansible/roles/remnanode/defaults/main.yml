@@ -5,7 +5,9 @@ remnanode_owner: root
 # Тег закреплён намеренно. latest разрешается в digest один раз — в момент
 # pull, — и дальше контейнер держит именно его: на проде метка latest
 # простояла с 15.07 по 14.08 на образе, собранном до выхода node 3.0.0.
-remnanode_image: remnawave/node:3.2.0
+# NOTE: 3.4.2 carries xray 26.7.28. Anything with xray >= 26.9.8 locks out
+# sing-box clients on VLESS-Vision-NoPQ (sing-box#4520) — check before bumping.
+remnanode_image: remnawave/node:3.4.2
 
 # Порт агента, которым панель управляет нодой. Наружу не выставлен.
 remnanode_port: 2222

@@ -1,0 +1,36 @@
+{"variant": "vision", "rep": 1, "idle": 5.0, "warm_ok": true, "warm_s": 1.18, "dropped": [], "wake_s": 0.2, "fails": 0, "after_ok": 3}
+{"variant": "xhttp", "rep": 1, "idle": 5.0, "warm_ok": true, "warm_s": 0.46, "dropped": ["tcp/39994"], "wake_s": 54.4, "fails": 12, "after_ok": 3}
+{"variant": "xhttp-ka10", "rep": 1, "idle": 5.0, "warm_ok": true, "warm_s": 0.25, "dropped": ["tcp/38726"], "wake_s": 19.8, "fails": 5, "after_ok": 3}
+{"variant": "xhttp-ka5", "rep": 1, "idle": 5.0, "warm_ok": true, "warm_s": 0.25, "dropped": ["tcp/59436"], "wake_s": 15.7, "fails": 4, "after_ok": 3}
+{"variant": "xhttp-ut8", "rep": 1, "idle": 5.0, "warm_ok": true, "warm_s": 0.25, "dropped": ["tcp/58286"], "wake_s": 9.1, "fails": 2, "after_ok": 3}
+{"variant": "xhttp-ut4", "rep": 1, "idle": 5.0, "warm_ok": true, "warm_s": 0.25, "dropped": ["tcp/37718"], "wake_s": 4.8, "fails": 1, "after_ok": 3}
+{"variant": "xhttp-ka10-ut8", "rep": 1, "idle": 5.0, "warm_ok": true, "warm_s": 0.26, "dropped": ["tcp/50132"], "wake_s": 9.1, "fails": 2, "after_ok": 3}
+{"variant": "grpc", "rep": 1, "idle": 5.0, "warm_ok": true, "warm_s": 0.18, "dropped": ["tcp/36546"], "fails": 27, "after_ok": 0}
+{"variant": "grpc-hc", "rep": 1, "idle": 5.0, "warm_ok": true, "warm_s": 0.22, "dropped": ["tcp/57072"], "wake_s": 9.2, "fails": 2, "after_ok": 3}
+{"variant": "grpc-ut8", "rep": 1, "idle": 5.0, "warm_ok": true, "warm_s": 0.19, "dropped": ["tcp/48604"], "wake_s": 9.0, "fails": 2, "after_ok": 3}
+{"variant": "hy2", "rep": 1, "idle": 5.0, "warm_ok": true, "warm_s": 0.18, "dropped": ["udp/49100"], "wake_s": 0.7, "fails": 1, "after_ok": 3}
+{"variant": "hy2-idle10", "rep": 1, "idle": 5.0, "warm_ok": true, "warm_s": 0.17, "dropped": ["udp/35582"], "wake_s": 0.7, "fails": 1, "after_ok": 3}
+{"variant": "vision", "rep": 2, "idle": 5.0, "warm_ok": true, "warm_s": 0.19, "dropped": [], "wake_s": 0.2, "fails": 0, "after_ok": 3}
+{"variant": "xhttp", "rep": 2, "idle": 5.0, "warm_ok": true, "warm_s": 0.25, "dropped": ["tcp/40334"], "wake_s": 54.4, "fails": 12, "after_ok": 3}
+{"variant": "xhttp-ka10", "rep": 2, "idle": 5.0, "warm_ok": true, "warm_s": 0.24, "dropped": ["tcp/49004"], "wake_s": 19.7, "fails": 5, "after_ok": 3}
+{"variant": "xhttp-ka5", "rep": 2, "idle": 5.0, "warm_ok": true, "warm_s": 0.24, "dropped": ["tcp/52382"], "wake_s": 15.8, "fails": 4, "after_ok": 3}
+{"variant": "xhttp-ut8", "rep": 2, "idle": 5.0, "warm_ok": true, "warm_s": 0.24, "dropped": ["tcp/47762"], "wake_s": 9.0, "fails": 2, "after_ok": 3}
+{"variant": "xhttp-ut4", "rep": 2, "idle": 5.0, "warm_ok": true, "warm_s": 0.36, "dropped": ["tcp/54414"], "wake_s": 4.8, "fails": 1, "after_ok": 3}
+{"variant": "xhttp-ka10-ut8", "rep": 2, "idle": 5.0, "warm_ok": true, "warm_s": 0.24, "dropped": ["tcp/49354"], "wake_s": 9.0, "fails": 2, "after_ok": 3}
+{"variant": "grpc", "rep": 2, "idle": 5.0, "warm_ok": true, "warm_s": 0.18, "dropped": ["tcp/49454"], "fails": 27, "after_ok": 0}
+{"variant": "grpc-hc", "rep": 2, "idle": 5.0, "warm_ok": true, "warm_s": 0.18, "dropped": ["tcp/45362"], "wake_s": 9.2, "fails": 2, "after_ok": 3}
+{"variant": "grpc-ut8", "rep": 2, "idle": 5.0, "warm_ok": true, "warm_s": 0.18, "dropped": ["tcp/33116"], "wake_s": 9.0, "fails": 2, "after_ok": 3}
+{"variant": "hy2", "rep": 2, "idle": 5.0, "warm_ok": true, "warm_s": 0.18, "dropped": ["udp/53717"], "wake_s": 0.7, "fails": 1, "after_ok": 3}
+{"variant": "hy2-idle10", "rep": 2, "idle": 5.0, "warm_ok": true, "warm_s": 0.17, "dropped": ["udp/44911"], "wake_s": 0.7, "fails": 1, "after_ok": 3}
+{"variant": "vision", "rep": 3, "idle": 5.0, "warm_ok": true, "warm_s": 0.16, "dropped": [], "wake_s": 0.2, "fails": 0, "after_ok": 3}
+{"variant": "xhttp", "rep": 3, "idle": 5.0, "warm_ok": true, "warm_s": 0.25, "dropped": ["tcp/56180"], "wake_s": 54.4, "fails": 12, "after_ok": 3}
+{"variant": "xhttp-ka10", "rep": 3, "idle": 5.0, "warm_ok": true, "warm_s": 0.25, "dropped": ["tcp/43800"], "wake_s": 19.8, "fails": 5, "after_ok": 3}
+{"variant": "xhttp-ka5", "rep": 3, "idle": 5.0, "warm_ok": true, "warm_s": 0.24, "dropped": ["tcp/42856"], "wake_s": 15.8, "fails": 4, "after_ok": 3}
+{"variant": "xhttp-ut8", "rep": 3, "idle": 5.0, "warm_ok": true, "warm_s": 0.24, "dropped": ["tcp/53624"], "wake_s": 9.0, "fails": 2, "after_ok": 3}
+{"variant": "xhttp-ut4", "rep": 3, "idle": 5.0, "warm_ok": true, "warm_s": 0.29, "dropped": ["tcp/50670"], "wake_s": 4.7, "fails": 1, "after_ok": 3}
+{"variant": "xhttp-ka10-ut8", "rep": 3, "idle": 5.0, "warm_ok": true, "warm_s": 0.24, "dropped": ["tcp/35250"], "wake_s": 9.1, "fails": 2, "after_ok": 3}
+{"variant": "grpc", "rep": 3, "idle": 5.0, "warm_ok": true, "warm_s": 0.18, "dropped": ["tcp/53186"], "fails": 27, "after_ok": 0}
+{"variant": "grpc-hc", "rep": 3, "idle": 5.0, "warm_ok": true, "warm_s": 0.22, "dropped": ["tcp/54058"], "wake_s": 9.2, "fails": 2, "after_ok": 3}
+{"variant": "grpc-ut8", "rep": 3, "idle": 5.0, "warm_ok": true, "warm_s": 0.17, "dropped": ["tcp/49166"], "wake_s": 9.0, "fails": 2, "after_ok": 3}
+{"variant": "hy2", "rep": 3, "idle": 5.0, "warm_ok": true, "warm_s": 0.17, "dropped": ["udp/56727"], "wake_s": 0.7, "fails": 1, "after_ok": 3}
+{"variant": "hy2-idle10", "rep": 3, "idle": 5.0, "warm_ok": true, "warm_s": 0.17, "dropped": ["udp/35149"], "wake_s": 0.7, "fails": 1, "after_ok": 3}

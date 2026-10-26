@@ -65,6 +65,11 @@ observability_remote_write_htpasswd: ""
 # observability_remote_write_enabled.
 observability_logs_push_enabled: false
 
+# Per source IP, requests per second, for both push routers. vmagent and
+# promtail treat 429 as retryable, so hitting it delays data, never drops it.
+observability_push_rate_average: 20
+observability_push_rate_burst: 200
+
 # Доставка алертов. Без alertmanager vmalert слать их некуда: его notifier.url
 # смотрел на саму victoriametrics, и правила срабатывали в пустоту. Реквизиты
 # по умолчанию — те же, что у gatus: второй бот ради тех же уведомлений
@@ -82,6 +87,16 @@ observability_panel_metrics_enabled: false
 observability_panel_metrics_user: "{{ panel_metrics_user | default('metrics') }}"
 observability_panel_metrics_password: "{{ panel_metrics_password | default('') }}"
 
+# Lookup metrics that name the panel user behind a client IP, so alerts and
+# dashboards show "Denis (95.24.175.40)" instead of a bare address. The
+# exporter reads xray access logs from Loki and usernames from the panel API;
+# the token defaults to subscription-page's — same host, and it can read
+# /users. Gatus's token cannot: the panel answers it 403 there.
+observability_peer_users_enabled: false
+observability_peer_users_image: python:3.12-alpine
+observability_panel_api_url: "https://{{ panel_domain | default('') }}/api"
+observability_panel_api_token: "{{ panel_subscription_api_token | default('') }}"
+
 # Вход в Grafana через Pocket ID. Клиент заводится в UI Pocket ID,
 # redirect URI: https://<observability_domain>/login/generic_oauth
 observability_oidc_enabled: false
@@ -93,3 +108,7 @@ observability_oidc_name: Pocket ID
 observability_oidc_issuer: ""
 observability_oidc_client_id: ""
 observability_oidc_client_secret: ""
+
+# Порт точки входа метрик traefik — должен совпадать с edge_metrics_port
+# в роли edge, роли разворачиваются на одной машине и в одной сети.
+observability_traefik_metrics_port: 8082

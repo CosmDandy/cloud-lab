@@ -75,9 +75,25 @@ services:
       traefik.http.routers.subscription.rule: "Host(`{{ panel_sub_domain }}`)"
       traefik.http.routers.subscription.entrypoints: websecure
       traefik.http.routers.subscription.tls.certresolver: letsencrypt
-      traefik.http.routers.subscription.middlewares: sub-https-headers
+      traefik.http.routers.subscription.middlewares: sub-https-headers,sub-ratelimit
       traefik.http.services.subscription.loadbalancer.server.port: "3010"
       traefik.http.middlewares.sub-https-headers.headers.customrequestheaders.X-Forwarded-Proto: https
+      # Клиент тянет подписку раз в час, страница подписки — пара десятков
+      # файлов за открытие; офис за одним NAT — это десяток таких клиентов
+      # разом. Потолок выше всего этого, но ниже перебора токенов.
+      traefik.http.middlewares.sub-ratelimit.ratelimit.average: "5"
+      traefik.http.middlewares.sub-ratelimit.ratelimit.burst: "60"
+      # Сканеры перебирают /.env, /.git, *.php: страница подписки отвечала на
+      # них 502 и давала три четверти всех ошибок 21.10. Ни один настоящий
+      # путь подписки так не выглядит, поэтому они отсекаются на входе:
+      # allowlist из одной петли — это 403 без похода в бэкенд.
+      traefik.http.routers.subscription-junk.rule: 'Host(`{{ panel_sub_domain }}`) && (PathPrefix(`/.`) || PathPrefix(`/wp-`) || PathRegexp(`(?i)\.(php|aspx?|jsp|cgi|env|git|sql|bak|old|ini|conf|cfg|log|ya?ml|xml|zip|tar|gz|rar|7z)$`))'
+      traefik.http.routers.subscription-junk.priority: "1000"
+      traefik.http.routers.subscription-junk.entrypoints: websecure
+      traefik.http.routers.subscription-junk.tls.certresolver: letsencrypt
+      traefik.http.routers.subscription-junk.service: noop@internal
+      traefik.http.routers.subscription-junk.middlewares: sub-deny
+      traefik.http.middlewares.sub-deny.ipallowlist.sourcerange: 127.0.0.1/32
 {% if panel_sub_root_redirect | length > 0 %}
       traefik.http.routers.subscription-root.rule: "Host(`{{ panel_sub_domain }}`) && Path(`/`)"
       traefik.http.routers.subscription-root.entrypoints: websecure

@@ -1,0 +1,17 @@
+# Managed by ansible (roles/vpn_probe). Правки на хосте будут перезаписаны.
+[Unit]
+Description=Probe every subscription host from this network and push the result
+Documentation=file://{{ vpn_probe_dir }}/vpn-probe.py
+Wants=network-online.target
+After=network-online.target
+
+[Service]
+Type=oneshot
+EnvironmentFile={{ vpn_probe_dir }}/vpn-probe.env
+ExecStart=/usr/bin/python3 {{ vpn_probe_dir }}/vpn-probe.py
+# Ключи и конфиги клиентов — во временных файлах, наружу им не надо.
+PrivateTmp=true
+NoNewPrivileges=true
+ProtectSystem=strict
+ProtectHome=true
+TimeoutStartSec=10min

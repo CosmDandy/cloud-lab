@@ -1,5 +1,0 @@
----
-- name: Restart panel stack
-  community.docker.docker_compose_v2:
-    project_src: "{{ panel_dir }}"
-    state: restarted

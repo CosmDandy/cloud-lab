@@ -44,6 +44,60 @@ scrape_configs:
       # что с instance у метрик.
       - target_label: host
         replacement: {{ node_metrics_instance }}
+    # Same idea as the control-plane promtail (roles/observability): the
+    # level goes into the `level` label, the app's own timestamp leaves the
+    # line, because the entry already carries docker's receive time.
+    pipeline_stages:
+      # Colour codes arrive as raw escapes and break every regex below.
+      - replace:
+          expression: '(\x1b\[[0-9;]*m)'
+          replace: ""
+      - match:
+          selector: '{container=~"node-exporter|promtail"}'
+          stages:
+            - logfmt:
+                mapping:
+                  level:
+            - replace:
+                expression: '(\b(?:time|ts)=\d{4}-\d\d-\d\dT\S+ ?)'
+                replace: ""
+      # VictoriaMetrics: "2026-10-25T21:40:59.964Z\twarn\tcaller\tmsg".
+      - match:
+          selector: '{container="vmagent"}'
+          stages:
+            - regex:
+                expression: '^\S+\t(?P<level>\w+)\t'
+            - replace:
+                expression: '^(\S+\t\w+\t)'
+                replace: ""
+      # NestJS: "2026-10-23 08:01:45.548     LOG [HandlerService] msg".
+      - match:
+          selector: '{container="remnanode"}'
+          stages:
+            - regex:
+                expression: '^\d{4}-\d\d-\d\d [\d:.]+ +(?P<level>[A-Z]+) '
+            - replace:
+                expression: '^(\d{4}-\d\d-\d\d [\d:.]+ +[A-Z]+ )'
+                replace: ""
+{% raw %}
+      - template:
+          source: level
+          template: >-
+            {{- $l := "" -}}
+            {{- if .Value -}}{{- $l = ToLower .Value -}}{{- end -}}
+            {{- if not $l -}}
+              {{- if regexMatch "(?i)\\b(error|fail(ed|ure)?|fatal|panic|exception)\\b" .Entry -}}error
+              {{- else if regexMatch "(?i)\\bwarn(ing)?\\b" .Entry -}}warn
+              {{- else -}}info{{- end -}}
+            {{- else if has $l (list "debug" "verbose") -}}debug
+            {{- else if has $l (list "info" "log") -}}info
+            {{- else if has $l (list "warn" "warning") -}}warn
+            {{- else if has $l (list "error") -}}error
+            {{- else if has $l (list "fatal" "panic") -}}critical
+            {{- else -}}info{{- end -}}
+{% endraw %}
+      - labels:
+          level:
 {% if node_metrics_xray_logs_enabled %}
 
   # Файловые логи xray. Отдельным job, потому что docker_sd их не видит:
@@ -53,6 +107,29 @@ scrape_configs:
       - targets: ["localhost"]
         labels:
           job: xray
+          # Not a docker container, but the logs dashboard selects by this
+          # label, and without it xray never shows up there.
+          container: xray
           host: {{ node_metrics_instance }}
           __path__: {{ node_metrics_xray_log_dir }}/*.log
+    # "2026/10/25 21:42:21.123456 [Info] [123] msg" in error.log; access.log
+    # has no level and gets info.
+    pipeline_stages:
+      - regex:
+          expression: '^\S+ \S+ \[(?P<level>\w+)\] '
+      - replace:
+          expression: '^(\d{4}/\d\d/\d\d [\d:.]+ (?:\[\w+\] )?)'
+          replace: ""
+{% raw %}
+      - template:
+          source: level
+          template: >-
+            {{- $l := "" -}}
+            {{- if .Value -}}{{- $l = ToLower .Value -}}{{- end -}}
+            {{- if eq $l "warning" -}}warn
+            {{- else if $l -}}{{- $l -}}
+            {{- else -}}info{{- end -}}
+{% endraw %}
+      - labels:
+          level:
 {% endif %}

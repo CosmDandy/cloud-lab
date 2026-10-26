@@ -27,11 +27,18 @@ services:
       traefik.enable: "true"
       # Path, а не PathPrefix: наружу открыт ровно приём записи. Запросы и
       # /api/v1/admin/tsdb/delete_series остаются недоступными снаружи, при
-      # том что сама victoriametrics их обслуживает без авторизации.
-      traefik.http.routers.vmwrite.rule: "Host(`{{ observability_vm_domain }}`) && Path(`/api/v1/write`)"
+      # том что сама victoriametrics их обслуживает без авторизации. Второй путь —
+      # приём текстового формата: так отдаёт результат проба из России
+      # (roles/vpn_probe), которой не нужен ни vmagent, ни экспортёр.
+      traefik.http.routers.vmwrite.rule: "Host(`{{ observability_vm_domain }}`) && (Path(`/api/v1/write`) || Path(`/api/v1/import/prometheus`))"
       traefik.http.routers.vmwrite.entrypoints: websecure
       traefik.http.routers.vmwrite.tls.certresolver: letsencrypt
-      traefik.http.routers.vmwrite.middlewares: vm-write-auth
+      # Rate limit first: it caps password guessing against the basic auth
+      # as well. The limit is per source IP and sits far above what one node
+      # pushes, even when it is catching up after an outage.
+      traefik.http.routers.vmwrite.middlewares: vm-write-ratelimit,vm-write-auth
+      traefik.http.middlewares.vm-write-ratelimit.ratelimit.average: "{{ observability_push_rate_average }}"
+      traefik.http.middlewares.vm-write-ratelimit.ratelimit.burst: "{{ observability_push_rate_burst }}"
       # Удвоение $ обязательно: compose иначе принимает $apr1$ за подстановку
       # переменной и молча передаёт traefik обрезанный хеш.
       traefik.http.middlewares.vm-write-auth.basicauth.users: "{{ observability_remote_write_user }}:{{ observability_remote_write_htpasswd | replace('$', '$$') }}"
@@ -95,13 +102,33 @@ services:
       traefik.http.routers.lokipush.rule: "Host(`{{ observability_vm_domain }}`) && Path(`/loki/api/v1/push`)"
       traefik.http.routers.lokipush.entrypoints: websecure
       traefik.http.routers.lokipush.tls.certresolver: letsencrypt
-      traefik.http.routers.lokipush.middlewares: logs-push-auth
+      traefik.http.routers.lokipush.middlewares: logs-push-ratelimit,logs-push-auth
+      traefik.http.middlewares.logs-push-ratelimit.ratelimit.average: "{{ observability_push_rate_average }}"
+      traefik.http.middlewares.logs-push-ratelimit.ratelimit.burst: "{{ observability_push_rate_burst }}"
       # Удвоение $ обязательно: compose иначе принимает $apr1$ за подстановку
       # переменной и молча передаёт traefik обрезанный хеш.
       traefik.http.middlewares.logs-push-auth.basicauth.users: "{{ observability_remote_write_user }}:{{ observability_remote_write_htpasswd | replace('$', '$$') }}"
       traefik.http.services.lokipush.loadbalancer.server.port: "3100"
 {% endif %}
 
+{% if observability_peer_users_enabled %}
+  # Stdlib-only script on a stock image: no build step, nothing to publish.
+  peer-users:
+    image: {{ observability_peer_users_image }}
+    container_name: peer-users
+    restart: unless-stopped
+    env_file:
+      - ./peer-users/.env
+    volumes:
+      - ./peer-users/peer_users.py:/app/peer_users.py:ro
+    command: ["python", "/app/peer_users.py"]
+    depends_on:
+      - loki
+      - victoriametrics
+    networks:
+      - monitoring
+
+{% endif %}
   promtail:
     image: {{ observability_promtail_image }}
     container_name: promtail

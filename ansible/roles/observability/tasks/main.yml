@@ -6,6 +6,14 @@
       - observability_grafana_admin_password | length > 0
     fail_msg: Нужны observability_domain и observability_grafana_admin_password.
 
+- name: Validate peer-users settings
+  ansible.builtin.assert:
+    that:
+      - observability_panel_api_token | length > 0
+      - observability_panel_api_url is match('https://[^/]+/api$')
+    fail_msg: peer-users needs observability_panel_api_token and observability_panel_api_url.
+  when: observability_peer_users_enabled
+
 - name: Create stack directories
   ansible.builtin.file:
     path: "{{ observability_dir }}/{{ item }}"
@@ -19,6 +27,7 @@
     - loki
     - promtail
     - vmalert
+    - peer-users
 
 # 0644, а не 0640: loki и grafana работают не от root и свои конфиги
 # при более строгих правах просто не открывают.
@@ -32,8 +41,17 @@
   loop:
     - grafana/datasources.yaml
     - grafana/dashboards.yaml
-    - promtail/config.yaml
     - vmalert/alerts.yaml
+    - peer-users/peer_users.py
+  notify: Restart observability stack
+
+- name: Render promtail config
+  ansible.builtin.template:
+    src: promtail-config.yaml.j2
+    dest: "{{ observability_dir }}/promtail/config.yaml"
+    owner: "{{ observability_owner }}"
+    group: "{{ observability_owner }}"
+    mode: "0644"
   notify: Restart observability stack
 
 # Каталогом, а не через loop: дашборды добавляются и удаляются, и держать
@@ -91,6 +109,18 @@
     group: "{{ observability_owner }}"
     mode: "0600"
   no_log: true
+  notify: Restart observability stack
+
+# 0600 and no_log: the file carries the panel API token.
+- name: Render peer-users environment file
+  ansible.builtin.template:
+    src: peer-users-env.j2
+    dest: "{{ observability_dir }}/peer-users/.env"
+    owner: "{{ observability_owner }}"
+    group: "{{ observability_owner }}"
+    mode: "0600"
+  no_log: true
+  when: observability_peer_users_enabled
   notify: Restart observability stack
 
 - name: Render compose file
