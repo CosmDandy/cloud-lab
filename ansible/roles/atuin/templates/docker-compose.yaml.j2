@@ -27,6 +27,10 @@ services:
       traefik.http.routers.atuin.entrypoints: websecure
       traefik.http.routers.atuin.tls.certresolver: letsencrypt
       traefik.http.services.atuin.loadbalancer.server.port: "{{ atuin_port }}"
+      # /login takes a password and is public; this caps guessing per IP.
+      traefik.http.routers.atuin.middlewares: atuin-ratelimit
+      traefik.http.middlewares.atuin-ratelimit.ratelimit.average: "{{ atuin_rate_average }}"
+      traefik.http.middlewares.atuin-ratelimit.ratelimit.burst: "{{ atuin_rate_burst }}"
 
 networks:
   edge:

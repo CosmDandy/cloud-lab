@@ -35,3 +35,8 @@ atuin_db_uri: "sqlite:///config/atuin.db"
 # TraceLayer sits at debug. on_response alone gives one line per request
 # with status and latency; all of tower_http=debug would double it.
 atuin_log_level: "info,atuin_server=info,tower_http::trace::on_response=debug"
+
+# Per source IP, requests per second. A first sync of a long history pages
+# through hundreds of requests, hence the burst.
+atuin_rate_average: 5
+atuin_rate_burst: 100
