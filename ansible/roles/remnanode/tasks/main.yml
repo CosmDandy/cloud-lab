@@ -19,7 +19,7 @@
     mode: "0750"
 
 # 0755 и root: внутрь контейнера xray пишет от root, а снаружи каталог читает
-# promtail. Создаётся до compose — иначе docker сделает его сам и владельцем
+# alloy. Создаётся до compose — иначе docker сделает его сам и владельцем
 # станет тот, кого назначит рантайм.
 - name: Create xray log directory
   ansible.builtin.file:
