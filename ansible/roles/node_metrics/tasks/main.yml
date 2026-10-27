@@ -251,5 +251,6 @@
   until: >-
     node_metrics_alloy_self.content | default('')
     is search('loki_source_docker_target_entries_total[{][^}]*[}] [1-9]')
-  when: node_metrics_logs_enabled
+  # In check mode the stack is not deployed, so there is nothing to ask.
+  when: node_metrics_logs_enabled and not ansible_check_mode
   tags: [logs]
