@@ -55,22 +55,39 @@ services:
       - "-remoteWrite.maxDiskUsagePerURL={{ node_metrics_max_disk_usage }}"
 
 {% if node_metrics_logs_enabled %}
-  promtail:
-    image: {{ node_metrics_promtail_image }}
-    container_name: promtail
+  alloy:
+    image: {{ node_metrics_alloy_image }}
+    container_name: alloy
     restart: unless-stopped
     volumes:
+      # loki.source.docker reads logs through the docker API and needs no
+      # access to the log files themselves.
       - /var/run/docker.sock:/var/run/docker.sock:ro
-      - /var/lib/docker/containers:/var/lib/docker/containers:ro
-      - ./promtail.yml:/etc/promtail/config.yaml:ro
+      - ./alloy-config.alloy:/etc/alloy/config.alloy:ro
       # Логи xray лежат файлами: rw-node не отдаёт stdout ядра в docker logs.
       - {{ node_metrics_xray_log_dir }}:{{ node_metrics_xray_log_dir }}:ro
-      - ./remote-write-password:/etc/promtail/password:ro
-      - promtail_positions:/tmp
-    command: -config.file=/etc/promtail/config.yaml
-    # Host-сеть, как у vmagent: promtail слушает только петлю (см. конфиг),
-    # поэтому наружу по-прежнему не открыто ничего, а vmagent скрейпит его
-    # метрики по 127.0.0.1 — доставка логов видна там же, где всё остальное.
+      - ./remote-write-password:/etc/alloy/password:ro
+      # Positions: without them a restart counts as a first start (see the
+      # stage.drop in the config).
+      - alloy_data:/var/lib/alloy/data
+{% if node_metrics_xray_logs_enabled %}
+      # promtail's offsets, read once on alloy's first start so the xray
+      # files resume where promtail stopped (legacy_positions_file).
+      # TODO: drop this mount and the volume once every node runs alloy.
+      - promtail_positions:/var/lib/promtail-positions:ro
+{% endif %}
+    command:
+      - run
+      - /etc/alloy/config.alloy
+      - --storage.path=/var/lib/alloy/data
+      # Host network, as vmagent: the address is spelled out rather than left
+      # to a default, because promtail's gRPC default was 0.0.0.0. This is
+      # alloy's only listener; vmagent scrapes its metrics here, so log
+      # delivery shows up next to everything else.
+      - --server.http.listen-addr=127.0.0.1:{{ node_metrics_alloy_port }}
+      # Usage reporting to stats.grafana.org is on by default; the only
+      # connection this collector needs is the one to loki.
+      - --disable-reporting
     network_mode: host
 {% endif %}
 
@@ -78,6 +95,10 @@ volumes:
   vmagent_data:
     name: node_metrics_vmagent_data
 {% if node_metrics_logs_enabled %}
+  alloy_data:
+    name: node_metrics_alloy_data
+{% if node_metrics_xray_logs_enabled %}
   promtail_positions:
     name: node_metrics_promtail_positions
+{% endif %}
 {% endif %}
