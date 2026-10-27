@@ -1,111 +1,78 @@
-name: "Terraform"
+# Terraform for every stack under terraform/live/<stack>. Each stack is its own
+# HCP Terraform workspace (remote execution), so the stack list is discovered
+# from the tree instead of maintained here — a new directory gets CI by existing.
+#
+# PR:        validate (no credentials) → speculative plan, posted to the PR.
+# master:    validate → saved plan → apply of exactly that plan, only when it has
+#            changes and only after approval on the `terraform` environment.
+# dispatch:  same as master when run on master; a plan only on any other ref.
+name: terraform
+
 on:
   pull_request:
     paths:
       - terraform/**
+      - .terraformignore
+      - .github/workflows/terraform.yml
+      - .github/workflows/terraform-stack.yml
+  push:
+    branches: [master]
+    paths:
+      - terraform/**
+      - .terraformignore
+      - .github/workflows/terraform.yml
+      - .github/workflows/terraform-stack.yml
   workflow_dispatch:
 
-# Пусто на уровне workflow — каждая job запрашивает права явно и минимально.
-# pull-requests: write нужен ровно одному шагу в plan, поэтому объявлен там,
-# а не здесь: иначе это право получает и apply, который ходит в прод.
 permissions: {}
 
+# Two master runs must not interleave their saved plans and applies; superseded
+# PR runs are simply dropped.
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
 jobs:
-  plan:
-    runs-on: ubuntu-latest
+  stacks:
+    name: stacks + fmt
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
     permissions:
-      contents: read # checkout
-      pull-requests: write # шаг "Comment PR with plan"
-    defaults:
-      run:
-        working-directory: terraform
-    env:
-      TF_VAR_hcloud_token: ${{ secrets.HCLOUD_TOKEN }}
-      TF_VAR_cloudflare_api_token: ${{ secrets.CLOUDFLARE_API_TOKEN }}
-      TF_VAR_github_token: ${{ secrets.GH_PAT_SECRETS }}
-    steps:
-      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-        with:
-          # По умолчанию checkout пишет токен в .git/config, откуда его прочитает
-          # любой последующий шаг. Модули terraform локальные (./modules/*),
-          # провайдеры тянутся из registry — git-доступ после клона не нужен.
-          persist-credentials: false
-
-      - uses: hashicorp/setup-terraform@dfe3c3f87815947d99a8997f908cb6525fc44e9e # v4.0.1
-        with:
-          cli_config_credentials_token: ${{ secrets.TF_API_TOKEN }}
-
-      - name: Format check
-        run: terraform fmt -check -recursive
-
-      - name: Init
-        run: terraform init
-
-      - name: Validate
-        run: terraform validate
-
-      - name: Plan
-        id: plan
-        run: terraform plan -no-color
-        continue-on-error: true
-
-      - name: Comment PR with plan
-        if: github.event_name == 'pull_request'
-        uses: actions/github-script@3a2844b7e9c422d3c10d287c895573f7108da1b3 # v9.0.0
-        # Значения передаём через env, а не подстановкой ${{ }} в тело script:
-        # подстановка склеивается в исходник до запуска, и вывод terraform plan
-        # (имена ресурсов, содержимое переменных) стал бы исполняемым кодом.
-        env:
-          PLAN_OUTCOME: ${{ steps.plan.outcome }}
-          PLAN_STDOUT: ${{ steps.plan.outputs.stdout }}
-        with:
-          script: |
-            const output = `#### Terraform Plan \`${process.env.PLAN_OUTCOME}\`
-
-            <details><summary>Show Plan</summary>
-
-            \`\`\`
-            ${process.env.PLAN_STDOUT}
-            \`\`\`
-
-            </details>`;
-
-            github.rest.issues.createComment({
-              issue_number: context.issue.number,
-              owner: context.repo.owner,
-              repo: context.repo.repo,
-              body: output
-            });
-
-      - name: Plan status
-        if: steps.plan.outcome == 'failure'
-        run: exit 1
-
-  apply:
-    needs: plan
-    if: github.ref == 'refs/heads/master' && github.event_name != 'pull_request'
-    runs-on: ubuntu-latest
-    permissions:
-      contents: read # checkout; комментировать PR этой job не нужно
-    environment: terraform
-    defaults:
-      run:
-        working-directory: terraform
-    env:
-      TF_VAR_hcloud_token: ${{ secrets.HCLOUD_TOKEN }}
-      TF_VAR_cloudflare_api_token: ${{ secrets.CLOUDFLARE_API_TOKEN }}
-      TF_VAR_github_token: ${{ secrets.GH_PAT_SECRETS }}
+      contents: read
+    outputs:
+      list: ${{ steps.list.outputs.list }}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
-
       - uses: hashicorp/setup-terraform@dfe3c3f87815947d99a8997f908cb6525fc44e9e # v4.0.1
         with:
-          cli_config_credentials_token: ${{ secrets.TF_API_TOKEN }}
+          terraform_version: 1.15.8
+          terraform_wrapper: false
+      # Recursive from the root: covers live stacks and the shared modules.
+      - name: fmt
+        run: terraform fmt -check -recursive -diff terraform
+      - name: list
+        id: list
+        run: |
+          list=$(find terraform/live -mindepth 1 -maxdepth 1 -type d -printf '%f\n' | sort | jq -Rcs 'split("\n")[:-1]')
+          echo "list=$list" >> "$GITHUB_OUTPUT"
+          echo "stacks: $list"
 
-      - name: Init
-        run: terraform init
-
-      - name: Apply
-        run: terraform apply -auto-approve
+  stack:
+    name: ${{ matrix.stack }}
+    needs: stacks
+    strategy:
+      fail-fast: false
+      matrix:
+        stack: ${{ fromJSON(needs.stacks.outputs.list) }}
+    # NOTE: zizmor (low) suggests the `$/` self-repository form; actionlint
+    # 1.7.12 rejects it. Switch once actionlint accepts it.
+    uses: ./.github/workflows/terraform-stack.yml
+    with:
+      stack: ${{ matrix.stack }}
+    permissions:
+      contents: read
+      pull-requests: write
+    secrets:
+      TF_API_TOKEN: ${{ secrets.TF_API_TOKEN }}
