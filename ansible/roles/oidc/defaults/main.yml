@@ -6,7 +6,7 @@ oidc_owner: root
 # через него перепрыгнули сразу на 2.13.0. Схема SQLite мигрирует при старте
 # сама; бэкап тома снимать ОСТАНОВЛЕННЫМ контейнером — иначе WAL не слит и
 # копия неконсистентна.
-oidc_image: ghcr.io/pocket-id/pocket-id:v2.13.0
+oidc_image: ghcr.io/pocket-id/pocket-id:v2.19.1
 
 # Домен, на котором отвечает Pocket ID; задаётся в инвентаре.
 oidc_domain: ""
