@@ -10,6 +10,11 @@
   // идёт на хосте до создания контейнера: тот же дайджест — no-op, офлайн —
   // едем на локальном (|| true).
   "initializeCommand": "docker pull ghcr.io/cosmdandy/devcontainer:devops || true",
+  // glibc sends A and AAAA from one UDP socket at once; NAT on the way drops
+  // one reply and every 2nd-3rd lookup waits the 5 s resolver timeout
+  // (curl, node dns.lookup in tool calls). Claude Code itself asks for A only
+  // and is not affected. Separate sockets avoid the race.
+  "runArgs": ["--dns-opt=single-request-reopen"],
   "containerEnv": {
     "LANG": "en_US.UTF-8",
     "LC_ALL": "en_US.UTF-8",

@@ -14,4 +14,10 @@ PrivateTmp=true
 NoNewPrivileges=true
 ProtectSystem=strict
 ProtectHome=true
-TimeoutStartSec=10min
+# Последняя удачная подписка и неотправленные результаты: ключи пользователя,
+# поэтому 0700.
+StateDirectory=vpn-probe
+StateDirectoryMode=0700
+# Прогон с замером скорости — пара минут, плюс до десяти минут повторов
+# отправки, когда путь до панели закрыт.
+TimeoutStartSec=30min

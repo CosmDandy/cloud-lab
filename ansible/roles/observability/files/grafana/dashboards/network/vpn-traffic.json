@@ -429,7 +429,7 @@
             "type": "prometheus",
             "uid": "victoriametrics"
           },
-          "expr": "count(max_over_time(vpn_probe_success_ratio[12m]) == 0 and avg_over_time(vpn_probe_success_ratio[1d] offset 15m) > 0.5 and on (instance) last_over_time(vpn_probe_direct_success[12m]) == 1) or vector(0)",
+          "expr": "count(max_over_time(vpn_probe_success_ratio[2h5m]) == 0 and avg_over_time(vpn_probe_success_ratio[1d] offset 2h15m) > 0.5 and on (instance) last_over_time(vpn_probe_direct_success[2h5m]) == 1) or vector(0)",
           "legendFormat": "хостов",
           "refId": "A",
           "range": false,
@@ -1737,7 +1737,7 @@
             "type": "prometheus",
             "uid": "victoriametrics"
           },
-          "expr": "max by (transport, node) (last_over_time(vpn_probe_success_ratio[15m]))",
+          "expr": "max by (transport, node) (last_over_time(vpn_probe_success_ratio[70m]))",
           "refId": "A",
           "instant": true,
           "range": false,
@@ -1769,7 +1769,7 @@
       "id": 60,
       "type": "state-timeline",
       "title": "По нодам",
-      "description": "Средняя доля прошедших запросов по всем транспортам ноды. Жёлтый у ноды, на которой из офиса не проходят Vision и gRPC, — постоянный фон, а не авария. Серый — проба не работала (тестбед выключен).",
+      "description": "Средняя доля прошедших запросов по всем транспортам ноды. Жёлтый у ноды, на которой из офиса не проходят Vision и gRPC, — постоянный фон, а не авария. Серый — проба не работала (тестбед выключен). Одна клетка — один час.",
       "datasource": {
         "type": "prometheus",
         "uid": "victoriametrics"
@@ -1824,7 +1824,7 @@
           "legendFormat": "{{node}}",
           "refId": "A",
           "range": true,
-          "interval": "10m"
+          "interval": "1h"
         }
       ]
     },
@@ -1887,7 +1887,7 @@
           "legendFormat": "{{transport}}",
           "refId": "A",
           "range": true,
-          "interval": "10m"
+          "interval": "1h"
         }
       ]
     },
@@ -1950,7 +1950,7 @@
           "legendFormat": "прямой выход",
           "refId": "A",
           "range": true,
-          "interval": "10m"
+          "interval": "1h"
         },
         {
           "datasource": {
@@ -1961,7 +1961,7 @@
           "legendFormat": "подписка",
           "refId": "B",
           "range": true,
-          "interval": "10m"
+          "interval": "1h"
         }
       ]
     },
@@ -1969,7 +1969,7 @@
       "id": 62,
       "type": "timeseries",
       "title": "Время ответа через ноду",
-      "description": "Среднее по транспортам, только прошедшие запросы.",
+      "description": "Медиана трёх запросов 204, среднее по транспортам; только прошедшие.",
       "datasource": {
         "type": "prometheus",
         "uid": "victoriametrics"
@@ -1977,7 +1977,7 @@
       "gridPos": {
         "x": 8,
         "y": 71,
-        "w": 16,
+        "w": 8,
         "h": 5
       },
       "fieldConfig": {
@@ -1986,8 +1986,9 @@
           "custom": {
             "lineWidth": 1,
             "fillOpacity": 8,
-            "showPoints": "never",
-            "spanNulls": 300000
+            "showPoints": "always",
+            "spanNulls": 7200000,
+            "pointSize": 4
           }
         },
         "overrides": []
@@ -2017,7 +2018,122 @@
           "legendFormat": "{{node}}",
           "refId": "A",
           "range": true,
-          "interval": "10m"
+          "interval": "1h"
+        }
+      ]
+    },
+    {
+      "id": 65,
+      "type": "timeseries",
+      "title": "Скорость через ноду",
+      "description": "Скачивание 5 МБ через каждый хост по очереди, среднее по транспортам. Потолок — офисный канал, поэтому смотреть на разницу между нодами и на просадки, а не на абсолютное число.",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "victoriametrics"
+      },
+      "gridPos": {
+        "x": 16,
+        "y": 71,
+        "w": 8,
+        "h": 5
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "bps",
+          "custom": {
+            "lineWidth": 1,
+            "fillOpacity": 8,
+            "showPoints": "always",
+            "spanNulls": 7200000,
+            "pointSize": 4
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "legend": {
+          "displayMode": "table",
+          "placement": "bottom",
+          "showLegend": true,
+          "calcs": [
+            "mean",
+            "min"
+          ]
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "desc"
+        }
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "victoriametrics"
+          },
+          "expr": "avg by (node) (avg_over_time(vpn_probe_throughput_bits_per_second[$__interval]))",
+          "legendFormat": "{{node}}",
+          "refId": "A",
+          "range": true,
+          "interval": "1h"
+        }
+      ]
+    },
+    {
+      "id": 66,
+      "type": "timeseries",
+      "title": "Скорость по транспортам",
+      "description": "То же скачивание, среднее по нодам. Транспорт без точки в этот час не прошёл проверку 204, и скорость не мерилась.",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "victoriametrics"
+      },
+      "gridPos": {
+        "x": 0,
+        "y": 76,
+        "w": 24,
+        "h": 6
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "bps",
+          "custom": {
+            "lineWidth": 1,
+            "fillOpacity": 8,
+            "showPoints": "always",
+            "spanNulls": 7200000,
+            "pointSize": 4
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "legend": {
+          "displayMode": "table",
+          "placement": "bottom",
+          "showLegend": true,
+          "calcs": [
+            "mean",
+            "min",
+            "max"
+          ]
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "desc"
+        }
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "victoriametrics"
+          },
+          "expr": "avg by (transport) (avg_over_time(vpn_probe_throughput_bits_per_second[$__interval]))",
+          "legendFormat": "{{transport}}",
+          "refId": "A",
+          "range": true,
+          "interval": "1h"
         }
       ]
     },
@@ -2028,7 +2144,7 @@
       "collapsed": false,
       "gridPos": {
         "x": 0,
-        "y": 76,
+        "y": 82,
         "w": 24,
         "h": 1
       },
@@ -2045,7 +2161,7 @@
       },
       "gridPos": {
         "x": 0,
-        "y": 77,
+        "y": 83,
         "w": 4,
         "h": 6
       },
@@ -2110,7 +2226,7 @@
       },
       "gridPos": {
         "x": 4,
-        "y": 77,
+        "y": 83,
         "w": 20,
         "h": 6
       },
@@ -2184,7 +2300,7 @@
       },
       "gridPos": {
         "x": 0,
-        "y": 83,
+        "y": 89,
         "w": 12,
         "h": 7
       },
@@ -2239,7 +2355,7 @@
       },
       "gridPos": {
         "x": 12,
-        "y": 83,
+        "y": 89,
         "w": 12,
         "h": 7
       },

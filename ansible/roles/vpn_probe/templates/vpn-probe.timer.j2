@@ -1,10 +1,10 @@
 # Managed by ansible (roles/vpn_probe). Правки на хосте будут перезаписаны.
 [Unit]
-Description=Probe subscription hosts every {{ vpn_probe_interval }}
+Description=Probe subscription hosts on schedule {{ vpn_probe_schedule }}
 
 [Timer]
-OnBootSec=2min
-OnUnitInactiveSec={{ vpn_probe_interval }}
+OnCalendar={{ vpn_probe_schedule }}
+AccuracySec=1s
 Unit=vpn-probe.service
 
 [Install]

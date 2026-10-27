@@ -227,6 +227,119 @@ HTTP/2-поток внутри Reality. `multiMode` даёт лучшую отд
 
 ---
 
+## Восстановление после сна
+
+Жалоба: после сна ноутбука или телефона Vision и AmneziaWG оживают сразу, а
+XHTTP «переподключается». Причина в пуле соединений, а не в протоколе.
+
+- **Vision** мультиплексора не имеет: каждое соединение приложения — своё
+  TCP до ноды. После пробуждения приложения открывают новые, ждать нечего.
+- **XHTTP и gRPC** кладут все соединения приложения в несколько общих
+  HTTP/2-соединений. После сна общее соединение мертво, но клиент об этом не
+  знает и отправляет новые запросы в него, пока не сработает таймаут.
+- **Hysteria2** — одно QUIC-соединение, но ошибка на нём наступает быстро, и
+  клиент тут же поднимает новое.
+
+Роутер после сна или смены сети молча выбрасывает пакеты старых потоков (их
+записи в таблице NAT уже нет), а новые пропускает. Так это и смоделировано на
+стенде: `testbed/bench/2026-10-23-sleep-wake.py` прогревает транспорт,
+останавливает xray (SIGSTOP), закрывает iptables-правилами все его открытые
+потоки к ноде, будит и раз в 0,5 с пробует новый запрос с таймаутом 4 с.
+Офисный стенд, sto-01, xray 26.3.27, по 3 повтора, разброс между повторами
+меньше 0,2 с. `[измерено 23.10.2026]`
+
+| вариант | до первого успешного запроса |
+|---|---|
+| Vision | 0,2 с |
+| Hysteria2 (как сейчас; `maxIdleTimeout: 10` — так же) | 0,7 с |
+| XHTTP, как сейчас в подписке | **54 с** |
+| XHTTP + `xmux.hKeepAlivePeriod: 10` | 20 с |
+| XHTTP + `xmux.hKeepAlivePeriod: 5` | 16 с |
+| XHTTP + `sockopt.tcpUserTimeout: 8000` | 9 с |
+| XHTTP + `sockopt.tcpUserTimeout: 4000` | 5 с |
+| XHTTP + оба (10 и 8000) | 9 с |
+| gRPC, как сейчас | **не восстановился за 120 с** |
+| gRPC + `idle_timeout: 10`, `health_check_timeout: 5` | 9 с |
+| gRPC + `sockopt.tcpUserTimeout: 8000` | 9 с |
+
+Что за этими числами стоит в коде xray (v26.3.27):
+
+- Пул XHTTP выбрасывает соединение, только когда на нём упал запрос
+  (`IsClosed()` выставляется по ошибке), или по лимитам `xmux`.
+- HTTP/2 пингует соединение после `hKeepAlivePeriod` тишины (по умолчанию 45 с,
+  как Chrome) и ждёт ответа ещё 15 с — отсюда 54 с.
+- `hMaxReusableSecs` и прочие лимиты `xmux` отсчитываются монотонными часами
+  Go. На macOS они во время сна стоят (golang/go#66870); на Linux и Android
+  Go берёт `CLOCK_MONOTONIC`, перейти на `CLOCK_BOOTTIME` предлагают в
+  golang/go#24595. Поэтому на укорачивание `hMaxReusableSecs` против сна
+  рассчитывать нельзя; на стенде сон с остановкой часов не воспроизвести.
+- `tcpUserTimeout` — опция ядра `TCP_USER_TIMEOUT`: соединение с
+  неподтверждёнными данными закрывается через N мс. Работает только на Linux
+  и Android.
+- gRPC-клиент без keepalive ждёт, пока сдастся TCP, — это минуты. На сервере
+  в профиле стоят `idleTimeout`/`healthCheckTimeout` в camelCase, а xray
+  читает `idle_timeout`/`health_check_timeout`, и клиентам они не уходят.
+- QUIC Hysteria2-клиента без keepalive, `maxIdleTimeout` 30 с
+  (`streamSettings.finalmask.quicParams`).
+
+Что из этого можно доставить через подписку:
+
+| формат | `xmux` (в `extra`) | `sockopt` | keepalive gRPC | `quicParams` HY2 |
+|---|---|---|---|---|
+| ссылки `vless://`, `hysteria2://` (Happ, v2rayN) | да | нет | нет | нет |
+| xray-json (правило ответа `XRAY_JSON`) | да | да | да | да |
+
+Почти все устройства — Happ (на 25.10.2026 по HWID: 13 iOS, 9 macOS,
+6 Android, 3 Windows). `TCP_USER_TIMEOUT` в xray есть только в
+`sockopt_linux.go`, поэтому `tcpUserTimeout` имеет смысл только на Android.
+
+### Что настроено (25.10.2026)
+
+- **`xmux.hKeepAlivePeriod: 10` на всех XHTTP-хостах**, поле хоста
+  `xhttpExtraParams`. Доходит до всех клиентов XHTTP — в `extra` ссылки и
+  в xray-json. Поле хоста **заменяет** `extra` инбаунда целиком, а не
+  дополняет его (`override(host, inbound)` в
+  `resolve-proxy-config.service.ts`, Remnawave 3.4.5). Поэтому в хостах
+  лежит весь `extra` профиля плюс `hKeepAlivePeriod`, и **правка `extra` в
+  профиле до клиентов больше не доходит** — `xmux`, паддинг и `sc*` для
+  клиентов правятся в хостах. Хосты: XHTTP-Stream на STO, AMS, STO-03,
+  STO-04 и выключенные XHTTP-Stream 2444 и XHTTP-Packet.
+- **`sockopt.tcpUserTimeout: 5000` на всех XHTTP- и gRPC-хостах**, поле
+  `sockoptParams`. Генератор ссылок sockopt не знает: ссылки и sing-box-выдача
+  до и после совпали. Доходит только в xray-json.
+- **Android-Happ получает xray-json.** Правило ответа «Happ Android JSON»
+  стоит перед «Fallback Base64»: `user-agent` ~ `^happ/` **и**
+  `x-device-os` ~ `^android$` (без учёта регистра) → `XRAY_JSON` с шаблоном
+  `xray-json` (`responseModifications.subscriptionTemplate`; без него панель
+  берёт шаблон `Default`). `x-device-os` — тот же заголовок, который панель
+  пишет в HWID-устройства как `platform`. iOS, macOS и Windows остаются на
+  ссылках.
+- **Шаблон `xray-json` повторяет «Sigma Routing v6»** (профиль Happ из
+  заголовка `routing`, см. [vpn-nodes.md](vpn-nodes.md#happ-подписка-и-роутинг)):
+  напрямую `geoip:private`, `100.64.0.0/10`, `fd7a:115c:a1e0::/48`,
+  `geoip:ru`, `geosite:private`, семь прямых geosite и `domain:hltv.org`;
+  затем блок `geosite:category-ads`; затем в туннель
+  `antifilter-download-community` и `geoip:ru-blocked`; остальное — в
+  туннель. DNS: прямые домены резолвит 77.88.8.8, остальное — DoH
+  Cloudflare. Правило `bittorrent → direct` из старого шаблона убрано: в v6
+  его нет.
+
+Ожидаемое восстановление после сна по стенду: XHTTP на Android около 5 с
+(`tcpUserTimeout` 4000 → 5 с, 8000 → 9 с; 5000 отдельно не мерилось),
+gRPC на Android около 9 с или быстрее, XHTTP на остальных около 20 с.
+**gRPC на iOS, macOS и Windows по-прежнему не восстанавливается**: keepalive
+gRPC в шаблон не добавлен, а ссылки его не несут.
+
+Проверено 25.10.2026: Android-выдача — 24 конфига с роутингом и DNS
+шаблона, `tcpUserTimeout` на 4 XHTTP и 4 gRPC; все 24 проходят
+`xray run -test` (стенд, xray 26.3.27, geo-файлы runetfreedom). Выдача
+Happ iOS/macOS, sing-box и v2rayNG не изменилась.
+
+Не проверено на устройстве: «DNS from JSON» в документации Happ — настройка,
+требующая Provider ID, которого у нас нет. Поэтому Android-Happ, возможно,
+берёт DNS не из JSON, а из своих настроек или из профиля роутинга. Откат:
+выключить или удалить правило в панели — Android вернётся на ссылки.
+
 ## Устойчивость к блокировкам
 
 Измеренное, без теории:
