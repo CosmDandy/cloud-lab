@@ -3,8 +3,8 @@ mesh_dir: /opt/mesh
 mesh_owner: root
 
 # Версии закреплены: плавающие теги ломают воспроизводимость стенда.
-mesh_headscale_image: headscale/headscale:0.29.2
-mesh_headplane_image: ghcr.io/tale/headplane:0.7.0
+mesh_headscale_image: headscale/headscale:0.29.6
+mesh_headplane_image: ghcr.io/tale/headplane:0.8.2
 
 # Публикация идёт через traefik из роли edge — она владеет 80/443 и acme.
 mesh_edge_network: "{{ edge_network | default('edge') }}"
