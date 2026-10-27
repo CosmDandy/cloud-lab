@@ -3,7 +3,7 @@ node_metrics_dir: /opt/node-metrics
 node_metrics_owner: root
 
 node_metrics_node_exporter_image: prom/node-exporter:v1.12.1
-node_metrics_vmagent_image: victoriametrics/vmagent:v1.148.0
+node_metrics_vmagent_image: victoriametrics/vmagent:v1.155.0
 
 # Куда отправлять. Нода инициирует соединение сама — наружу на ней не
 # открывается ни одного порта, в отличие от pull-модели, где пришлось бы
