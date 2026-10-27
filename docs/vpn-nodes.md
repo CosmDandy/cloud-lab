@@ -160,7 +160,7 @@ ssh-агенте больше трёх ключей и нужный не в на
 | Что | Чем | Куда |
 | --- | --- | --- |
 | метрики | vmagent | `https://vm.cosmdandy.dev/api/v1/write` |
-| логи | promtail | `https://vm.cosmdandy.dev/loki/api/v1/push` |
+| логи | alloy | `https://vm.cosmdandy.dev/loki/api/v1/push` |
 
 Домен один и учётка одна: traefik различает приём метрик и приём логов по
 пути. Отдельный домен стоил бы записи в DNS и второго сертификата ради одного
@@ -262,7 +262,8 @@ Xray пишет их в файлы, и работает это только пр
    (`/var/log/remnanode/access.log` и `error.log`) и `loglevel`;
 2. каталог смонтирован в контейнер — это делает роль `remnanode`
    (`remnanode_log_dir`);
-3. promtail читает файлы отдельным job `xray` — `docker_sd` их не видит.
+3. alloy читает файлы отдельным `loki.source.file "xray"` — docker-источник
+   их не видит.
 
 Уровень `info` даёт строку на каждое соединение: на Осло это около 70 МБ в
 сутки при диске 8.8 ГБ, поэтому ротация (`/etc/logrotate.d/remnanode-xray`,

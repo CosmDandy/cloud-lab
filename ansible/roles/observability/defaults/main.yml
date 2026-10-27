@@ -10,14 +10,12 @@ observability_alertmanager_image: prom/alertmanager:v0.34.1
 # uid, под которым процесс работает внутри контейнера.
 observability_alertmanager_uid: "65534"
 observability_grafana_image: grafana/grafana:13.1.8
-# loki и promtail держим одной парой версий: push API стабилен,
-# но конфиг-схемы между минорами разъезжаются.
 # 3.5 сыпала 'negative structured metadata bytes received' по полсотни
 # строк в минуту — ошибка учёта, логи при этом доходили.
 observability_loki_image: grafana/loki:3.6.19
-# promtail заморожен на 3.6.11: grafana перевела сбор логов на alloy и
-# новых сборок не выпускает. Держим loki в той же минорной ветке.
-observability_promtail_image: grafana/promtail:3.6.11
+# alloy talks to loki only through the push API, so its version does not
+# follow loki's.
+observability_alloy_image: grafana/alloy:v1.21.2
 observability_node_exporter_image: prom/node-exporter:v1.12.1
 # Адрес docker0: на него резолвится host.docker.internal, через который
 # victoriametrics скрейпит node-exporter из bridge-сети. Наружу не смотрит.
@@ -68,7 +66,7 @@ observability_remote_write_htpasswd: ""
 observability_logs_push_enabled: false
 
 # Per source IP, requests per second, for both push routers. vmagent and
-# promtail treat 429 as retryable, so hitting it delays data, never drops it.
+# alloy treat 429 as retryable, so hitting it delays data, never drops it.
 observability_push_rate_average: 20
 observability_push_rate_burst: 200
 

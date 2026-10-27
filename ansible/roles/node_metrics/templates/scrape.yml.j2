@@ -12,11 +12,11 @@ scrape_configs:
           instance: {{ node_metrics_instance }}
 {% if node_metrics_logs_enabled %}
 
-  # Метрики самого promtail: по ним видно, доезжают ли логи. Без них обрыв
+  # Метрики самого alloy: по ним видно, доезжают ли логи. Без них обрыв
   # доставки выглядит как «на ноде просто тихо».
-  - job_name: promtail
+  - job_name: alloy
     static_configs:
-      - targets: ["127.0.0.1:{{ node_metrics_promtail_port }}"]
+      - targets: ["127.0.0.1:{{ node_metrics_alloy_port }}"]
         labels:
           instance: {{ node_metrics_instance }}
 {% endif %}
