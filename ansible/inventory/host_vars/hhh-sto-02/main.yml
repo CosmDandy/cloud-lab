@@ -263,12 +263,20 @@ gatus_oidc_client_id: 92ba05d1-584e-452b-a5f1-18dc197d0e75
 # Проверки бьют по публичным адресам: смысл в том, чтобы видеть сервис
 # глазами пользователя — вместе с traefik, сертификатом и DNS.
 gatus_endpoints:
+  # Connection: close because a kept-alive connection outlives a host reboot
+  # badly: gatus started before traefik knew the mesh router, negotiated with
+  # the default TLS options, and then got 421 Misdirected Request on that
+  # connection for good (mesh uses its own headscale@file options).
   - name: headscale
     group: mesh
     url: https://mesh.cosmdandy.dev/health
+    headers:
+      Connection: close
   - name: headplane
     group: mesh
     url: https://mesh.cosmdandy.dev/admin
+    headers:
+      Connection: close
   - name: pocket-id
     group: sso
     url: https://oidc.cosmdandy.dev/
