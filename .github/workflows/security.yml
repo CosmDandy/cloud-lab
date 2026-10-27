@@ -19,7 +19,7 @@ permissions: {}
 jobs:
   secrets:
     name: secrets (gitleaks)
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     permissions:
       contents: read
     steps:
@@ -36,7 +36,7 @@ jobs:
 
   iac:
     name: iac (trivy)
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     permissions:
       contents: read
       security-events: write # для загрузки SARIF в Security tab (бесплатно для публичных репо)
@@ -78,7 +78,7 @@ jobs:
 
   workflows:
     name: workflow-конфиги (zizmor)
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     permissions:
       contents: read
       security-events: write
@@ -105,7 +105,7 @@ jobs:
       # уверенностью) не роняет CI, всё остальное роняет. Версия закреплена по
       # той же причине, что actions пиннятся по SHA: воспроизводимость прогона.
       - name: zizmor (гейт)
-        run: pipx run zizmor==1.28.0 --offline --min-severity=medium .
+        run: pipx run zizmor==1.31.1 --offline --min-severity=medium .
 
       # Эту связку zizmor не ловит: он ищет литеральную метку `self-hosted`, а
       # свои раннеры здесь именуются по хосту (hcloud-htz-hel-01).
@@ -116,5 +116,5 @@ jobs:
       # ничто не проверяет, живёт до первой правки.
       - name: свой раннер только на workflow_dispatch (гейт)
         run: |
-          python -m pip install --quiet pyyaml
+          python -m pip install --quiet pyyaml==6.0.3
           python scripts/check-workflow-runners.py
