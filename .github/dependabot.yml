@@ -13,3 +13,17 @@ updates:
     groups:
       actions:
         patterns: ["*"]
+
+  # Provider pins live in each stack's .terraform.lock.hcl; without this they
+  # only move when someone runs `terraform init -upgrade` by hand.
+  - package-ecosystem: terraform
+    directories:
+      - /terraform/live/*
+      - /terraform/modules/*
+    schedule:
+      interval: weekly
+    cooldown:
+      default-days: 7
+    groups:
+      terraform:
+        patterns: ["*"]
