@@ -217,15 +217,16 @@ groups:
       # разбудить человека бессмысленно. Метрика
       # vpn_client_tcp_reordering остаётся для разбора инцидентов руками.
 
-  # Проба из офиса в России (roles/vpn_probe), раз в пять минут. Gatus этого
+  # Проба из офиса в России (roles/vpn_probe), раз в час в :05. Gatus этого
   # не видит: он ходит из Швеции, и 17-18.10 AMS Vision был мёртв из России
   # при полностью зелёных проверках.
   - name: vpn-probe
     interval: 1m
     rules:
-      # Два прогона подряд без единого ответа, при живом прямом выходе из
-      # офиса: когда лежит сам офисный канал, падает всё разом, и к VPN это
-      # отношения не имеет.
+      # Два прогона подряд (два часа) без единого ответа, при живом прямом
+      # выходе из офиса: когда лежит сам офисный канал, падает всё разом, и к
+      # VPN это отношения не имеет. Один прогон — мало: провайдер офиса
+      # закрывает наши адреса окнами по несколько минут.
       # Fires on a change, not on a state: the host must have passed more than
       # half of the probes in the day before. The office path cuts Vision and
       # gRPC to several nodes for good (0-17 % of probes pass), and a rule on
@@ -233,25 +234,24 @@ groups:
       # dead resolves after about a day; the dashboard row still shows it.
       - alert: ProtocolDeadFromRussia
         expr: >-
-          max_over_time(vpn_probe_success_ratio[12m]) == 0
-          and avg_over_time(vpn_probe_success_ratio[1d] offset 15m) > 0.5
-          and on (instance) last_over_time(vpn_probe_direct_success[12m]) == 1
-        for: 5m
+          max_over_time(vpn_probe_success_ratio[2h5m]) == 0
+          and avg_over_time(vpn_probe_success_ratio[1d] offset 2h15m) > 0.5
+          and on (instance) last_over_time(vpn_probe_direct_success[2h5m]) == 1
         labels:
           severity: critical
         annotations:
           summary: "{{ $labels.host }} does not work from Russia"
           description: >-
             Every probe through {{ $labels.transport }} on {{ $labels.node }}
-            failed for 10+ minutes while the office reached the internet directly.
+            failed two hourly runs in a row while the office reached the
+            internet directly.
 
       # Клиенты обновляют конфиг с этого домена; недоступен из России —
       # новые устройства не подключить, а старые не узнают о новых хостах.
       - alert: SubscriptionUnreachableFromRussia
         expr: >-
-          max_over_time(vpn_probe_subscription_success[12m]) == 0
-          and on (instance) last_over_time(vpn_probe_direct_success[12m]) == 1
-        for: 5m
+          max_over_time(vpn_probe_subscription_success[2h5m]) == 0
+          and on (instance) last_over_time(vpn_probe_direct_success[2h5m]) == 1
         labels:
           severity: warning
         annotations:
@@ -262,13 +262,13 @@ groups:
       # «всё хорошо», а «из России сейчас не смотрит никто».
       - alert: VpnProbeSilent
         expr: >-
-          time() - max(last_over_time(vpn_probe_last_run_timestamp_seconds[1d])) > 1800
+          time() - max(last_over_time(vpn_probe_last_run_timestamp_seconds[1d])) > 9000
           or absent_over_time(vpn_probe_last_run_timestamp_seconds[1d])
         for: 10m
         labels:
           severity: info
         annotations:
-          summary: "No probe results from Russia for 30+ minutes"
+          summary: "No probe results from Russia for 2.5+ hours"
           description: "testbed-l-01 is off or cannot push; protocols are unwatched from inside Russia"
 
   - name: scraping

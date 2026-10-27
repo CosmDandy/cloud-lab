@@ -71,12 +71,15 @@
   loop:
     - vpn-probe.service
     - vpn-probe.timer
+  register: vpn_probe_units
 
+# A running timer keeps its old triggers until it is restarted, even after
+# daemon-reload.
 - name: Enable probe timer
   ansible.builtin.systemd_service:
     name: vpn-probe.timer
     enabled: true
-    state: started
+    state: "{{ 'restarted' if vpn_probe_units is changed else 'started' }}"
     daemon_reload: true
   when: not ansible_check_mode
 
