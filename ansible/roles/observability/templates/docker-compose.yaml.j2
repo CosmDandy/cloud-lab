@@ -129,16 +129,25 @@ services:
       - monitoring
 
 {% endif %}
-  promtail:
-    image: {{ observability_promtail_image }}
-    container_name: promtail
+  alloy:
+    image: {{ observability_alloy_image }}
+    container_name: alloy
     restart: unless-stopped
+    # Only the socket: loki.source.docker reads logs through the docker API
+    # and needs no access to the log files themselves.
     volumes:
       - /var/run/docker.sock:/var/run/docker.sock:ro
-      - /var/lib/docker/containers:/var/lib/docker/containers:ro
-      - ./promtail/config.yaml:/etc/promtail/config.yaml:ro
-      - promtail_positions:/tmp
-    command: -config.file=/etc/promtail/config.yaml
+      - ./alloy/config.alloy:/etc/alloy/config.alloy:ro
+      # Positions: without them a restart counts as a first start (see the
+      # stage.drop in the config).
+      - alloy_data:/var/lib/alloy/data
+    command:
+      - run
+      - /etc/alloy/config.alloy
+      - --storage.path=/var/lib/alloy/data
+      # Usage reporting to stats.grafana.org is on by default; the only
+      # connection this collector needs is the one to loki.
+      - --disable-reporting
     depends_on:
       - loki
     networks:
@@ -249,8 +258,10 @@ volumes:
     name: observability_grafana_data
   loki_data:
     name: observability_loki_data
-  promtail_positions:
-    name: observability_promtail_positions
+  # observability_promtail_positions stays on the host unused; compose never
+  # removes a volume it no longer declares.
+  alloy_data:
+    name: observability_alloy_data
 {% if observability_alerting_enabled %}
   alertmanager_data:
     name: observability_alertmanager_data
