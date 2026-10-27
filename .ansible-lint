@@ -14,6 +14,9 @@ exclude_paths:
   # «дописать или снести» за владельцем репозитория.
   - ansible/playbooks/bootstrap.yml
   - ansible/playbooks/update.yml
+  # sops output: base64 ciphertext lines and `#ENC[...]` comments are written
+  # by sops, not by hand, so yaml[line-length] and yaml[comments] there are noise.
+  - "**/*.sops.yaml"
 
 skip_list:
   # Дефис в имени роли (github-runner, xray-client). Ansible такие имена
