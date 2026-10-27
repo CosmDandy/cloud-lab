@@ -1,0 +1,100 @@
+# Correctness linters for everything in the repo that runs: Ansible, the Python
+# and shell helpers, and the workflows themselves. security.yml answers "is it
+# safe"; this answers "will it work". One job per tool so each can become a
+# required check on its own.
+#
+# Tools come through uvx at exact versions: what passes here passes locally with
+# the same command, and an upstream release cannot turn CI red overnight.
+name: lint
+
+on:
+  pull_request:
+  push:
+    branches: [master]
+
+permissions: {}
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+jobs:
+  ansible:
+    name: ansible-lint
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    permissions:
+      contents: read
+    env:
+      ANSIBLE_CONFIG: ${{ github.workspace }}/ansible/ansible.cfg
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: astral-sh/setup-uv@1c37ad07a6a961277cf70c0d37d6f313000f5884 # v10.3.0
+        with:
+          version: "0.13.1"
+          enable-cache: false
+      # Without the collections every community.* module is "couldn't resolve",
+      # which is a missing dependency, not a playbook defect.
+      - name: collections
+        run: uvx --from ansible-lint==26.10.1 ansible-galaxy collection install -r ansible/requirements.yml
+      - name: ansible-lint
+        run: uvx ansible-lint@26.10.1 --profile moderate --offline ansible/
+
+  python:
+    name: ruff
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: astral-sh/setup-uv@1c37ad07a6a961277cf70c0d37d6f313000f5884 # v10.3.0
+        with:
+          version: "0.13.1"
+          enable-cache: false
+      - name: ruff check
+        run: uvx ruff@0.17.1 check --output-format=github .
+
+  shell:
+    name: shellcheck
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: astral-sh/setup-uv@1c37ad07a6a961277cf70c0d37d6f313000f5884 # v10.3.0
+        with:
+          version: "0.13.1"
+          enable-cache: false
+      # testbed/bench holds dated one-off measurement scripts kept as a record.
+      - name: shellcheck
+        run: |
+          git ls-files -z '*.sh' ':!:testbed/bench/*' \
+            | xargs -0 uvx --from shellcheck-py==0.11.0.1 shellcheck -S warning
+
+  workflows:
+    name: actionlint
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: astral-sh/setup-uv@1c37ad07a6a961277cf70c0d37d6f313000f5884 # v10.3.0
+        with:
+          version: "0.13.1"
+          enable-cache: false
+      # zizmor in security.yml covers injection and permissions; actionlint
+      # covers what zizmor does not: expression types, unknown inputs, needs:
+      # graph, and shellcheck over every run: block.
+      - name: actionlint
+        run: uvx --from actionlint-py==1.7.12.25 actionlint -color
