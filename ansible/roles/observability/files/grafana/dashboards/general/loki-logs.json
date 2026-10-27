@@ -8,12 +8,38 @@
   "timezone": "browser",
   "schemaVersion": 39,
   "time": {
-    "from": "now-1h",
+    "from": "now-6h",
     "to": "now"
   },
   "refresh": "30s",
   "templating": {
     "list": [
+      {
+        "name": "host",
+        "label": "Хост",
+        "type": "query",
+        "datasource": {
+          "type": "loki",
+          "uid": "loki"
+        },
+        "query": {
+          "label": "host",
+          "refId": "LokiVariableQueryEditor-VariableQuery",
+          "type": 1
+        },
+        "refresh": 2,
+        "includeAll": true,
+        "multi": true,
+        "allValue": ".*",
+        "current": {
+          "text": [
+            "All"
+          ],
+          "value": [
+            "$__all"
+          ]
+        }
+      },
       {
         "name": "container",
         "label": "Контейнер",
@@ -27,9 +53,27 @@
           "refId": "LokiVariableQueryEditor-VariableQuery",
           "type": 1
         },
-        "refresh": 1,
+        "refresh": 2,
         "includeAll": true,
         "multi": true,
+        "current": {
+          "text": [
+            "All"
+          ],
+          "value": [
+            "$__all"
+          ]
+        },
+        "allValue": ".+"
+      },
+      {
+        "name": "level",
+        "label": "Уровень",
+        "type": "custom",
+        "query": "critical,error,warn,info,debug",
+        "includeAll": true,
+        "multi": true,
+        "allValue": ".*",
         "current": {
           "text": [
             "All"
@@ -54,7 +98,7 @@
   "panels": [
     {
       "type": "timeseries",
-      "title": "Строк в секунду",
+      "title": "Строк по уровням",
       "datasource": {
         "type": "loki",
         "uid": "loki"
@@ -72,8 +116,8 @@
             "type": "loki",
             "uid": "loki"
           },
-          "expr": "sum by (container) (rate({container=~\"$container\"} |~ \"$search\" [$__rate_interval]))",
-          "legendFormat": "{{container}}"
+          "expr": "sum by (level) (count_over_time({host=~\"$host\", container=~\"$container\", level=~\"$level\"} |~ \"$search\" [$__auto]))",
+          "legendFormat": "{{level}}"
         }
       ],
       "fieldConfig": {
@@ -82,10 +126,87 @@
             "fillOpacity": 20,
             "stacking": {
               "mode": "normal"
-            }
+            },
+            "drawStyle": "bars"
           }
         },
-        "overrides": []
+        "overrides": [
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "critical"
+            },
+            "properties": [
+              {
+                "id": "color",
+                "value": {
+                  "mode": "fixed",
+                  "fixedColor": "purple"
+                }
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "error"
+            },
+            "properties": [
+              {
+                "id": "color",
+                "value": {
+                  "mode": "fixed",
+                  "fixedColor": "red"
+                }
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "warn"
+            },
+            "properties": [
+              {
+                "id": "color",
+                "value": {
+                  "mode": "fixed",
+                  "fixedColor": "yellow"
+                }
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "info"
+            },
+            "properties": [
+              {
+                "id": "color",
+                "value": {
+                  "mode": "fixed",
+                  "fixedColor": "green"
+                }
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "debug"
+            },
+            "properties": [
+              {
+                "id": "color",
+                "value": {
+                  "mode": "fixed",
+                  "fixedColor": "blue"
+                }
+              }
+            ]
+          }
+        ]
       }
     },
     {
@@ -108,7 +229,7 @@
             "type": "loki",
             "uid": "loki"
           },
-          "expr": "{container=~\"$container\"} |~ \"$search\""
+          "expr": "{host=~\"$host\", container=~\"$container\", level=~\"$level\"} |~ \"$search\""
         }
       ],
       "options": {

@@ -1,0 +1,224 @@
+# Managed by ansible (roles/observability). Edits on the host are overwritten.
+server:
+  http_listen_port: 9080
+
+positions:
+  filename: /tmp/positions.yaml
+
+clients:
+  - url: http://loki:3100/loki/api/v1/push
+
+scrape_configs:
+  - job_name: docker
+    docker_sd_configs:
+      - host: unix:///var/run/docker.sock
+        refresh_interval: 5s
+    relabel_configs:
+      - source_labels: ["__meta_docker_container_name"]
+        target_label: container
+        regex: /(.+)
+      - source_labels: ["__meta_docker_container_log_stream"]
+        target_label: stream
+      - source_labels: ["__meta_docker_compose_project"]
+        target_label: compose_project
+      - source_labels: ["__meta_docker_compose_service"]
+        target_label: compose_service
+      # The VPN nodes set the same label; without it the dashboard's host
+      # filter has no value for this machine.
+      - target_label: host
+        replacement: {{ inventory_hostname }}
+{% raw %}
+    # Every app prints its own timestamp and level in its own format. Loki
+    # cannot read most of them (detected_level=unknown), and Grafana shows the
+    # app timestamp again next to the entry time. Each block below takes the
+    # level out into the `level` label and cuts the timestamp from the line;
+    # the entry keeps docker's receive time, which is never off by a timezone.
+    pipeline_stages:
+      # Colour codes arrive as raw escapes and break every regex below.
+      - replace:
+          expression: '(\x1b\[[0-9;]*m)'
+          replace: ""
+
+      # A stack trace comes one frame per line, indented; glue every
+      # indented line to the entry it continues. Inside a match block the
+      # stage does nothing.
+      - multiline:
+          firstline: '^\S'
+          max_wait_time: 3s
+      - match:
+          selector: '{container="headplane"}'
+          stages:
+            - template:
+                source: level
+                template: '{{ if regexMatch "\n\\s+at " .Entry }}error{{ end }}'
+
+      # logfmt: level is already a key, only the timestamp key goes.
+      - match:
+          selector: '{container=~"alertmanager|grafana|loki|node-exporter|promtail"}'
+          stages:
+            - logfmt:
+                mapping:
+                  level:
+            - replace:
+                expression: '(\b(?:time|ts|t)=\d{4}-\d\d-\d\dT\S+ ?)'
+                replace: ""
+
+      # VictoriaMetrics: "2026-10-25T21:40:59.964Z\twarn\tcaller\tmsg".
+      - match:
+          selector: '{container=~"victoriametrics|vmalert"}'
+          stages:
+            - regex:
+                expression: '^\S+\t(?P<level>\w+)\t'
+            - replace:
+                expression: '^(\S+\t\w+\t)'
+                replace: ""
+
+      # zerolog console: "2026-10-25T21:42:25Z INF msg".
+      - match:
+          selector: '{container="headscale"}'
+          stages:
+            - regex:
+                expression: '^\S+ (?P<level>[A-Z]{3}) '
+            - replace:
+                expression: '^(\S+ [A-Z]{3} )'
+                replace: ""
+
+      # zerolog without a year: "Oct 25 21:42:17 INF msg".
+      - match:
+          selector: '{container="pocket-id"}'
+          stages:
+            - regex:
+                expression: '^\w{3} +\d+ [\d:]+ (?P<level>[A-Z]{3}) '
+            - replace:
+                expression: '^(\w{3} +\d+ [\d:]+ [A-Z]{3} )'
+                replace: ""
+
+      # tracing: "2026-10-20T20:03:08.437258Z  WARN target: msg".
+      - match:
+          selector: '{container="atuin"}'
+          stages:
+            - regex:
+                expression: '^\S+ +(?P<level>[A-Z]+) '
+            - replace:
+                expression: '^(\S+ +[A-Z]+ )'
+                replace: ""
+            # The request log is at debug only because tower-http puts it
+            # there; atuin_log_level enables it on purpose, it is the info.
+            - template:
+                source: level
+                template: '{{ if regexMatch "tower_http::trace::on_response" .Entry }}info{{ else if .Value }}{{ .Value }}{{ end }}'
+
+      # NestJS: "[work-0] 2026-10-25 17:00:00.059     LOG [Context] msg".
+      - match:
+          selector: '{container=~"remnawave-panel|remnawave-subscription-page"}'
+          stages:
+            - regex:
+                expression: '^(?:\[[\w-]+\] )?\d{4}-\d\d-\d\d [\d:.]+ +(?P<level>[A-Z]+) '
+            - replace:
+                expression: '^(?:\[[\w-]+\] )?(\d{4}-\d\d-\d\d [\d:.]+ +[A-Z]+ )'
+                replace: ""
+
+      # "2026-10-25 21:40:13.810 UTC [26] LOG:  msg".
+      - match:
+          selector: '{container="remnawave-postgres"}'
+          stages:
+            - regex:
+                expression: '^\S+ \S+ UTC \[\d+\] (?P<level>[A-Z]+)\d?:'
+            - replace:
+                expression: '^(\S+ \S+ UTC )'
+                replace: ""
+
+      # "1:M 25 Oct 2026 21:41:35.169 * msg"; the level is a symbol.
+      - match:
+          selector: '{container="remnawave-redis"}'
+          stages:
+            - regex:
+                expression: '^\d+:[A-Z] \d+ \w+ \d+ [\d:.]+ (?P<level>[.*#-]) '
+            - replace:
+                expression: '^\d+:[A-Z] (\d+ \w+ \d+ [\d:.]+ )'
+                replace: ""
+
+      # klog: "I1025 21:41:00.461945       1 file.go:135] msg".
+      - match:
+          selector: '{container="cadvisor"}'
+          stages:
+            - regex:
+                expression: '^(?P<level>[IWEF])\d{4} '
+            - replace:
+                expression: '^([IWEF]\d{4} [\d:.]+ +\d+ )'
+                replace: ""
+
+      # uvicorn: "INFO:     msg".
+      - match:
+          selector: '{container="soniox-openai-shim"}'
+          stages:
+            - regex:
+                expression: '^(?P<level>[A-Z]+): '
+            - replace:
+                expression: '^([A-Z]+: +)'
+                replace: ""
+
+      # Gatus has no level at all: a failed check is the only thing to see.
+      - match:
+          selector: '{container=~"gatus|gatus-public"}'
+          stages:
+            - template:
+                source: level
+                template: '{{ if regexMatch "success=false" .Entry }}warn{{ else }}info{{ end }}'
+            - replace:
+                expression: '^(\d{4}/\d\d/\d\d [\d:]+ )'
+                replace: ""
+
+      - match:
+          selector: '{container="oauth2-proxy"}'
+          stages:
+            - replace:
+                expression: '(\[\d{4}/\d\d/\d\d [\d:]+\] )'
+                replace: ""
+
+      # Access logs: a 5xx is the error, anything else is a normal request.
+      # traefik is the exception, it logs only 4xx and 5xx (roles/edge).
+      - match:
+          selector: '{container="traefik"}'
+          stages:
+            - regex:
+                expression: '"DownstreamStatus":(?P<status>\d)'
+            - template:
+                source: level
+                template: '{{ if eq (print .status) "5" }}error{{ else }}warn{{ end }}'
+      - match:
+          selector: '{container="wallcal"}'
+          stages:
+            - regex:
+                expression: '"status": (?P<status>\d)'
+            - replace:
+                expression: '("ts": "[^"]*", )'
+                replace: ""
+      - match:
+          selector: '{container="remnawave-subscription-page"}'
+          stages:
+            - regex:
+                expression: '" (?P<status>\d)\d\d '
+
+      # One vocabulary for every format above. A line no block recognised
+      # falls back to keywords and then to info, so nothing stays unknown.
+      - template:
+          source: level
+          template: >-
+            {{- $l := "" -}}
+            {{- if .Value -}}{{- $l = ToLower .Value -}}{{- end -}}
+            {{- if not $l -}}
+              {{- if eq (print .status) "5" -}}error
+              {{- else if regexMatch "(?i)\\b(error|fail(ed|ure)?|fatal|panic|exception)\\b" .Entry -}}error
+              {{- else if regexMatch "(?i)\\bwarn(ing)?\\b" .Entry -}}warn
+              {{- else -}}info{{- end -}}
+            {{- else if has $l (list "trace" "trc" "debug" "dbg" "verbose" "." "-") -}}debug
+            {{- else if regexMatch "^debug\\d$" $l -}}debug
+            {{- else if has $l (list "info" "inf" "i" "log" "notice" "*") -}}info
+            {{- else if has $l (list "warn" "wrn" "warning" "w" "#") -}}warn
+            {{- else if has $l (list "error" "err" "e") -}}error
+            {{- else if has $l (list "fatal" "ftl" "f" "panic" "pnc" "crit" "critical") -}}critical
+            {{- else -}}info{{- end -}}
+      - labels:
+          level:
+{% endraw %}

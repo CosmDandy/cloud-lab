@@ -9,7 +9,7 @@ stt_owner: root
 # тот же образ: этот тег в ghcr уже переписывали — 06.09.2026 он сменил
 # digest с sha256:40324f08613f… на sha256:8703a5d9e0b1… при пересборке того
 # же коммита. То есть «неподвижен» здесь только semver.
-stt_image: ghcr.io/cosmdandy/soniox-openai-shim:0.3.0
+stt_image: ghcr.io/cosmdandy/soniox-openai-shim:0.3.1
 
 # Домен; задаётся в инвентаре.
 stt_domain: ""

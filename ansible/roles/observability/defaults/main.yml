@@ -65,6 +65,11 @@ observability_remote_write_htpasswd: ""
 # observability_remote_write_enabled.
 observability_logs_push_enabled: false
 
+# Per source IP, requests per second, for both push routers. vmagent and
+# promtail treat 429 as retryable, so hitting it delays data, never drops it.
+observability_push_rate_average: 20
+observability_push_rate_burst: 200
+
 # Доставка алертов. Без alertmanager vmalert слать их некуда: его notifier.url
 # смотрел на саму victoriametrics, и правила срабатывали в пустоту. Реквизиты
 # по умолчанию — те же, что у gatus: второй бот ради тех же уведомлений

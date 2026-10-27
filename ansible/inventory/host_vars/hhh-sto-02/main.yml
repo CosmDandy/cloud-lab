@@ -130,6 +130,10 @@ oidc_clients:
     name: grafana
     callback_urls:
       - "https://{{ observability_domain }}/login/generic_oauth"
+    # Without it any Pocket ID user signed in as Viewer and could read the
+    # logs, which carry VPN users' addresses.
+    group_restricted: true
+    allowed_user_groups: [admins]
 
   # Отсутствовал в списке: на прошлом стенде клиент был заведён руками, и
   # это вскрылось только на чистом Pocket ID — вход в статус-страницу отдавал

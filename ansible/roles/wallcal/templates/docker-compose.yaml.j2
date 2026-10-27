@@ -66,6 +66,10 @@ services:
       traefik.http.middlewares.wallcal-ratelimit.ratelimit.average: "{{ wallcal_rate_average }}"
       traefik.http.middlewares.wallcal-ratelimit.ratelimit.burst: "{{ wallcal_rate_burst }}"
       traefik.http.middlewares.wallcal-inflight.inflightreq.amount: "{{ wallcal_inflight }}"
+      # NOTE: unlike ratelimit, inflightreq defaults to counting per request
+      # Host, i.e. one pool for the domain. An empty ipStrategy makes it the
+      # remote address, as the comment above assumes.
+      traefik.http.middlewares.wallcal-inflight.inflightreq.sourcecriterion.ipstrategy.depth: "0"
 
 networks:
   edge:
