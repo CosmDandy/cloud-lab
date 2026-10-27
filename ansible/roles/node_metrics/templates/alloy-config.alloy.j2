@@ -37,9 +37,21 @@ discovery.relabel "containers" {
 // Positions live in the component's data path under --storage.path, keyed by
 // this component's name: renaming it makes alloy forget them and fall back to
 // the first-start rule in loki.process below.
+// amnezia-awg2 runs with the "none" log driver: there is nothing to read,
+// and tailing it logs an error every five seconds.
+discovery.relabel "readable" {
+	targets = discovery.docker.containers.targets
+
+	rule {
+		source_labels = ["__meta_docker_container_name"]
+		regex         = "/amnezia-.*"
+		action        = "drop"
+	}
+}
+
 loki.source.docker "containers" {
 	host          = "unix:///var/run/docker.sock"
-	targets       = discovery.docker.containers.targets
+	targets       = discovery.relabel.readable.output
 	relabel_rules = discovery.relabel.containers.rules
 	forward_to    = [loki.process.containers.receiver]
 }

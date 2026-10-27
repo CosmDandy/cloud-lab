@@ -234,6 +234,11 @@
 # контейнеры ноды молчат сутками (у xray loglevel warning), и счётчик
 # отправленных строк остаётся нулевым, даже когда всё исправно. Нулевое
 # число прочитанных строк, наоборот, означает, что alloy не видит docker.sock.
+# A config change restarts alloy from a handler; probing before it would
+# check the instance that is about to go away.
+- name: Restart alloy before probing it
+  ansible.builtin.meta: flush_handlers
+
 # From the host, not docker exec: the alloy image has no wget or curl.
 - name: Verify alloy reads container logs
   ansible.builtin.uri:
