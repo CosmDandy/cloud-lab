@@ -1,0 +1,25 @@
+---
+- name: Deploy Remnawave node
+  hosts: vpn_nodes
+  become: true
+  # По одной ноде за раз. Пересоздание контейнера рвёт все инбаунды на
+  # машине, и одновременный прогон по группе оставил бы пользователей без
+  # выхода целиком, а не по трети.
+  #
+  # Порядок внутри группы — из inventory (ams, sto). Через ноду, которой
+  # пользуется рабочая машина, надо ходить последней, поэтому
+  # прогон идёт с явным --limit, по одной ноде:
+  #   --limit hhh-sto-01   затем hhh-ams-01
+  serial: 1
+
+  roles:
+    - role: vpn_tuning
+      tags: [vpn_tuning]
+    - role: docker
+      tags: [docker]
+    - role: remnanode
+      tags: [remnanode]
+    - role: firewall
+      tags: [firewall]
+    - role: node_metrics
+      tags: [node_metrics]

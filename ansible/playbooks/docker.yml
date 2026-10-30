@@ -1,0 +1,8 @@
+---
+- name: Install Docker
+  hosts: vpn_nodes
+  become: true
+
+  roles:
+    - role: docker
+      tags: [docker]
