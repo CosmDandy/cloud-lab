@@ -1818,7 +1818,18 @@
         "defaults": {
           "unit": "percentunit",
           "decimals": 0,
-          "mappings": [{"type": "value", "options": {"-1": {"text": "Отключена", "color": "gray", "index": 0}}}],
+          "mappings": [
+            {
+              "type": "value",
+              "options": {
+                "-1": {
+                  "text": "Отключена",
+                  "color": "gray",
+                  "index": 0
+                }
+              }
+            }
+          ],
           "custom": {
             "align": "center",
             "cellOptions": {
@@ -1903,7 +1914,18 @@
       },
       "fieldConfig": {
         "defaults": {
-          "mappings": [{"type": "value", "options": {"-1": {"text": "Отключена", "color": "gray", "index": 0}}}],
+          "mappings": [
+            {
+              "type": "value",
+              "options": {
+                "-1": {
+                  "text": "Отключена",
+                  "color": "gray",
+                  "index": 0
+                }
+              }
+            }
+          ],
           "thresholds": {
             "mode": "absolute",
             "steps": [
@@ -2085,7 +2107,10 @@
           "interval": "1h"
         },
         {
-          "datasource": {"type": "prometheus", "uid": "victoriametrics"},
+          "datasource": {
+            "type": "prometheus",
+            "uid": "victoriametrics"
+          },
           "expr": "min(min_over_time(vpn_probe_admin_state_fresh[$__interval]))",
           "legendFormat": "состояние нод актуально",
           "refId": "C",

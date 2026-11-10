@@ -293,6 +293,18 @@ INGRESS = f"rate(node_network_receive_bytes_total{{{IFACE}}}[5m])"
 # of the hoster's figure. Labelled `instance` like the node-exporter series.
 RW_NODE = "* on (node_uuid) group_left (node_name) remnawave_node_basic_info"
 
+# The probe marks hosts the panel has switched off with host_enabled == 0 and
+# does not test them: they must not count as failures, and the grid shows them
+# as -1 ("Отключена") instead of an empty cell.
+PROBE_OFF = "last_over_time(vpn_probe_host_enabled[70m]) == 0"
+UNLESS_OFF = f" unless on (instance, host) ({PROBE_OFF})"
+OFF_MAPPING = [
+    {
+        "type": "value",
+        "options": {"-1": {"text": "Отключена", "color": "gray", "index": 0}},
+    }
+]
+
 
 def iface_bytes(window, offset=""):
     return label_instance(
@@ -595,10 +607,10 @@ panels += [
         3,
         [
             (
-                "count(max_over_time(vpn_probe_success_ratio[2h5m]) == 0"
+                "count((max_over_time(vpn_probe_success_ratio[2h5m]) == 0"
                 " and avg_over_time(vpn_probe_success_ratio[1d] offset 2h15m) > 0.5"
                 " and on (instance) last_over_time(vpn_probe_direct_success[2h5m])"
-                " == 1)"
+                f" == 1){UNLESS_OFF})"
                 " or vector(0)",
                 "хостов",
             )
@@ -1063,7 +1075,7 @@ y += 1
 # exactly one run; a gap means the probe really did not run. Runs that could
 # not be delivered at once arrive later with their own timestamps.
 PROBE_STEP = "1h"
-PROBE_OK = "avg_over_time(vpn_probe_success_ratio[$__interval])"
+PROBE_OK = f"avg_over_time(vpn_probe_success_ratio[$__interval]){UNLESS_OFF}"
 
 
 def hourly(p):
@@ -1075,21 +1087,24 @@ def hourly(p):
 
 
 def probe_by(label, metric):
-    return f"avg by ({label}) (avg_over_time({metric}[$__interval]))"
+    return f"avg by ({label}) (avg_over_time({metric}[$__interval]){UNLESS_OFF})"
 
 
 probe_now = {
     "id": 64,
     "type": "table",
     "title": "Сейчас: транспорт × нода",
-    "description": "Доля запросов, прошедших через хост, по последнему прогону пробы. "
-    "Пусто — такого хоста в подписке нет.",
+    "description": "Последний прогон пробы: серое «Отключена» — нода административно "
+    "выключена в панели и не проверяется. Включённая, но недоступная нода остаётся "
+    "красной. Пусто — хоста нет в подписке. При сбое API используется последнее "
+    "известное состояние; свежесть показана ниже.",
     "datasource": DS,
     "gridPos": {"x": 0, "y": y, "w": 8, "h": 9},
     "fieldConfig": {
         "defaults": {
             "unit": "percentunit",
             "decimals": 0,
+            "mappings": OFF_MAPPING,
             "custom": {"align": "center", "cellOptions": {"type": "color-background"}},
             "color": {"mode": "thresholds"},
             "thresholds": {
@@ -1108,7 +1123,8 @@ probe_now = {
         {
             "datasource": DS,
             "expr": "max by (transport, node) "
-            "(last_over_time(vpn_probe_success_ratio[70m]))",
+            f"((last_over_time(vpn_probe_success_ratio[70m]){UNLESS_OFF})"
+            f" or (({PROBE_OFF}) - 1))",
             "refId": "A",
             "instant": True,
             "range": False,
@@ -1139,11 +1155,13 @@ panels += [
         y,
         16,
         4,
-        [(f"avg by (node) ({PROBE_OK})", "{{node}}")],
+        [(f"avg by (node) ({PROBE_OK}) or (max by (node) ({PROBE_OFF}) - 1)", "{{node}}")],
         interval=PROBE_STEP,
-        desc="Средняя доля прошедших запросов по всем транспортам ноды. Жёлтый у ноды, "
-        "на которой из офиса не проходят Vision и gRPC, — постоянный фон, а не авария. "
-        "Серый — проба не работала (тестбед выключен). Одна клетка — один час.",
+        mappings=OFF_MAPPING,
+        desc="Средняя доля прошедших запросов по транспортам включённой ноды. Серое "
+        "«Отключена» — административное отключение; отсутствие данных — проба не "
+        "работала. Одна клетка — один час. История до начала учёта административного "
+        "состояния не пересчитывается.",
     ),
     timeline(
         63,
@@ -1154,12 +1172,14 @@ panels += [
         5,
         [(f"avg by (transport) ({PROBE_OK})", "{{transport}}")],
         interval=PROBE_STEP,
-        desc="Средняя доля прошедших запросов по всем нодам. Красное у всех разом при "
-        "красном «прямой выход» — лёг офисный канал, а не VPN.",
+        desc="Средняя доля прошедших запросов только по административно включённым "
+        "нодам. Недоступные, но включённые ноды учитываются как сбой. Красное у всех "
+        "при красном «прямой выход» — проблема офисного канала. Старые интервалы "
+        "сохраняют состояние на тот момент.",
     ),
     timeline(
         61,
-        "Прямой выход и подписка",
+        "Прямой выход, подписка и состояние нод",
         0,
         y + 9,
         8,
@@ -1172,6 +1192,10 @@ panels += [
             (
                 "max(min_over_time(vpn_probe_subscription_success[$__interval]))",
                 "подписка",
+            ),
+            (
+                "min(min_over_time(vpn_probe_admin_state_fresh[$__interval]))",
+                "состояние нод актуально",
             ),
         ],
         interval=PROBE_STEP,
