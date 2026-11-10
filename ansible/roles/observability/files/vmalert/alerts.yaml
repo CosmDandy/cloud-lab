@@ -234,9 +234,10 @@ groups:
       # dead resolves after about a day; the dashboard row still shows it.
       - alert: ProtocolDeadFromRussia
         expr: >-
-          max_over_time(vpn_probe_success_ratio[2h5m]) == 0
+          (max_over_time(vpn_probe_success_ratio[2h5m]) == 0
           and avg_over_time(vpn_probe_success_ratio[1d] offset 2h15m) > 0.5
-          and on (instance) last_over_time(vpn_probe_direct_success[2h5m]) == 1
+          and on (instance) last_over_time(vpn_probe_direct_success[2h5m]) == 1)
+          unless on (instance, host) (last_over_time(vpn_probe_host_enabled[70m]) == 0)
         labels:
           severity: critical
         annotations:

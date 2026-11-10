@@ -37,8 +37,10 @@ import urllib.error
 import urllib.parse
 import urllib.request
 from concurrent.futures import ThreadPoolExecutor
+from pathlib import Path
 
 import sub2client
+from node_state import enabled_entries, load_state
 
 SUB_URL = os.environ["VPN_PROBE_SUBSCRIPTION_URL"]
 PUSH_URL = os.environ["VPN_PROBE_PUSH_URL"]
@@ -51,6 +53,8 @@ WORKERS = int(os.environ.get("VPN_PROBE_WORKERS", "4"))
 SPEED_BYTES = int(os.environ.get("VPN_PROBE_SPEED_BYTES", "5000000"))
 STATE = os.environ.get("STATE_DIRECTORY", "/var/lib/vpn-probe")
 SUB_CACHE = os.path.join(STATE, "subscription.txt")
+PANEL_URL = os.environ["VPN_PROBE_PANEL_API_URL"]
+PANEL_TOKEN = os.environ["VPN_PROBE_PANEL_API_TOKEN"]
 SPOOL = os.path.join(STATE, "spool.prom")
 PUSH_ATTEMPTS = 10
 PUSH_PAUSE = 60
@@ -173,7 +177,10 @@ def host_labels(entry):
         c for c in entry["remark"] if not 0x1F1E6 <= ord(c) <= 0x1F1FF
     ).strip()
     node, _, transport = remark.partition(" · ")
-    return f'host="{label(remark)}",node="{label(node)}",transport="{label(transport or remark)}"'
+    return (
+        f'host="{label(remark)}",node="{label(node)}",'
+        f'transport="{label(transport or remark)}"'
+    )
 
 
 def push(body):
@@ -226,20 +233,29 @@ def main():
         for e in (sub2client.parse_link(link) for link in links)
         if e["scheme"] in ("vless", "hysteria2", "hy2")
     ]
+    nodes, admin_fresh, admin_timestamp = load_state(
+        PANEL_URL, PANEL_TOKEN, Path(STATE) / "node-state.json"
+    )
+    enabled, mapping_known = enabled_entries(entries, nodes)
+    active = [entry for entry, flag in zip(entries, enabled, strict=True) if flag]
     with ThreadPoolExecutor(WORKERS) as pool:
-        results = list(pool.map(probe, entries))
+        results = list(pool.map(probe, active))
     # One at a time: parallel downloads would split the office uplink and
     # measure each other instead of the path.
     speeds = [
         through(entry, speed) if ok else None
-        for entry, (ok, _) in zip(entries, results, strict=True)
+        for entry, (ok, _) in zip(active, results, strict=True)
     ]
 
     lines = [
         f"vpn_probe_direct_success {int(direct)}",
         f"vpn_probe_subscription_success {int(fresh)}",
+        f"vpn_probe_admin_state_fresh {int(admin_fresh and mapping_known)}",
+        f"vpn_probe_admin_state_timestamp_seconds {admin_timestamp:.0f}",
     ]
-    for entry, (ok, latency), bps in zip(entries, results, speeds, strict=True):
+    for entry, flag in zip(entries, enabled, strict=True):
+        lines.append(f"vpn_probe_host_enabled{{{host_labels(entry)}}} {int(flag)}")
+    for entry, (ok, latency), bps in zip(active, results, speeds, strict=True):
         tags = host_labels(entry)
         lines.append(f"vpn_probe_success_ratio{{{tags}}} {ok / TRIES:.3f}")
         if latency is not None:
@@ -247,13 +263,16 @@ def main():
         if bps is not None:
             lines.append(f"vpn_probe_throughput_bits_per_second{{{tags}}} {bps:.0f}")
     lines += [
-        f"vpn_probe_hosts {len(entries)}",
+        f"vpn_probe_hosts {len(active)}",
+        f"vpn_probe_disabled_hosts {len(entries) - len(active)}",
         f"vpn_probe_duration_seconds {time.time() - started:.1f}",
         f"vpn_probe_last_run_timestamp_seconds {int(started)}",
     ]
     delivered = deliver("".join(f"{line} {ts}\n" for line in lines))
     print(
-        f"{len(entries)} hosts, direct={direct}, subscription fresh={fresh}, "
+        f"{len(active)} active hosts, {len(entries) - len(active)} disabled, "
+        f"direct={direct}, subscription fresh={fresh}, "
+        f"admin fresh={admin_fresh and mapping_known}, "
         f"pushed={delivered}, {time.time() - started:.0f}s"
     )
 

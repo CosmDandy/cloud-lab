@@ -10,6 +10,11 @@ vpn_probe_dir: /opt/vpn-probe
 # Секрет, задаётся в SOPS хоста.
 vpn_probe_subscription_url: ""
 
+# Administrative state is separate from connectivity: an offline enabled
+# node must still fail the probe. The token needs read access to /api/nodes.
+vpn_probe_panel_api_url: https://vpn.cosmdandy.dev/api
+vpn_probe_panel_api_token: ""
+
 # Приём текстового формата Prometheus — на том же домене и под той же
 # basic-auth, что remote write нод.
 vpn_probe_push_url: https://vm.cosmdandy.dev/api/v1/import/prometheus
