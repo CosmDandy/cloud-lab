@@ -2,8 +2,8 @@
 edge_dir: /opt/edge
 edge_owner: root
 
-edge_traefik_image: traefik:v3.7.9
-edge_oauth2_proxy_image: quay.io/oauth2-proxy/oauth2-proxy:v7.15.3
+edge_traefik_image: traefik:v3.7.16
+edge_oauth2_proxy_image: quay.io/oauth2-proxy/oauth2-proxy:v7.15.5
 
 # Внешняя сеть, к которой подключаются все публикуемые стеки: mesh, panel,
 # oidc, observability. Traefik — единственный владелец 80/443 на хосте.

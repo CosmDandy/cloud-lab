@@ -26,4 +26,8 @@ nodes = {
     ipv4_address = "167.104.105.157"
     country_code = "SE"
   }
+  "mis-sto-01" = {
+    ipv4_address = "146.19.3.157"
+    country_code = "SE"
+  }
 }

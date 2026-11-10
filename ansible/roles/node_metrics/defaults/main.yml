@@ -3,7 +3,7 @@ node_metrics_dir: /opt/node-metrics
 node_metrics_owner: root
 
 node_metrics_node_exporter_image: prom/node-exporter:v1.12.1
-node_metrics_vmagent_image: victoriametrics/vmagent:v1.148.0
+node_metrics_vmagent_image: victoriametrics/vmagent:v1.155.0
 
 # Куда отправлять. Нода инициирует соединение сама — наружу на ней не
 # открывается ни одного порта, в отличие от pull-модели, где пришлось бы
@@ -76,13 +76,13 @@ node_metrics_hy2_hop_lo: 0
 node_metrics_hy2_hop_hi: 0
 
 # --- Логи ---------------------------------------------------------------
-# Promtail шлёт логи контейнеров ноды в loki на control-plane. Модель та же,
+# Alloy шлёт логи контейнеров ноды в loki на control-plane. Модель та же,
 # что у метрик: соединение инициирует нода, наружу не открывается ничего.
 node_metrics_logs_enabled: false
 node_metrics_loki_url: ""
-node_metrics_promtail_image: grafana/promtail:3.6.11
-node_metrics_promtail_port: 9080
-node_metrics_promtail_grpc_port: 9095
+node_metrics_alloy_image: grafana/alloy:v1.21.2
+# HTTP (UI and /metrics) on loopback; alloy has no other listener.
+node_metrics_alloy_port: 12345
 
 # Логи xray. Пути внутри контейнера задаёт конфиг-профиль панели, каталог
 # наружу отдаёт роль remnanode — здесь он только читается.

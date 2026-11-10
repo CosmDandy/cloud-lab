@@ -10,6 +10,11 @@ vpn_probe_dir: /opt/vpn-probe
 # Секрет, задаётся в SOPS хоста.
 vpn_probe_subscription_url: ""
 
+# Administrative state is separate from connectivity: an offline enabled
+# node must still fail the probe. The token needs read access to /api/nodes.
+vpn_probe_panel_api_url: https://vpn.cosmdandy.dev/api
+vpn_probe_panel_api_token: ""
+
 # Приём текстового формата Prometheus — на том же домене и под той же
 # basic-auth, что remote write нод.
 vpn_probe_push_url: https://vm.cosmdandy.dev/api/v1/import/prometheus
@@ -28,6 +33,10 @@ vpn_probe_xray_url: >-
 # минут: три попытки по 8 секунд на хост, четыре хоста разом.
 vpn_probe_tries: 3
 vpn_probe_workers: 4
-# От завершения прошлого прогона, а не от его начала: медленный прогон не
-# наслаивается на следующий.
-vpn_probe_interval: 5min
+# Раз в час в фиксированную минуту: окно часа на дашборде всегда содержит
+# ровно один прогон. Чаще не нужно — из офиса виден один путь, и минутные
+# провалы на нём (окна, когда провайдер режет TLS к нашим адресам) — шум.
+vpn_probe_schedule: "*-*-* *:05:00"
+# Скачивание через каждый хост по очереди: 24 хоста по 5 МБ — около 120 МБ
+# в час на офисный канал и ноды.
+vpn_probe_speed_bytes: 5000000

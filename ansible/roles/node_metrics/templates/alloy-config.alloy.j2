@@ -1,0 +1,230 @@
+// Managed by ansible (roles/node_metrics). Edits on the host are overwritten.
+
+// At info alloy logs every component update; on a node what matters is a
+// broken link to loki, and that is warn and error.
+logging {
+	level = "warn"
+}
+
+discovery.docker "containers" {
+	host             = "unix:///var/run/docker.sock"
+	refresh_interval = "5s"
+}
+
+discovery.relabel "containers" {
+	targets = []
+
+	rule {
+		source_labels = ["__meta_docker_container_name"]
+		regex         = "/(.+)"
+		target_label  = "container"
+	}
+
+	// Set by loki.source.docker per entry, not by discovery.
+	rule {
+		source_labels = ["__meta_docker_container_log_stream"]
+		target_label  = "stream"
+	}
+
+	// Without it the logs of three nodes merge into one stream, the same
+	// mistake as a missing instance label on metrics.
+	rule {
+		target_label = "host"
+		replacement  = "{{ node_metrics_instance }}"
+	}
+}
+
+// Positions live in the component's data path under --storage.path, keyed by
+// this component's name: renaming it makes alloy forget them and fall back to
+// the first-start rule in loki.process below.
+// amnezia-awg2 runs with the "none" log driver: there is nothing to read,
+// and tailing it logs an error every five seconds.
+discovery.relabel "readable" {
+	targets = discovery.docker.containers.targets
+
+	rule {
+		source_labels = ["__meta_docker_container_name"]
+		regex         = "/amnezia-.*"
+		action        = "drop"
+	}
+}
+
+loki.source.docker "containers" {
+	host          = "unix:///var/run/docker.sock"
+	targets       = discovery.relabel.readable.output
+	relabel_rules = discovery.relabel.containers.rules
+	forward_to    = [loki.process.containers.receiver]
+}
+
+// Same idea as the control-plane alloy (roles/observability): the level goes
+// into the `level` label, the app's own timestamp leaves the line, because
+// the entry already carries docker's receive time.
+loki.process "containers" {
+	forward_to = [loki.write.loki.receiver]
+
+	// A container without a stored position is read from the very start of
+	// its docker log: loki.source.docker has no tail-from-end switch. That
+	// happens on the first start after promtail and whenever the positions
+	// volume is lost, and would re-ship history Loki already holds. An hour
+	// bounds the overlap; the cost is that an alloy outage longer than that
+	// loses the lines older than an hour when it comes back.
+	stage.drop {
+		older_than          = "1h"
+		drop_counter_reason = "older_than_first_start_window"
+	}
+
+	// Colour codes arrive as raw escapes and break every regex below.
+	stage.replace {
+		expression = `(\x1b\[[0-9;]*m)`
+		replace    = ""
+	}
+
+	stage.match {
+		selector = `{container=~"node-exporter|alloy"}`
+
+		stage.logfmt {
+			mapping = {
+				level = "",
+			}
+		}
+
+		stage.replace {
+			expression = `(\b(?:time|ts)=\d{4}-\d\d-\d\dT\S+ ?)`
+			replace    = ""
+		}
+	}
+
+	// VictoriaMetrics: "2026-10-25T21:40:59.964Z\twarn\tcaller\tmsg".
+	stage.match {
+		selector = `{container="vmagent"}`
+
+		stage.regex {
+			expression = `^\S+\t(?P<level>\w+)\t`
+		}
+
+		stage.replace {
+			expression = `^(\S+\t\w+\t)`
+			replace    = ""
+		}
+	}
+
+	// NestJS: "2026-10-23 08:01:45.548     LOG [HandlerService] msg".
+	stage.match {
+		selector = `{container="remnanode"}`
+
+		stage.regex {
+			expression = `^\d{4}-\d\d-\d\d [\d:.]+ +(?P<level>[A-Z]+) `
+		}
+
+		stage.replace {
+			expression = `^(\d{4}-\d\d-\d\d [\d:.]+ +[A-Z]+ )`
+			replace    = ""
+		}
+	}
+{% raw %}
+	// Every action trims the whitespace around it, so the layout below
+	// does not reach the result. The lines start at column 0 because
+	// alloy fmt adds a tab to every tab-indented line of a raw string on
+	// each run.
+	stage.template {
+		source   = "level"
+		template = `
+{{- $l := "" -}}
+{{- if .Value -}}{{- $l = ToLower .Value -}}{{- end -}}
+{{- if not $l -}}
+  {{- if regexMatch "(?i)\\b(error|fail(ed|ure)?|fatal|panic|exception)\\b" .Entry -}}error
+  {{- else if regexMatch "(?i)\\bwarn(ing)?\\b" .Entry -}}warn
+  {{- else -}}info{{- end -}}
+{{- else if has $l (list "debug" "verbose") -}}debug
+{{- else if has $l (list "info" "log") -}}info
+{{- else if has $l (list "warn" "warning") -}}warn
+{{- else if has $l (list "error") -}}error
+{{- else if has $l (list "fatal" "panic") -}}critical
+{{- else -}}info{{- end -}}`
+	}
+{% endraw %}
+
+	stage.labels {
+		values = {
+			level = "",
+		}
+	}
+}
+{% if node_metrics_xray_logs_enabled %}
+
+// xray's file logs. A separate source because docker discovery cannot see
+// them: the core writes to files mounted from the host, not to stdout.
+loki.source.file "xray" {
+	targets = [{
+		__path__ = "{{ node_metrics_xray_log_dir }}/*.log",
+		job      = "xray",
+		// Not a docker container, but the logs dashboard selects by this
+		// label, and without it xray never shows up there.
+		container = "xray",
+		host      = "{{ node_metrics_instance }}",
+	}]
+	forward_to = [loki.process.xray.receiver]
+
+	file_match {
+		enabled = true
+	}
+
+	// promtail's read offsets, imported once: on the first start, when alloy
+	// has no positions of its own, it resumes every file exactly where
+	// promtail stopped. Without them it would read the files from the start
+	// and re-send everything promtail already shipped; tail_from_end instead
+	// would lose what was written between the two. A file with no position
+	// at all is read from its start, as promtail did.
+	legacy_positions_file = "/var/lib/promtail-positions/positions.yaml"
+}
+
+// "2026/10/25 21:42:21.123456 [Info] [123] msg" in error.log; access.log
+// has no level and gets info.
+loki.process "xray" {
+	forward_to = [loki.write.loki.receiver]
+
+	stage.regex {
+		expression = `^\S+ \S+ \[(?P<level>\w+)\] `
+	}
+
+	stage.replace {
+		expression = `^(\d{4}/\d\d/\d\d [\d:.]+ (?:\[\w+\] )?)`
+		replace    = ""
+	}
+{% raw %}
+	stage.template {
+		source   = "level"
+		template = `
+{{- $l := "" -}}
+{{- if .Value -}}{{- $l = ToLower .Value -}}{{- end -}}
+{{- if eq $l "warning" -}}warn
+{{- else if $l -}}{{- $l -}}
+{{- else -}}info{{- end -}}`
+	}
+{% endraw %}
+
+	stage.labels {
+		values = {
+			level = "",
+		}
+	}
+}
+{% endif %}
+
+loki.write "loki" {
+	endpoint {
+		url = "{{ node_metrics_loki_url }}"
+
+		// A node can lose the control plane for minutes: the Oslo incident on
+		// 14.08 lasted ten. Backoff delivers what piled up instead of dropping it.
+		min_backoff_period  = "500ms"
+		max_backoff_period  = "5m"
+		max_backoff_retries = 20
+
+		basic_auth {
+			username = "{{ node_metrics_remote_write_user }}"
+			// A file, not the value: the config is readable, the password is not.
+			password_file = "/etc/alloy/password"
+		}
+	}
+}

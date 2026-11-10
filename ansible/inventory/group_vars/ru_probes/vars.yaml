@@ -3,3 +3,8 @@
 # одного текстового файла раз в пять минут — ещё один секрет без пользы.
 vpn_probe_push_password: >-
   {{ hostvars[groups['vpn_nodes'][0]].node_metrics_remote_write_password }}
+
+# Reuse the existing monitoring credential, which can read nodes but cannot
+# read hosts. Both local.yml and cloud.yml must be loaded, as above.
+vpn_probe_panel_api_token: >-
+  {{ hostvars['hhh-sto-02'].gatus_panel_api_token }}

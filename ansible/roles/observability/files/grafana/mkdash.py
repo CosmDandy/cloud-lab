@@ -293,6 +293,18 @@ INGRESS = f"rate(node_network_receive_bytes_total{{{IFACE}}}[5m])"
 # of the hoster's figure. Labelled `instance` like the node-exporter series.
 RW_NODE = "* on (node_uuid) group_left (node_name) remnawave_node_basic_info"
 
+# The probe marks hosts the panel has switched off with host_enabled == 0 and
+# does not test them: they must not count as failures, and the grid shows them
+# as -1 ("Отключена") instead of an empty cell.
+PROBE_OFF = "last_over_time(vpn_probe_host_enabled[70m]) == 0"
+UNLESS_OFF = f" unless on (instance, host) ({PROBE_OFF})"
+OFF_MAPPING = [
+    {
+        "type": "value",
+        "options": {"-1": {"text": "Отключена", "color": "gray", "index": 0}},
+    }
+]
+
 
 def iface_bytes(window, offset=""):
     return label_instance(
@@ -595,9 +607,10 @@ panels += [
         3,
         [
             (
-                "count(max_over_time(vpn_probe_success_ratio[12m]) == 0"
-                " and avg_over_time(vpn_probe_success_ratio[1d] offset 15m) > 0.5"
-                " and on (instance) last_over_time(vpn_probe_direct_success[12m]) == 1)"
+                "count((max_over_time(vpn_probe_success_ratio[2h5m]) == 0"
+                " and avg_over_time(vpn_probe_success_ratio[1d] offset 2h15m) > 0.5"
+                " and on (instance) last_over_time(vpn_probe_direct_success[2h5m])"
+                f" == 1){UNLESS_OFF})"
                 " or vector(0)",
                 "хостов",
             )
@@ -770,6 +783,59 @@ panels += [
         interval=TRAFFIC_STEP,
         desc="Отдача и приём вместе: панель хранит по человеку только общий счётчик. "
         "Все ноды сразу, фильтр Node сюда не действует.",
+    ),
+]
+y += 8
+
+# Rates above answer "how fast right now"; people think in "how much did it
+# take", so the same counters again as a volume per fixed hour. The hour is
+# fixed (not $__interval) so a bar means the same thing at any zoom.
+HOUR = "[1h] offset -1h"
+panels += [
+    panel(
+        18,
+        "Объём за час, по нодам",
+        0,
+        y,
+        12,
+        8,
+        [
+            (
+                f"sum by (node_name) ((increase({RW_INBOUND['downlink']}{HOUR})"
+                f" + increase({RW_INBOUND['uplink']}{HOUR})) {RW_NODE})",
+                "{{node_name}}",
+            )
+        ],
+        unit="decbytes",
+        stack=True,
+        bars=True,
+        interval="1h",
+        calcs=("sum",),
+        desc="Отдача и приём вместе, счётчики панели (только xray: без Hysteria2 и "
+        "AmneziaWG). Столбец подписан началом часа; в легенде сумма за период.",
+    ),
+    panel(
+        19,
+        "Объём за час, по людям",
+        12,
+        y,
+        12,
+        8,
+        [
+            (
+                named_user(
+                    f"sum by (user) (increase(vpn_user_traffic_bytes_total{HOUR})) > 0"
+                ),
+                "{{username}}",
+            )
+        ],
+        unit="decbytes",
+        stack=True,
+        bars=True,
+        interval="1h",
+        calcs=("sum",),
+        desc="Отдача и приём вместе, все ноды; счётчик панели по человеку. "
+        "Столбец подписан началом часа. Фильтр Node сюда не действует.",
     ),
 ]
 y += 8
@@ -1000,28 +1066,45 @@ y += 8
 
 # --- Из России ----------------------------------------------------------
 # roles/vpn_probe on the office testbed: every subscription host, the way a
-# user connects, every five minutes. 24 hosts in one timeline were unreadable,
+# user connects, once an hour at :05. 24 hosts in one timeline were unreadable,
 # so the same data is cut three ways: now as a transport x node grid, and over
 # time per node and per transport.
 panels.append(row(108, "Из России (проба из офиса)", y))
 y += 1
-# The timer is OnUnitInactiveSec=5min, so runs land every 5 min plus the
-# run itself: a 5m window is regularly empty and the lane breaks. 10m always
-# holds a run; a gap then means the probe really did not run.
-PROBE_STEP = "10m"
-PROBE_OK = "avg_over_time(vpn_probe_success_ratio[$__interval])"
+# The timer fires at a fixed minute every hour, so a 1h window always holds
+# exactly one run; a gap means the probe really did not run. Runs that could
+# not be delivered at once arrive later with their own timestamps.
+PROBE_STEP = "1h"
+PROBE_OK = f"avg_over_time(vpn_probe_success_ratio[$__interval]){UNLESS_OFF}"
+
+
+def hourly(p):
+    """One point an hour: draw the points and join them across the hour."""
+    p["fieldConfig"]["defaults"]["custom"].update(
+        {"showPoints": "always", "pointSize": 4, "spanNulls": 2 * 3600 * 1000}
+    )
+    return p
+
+
+def probe_by(label, metric):
+    return f"avg by ({label}) (avg_over_time({metric}[$__interval]){UNLESS_OFF})"
+
+
 probe_now = {
     "id": 64,
     "type": "table",
     "title": "Сейчас: транспорт × нода",
-    "description": "Доля запросов, прошедших через хост, по последнему прогону пробы. "
-    "Пусто — такого хоста в подписке нет.",
+    "description": "Последний прогон пробы: серое «Отключена» — нода административно "
+    "выключена в панели и не проверяется. Включённая, но недоступная нода остаётся "
+    "красной. Пусто — хоста нет в подписке. При сбое API используется последнее "
+    "известное состояние; свежесть показана ниже.",
     "datasource": DS,
     "gridPos": {"x": 0, "y": y, "w": 8, "h": 9},
     "fieldConfig": {
         "defaults": {
             "unit": "percentunit",
             "decimals": 0,
+            "mappings": OFF_MAPPING,
             "custom": {"align": "center", "cellOptions": {"type": "color-background"}},
             "color": {"mode": "thresholds"},
             "thresholds": {
@@ -1040,7 +1123,8 @@ probe_now = {
         {
             "datasource": DS,
             "expr": "max by (transport, node) "
-            "(last_over_time(vpn_probe_success_ratio[15m]))",
+            f"((last_over_time(vpn_probe_success_ratio[70m]){UNLESS_OFF})"
+            f" or (({PROBE_OFF}) - 1))",
             "refId": "A",
             "instant": True,
             "range": False,
@@ -1071,11 +1155,13 @@ panels += [
         y,
         16,
         4,
-        [(f"avg by (node) ({PROBE_OK})", "{{node}}")],
+        [(f"avg by (node) ({PROBE_OK}) or (max by (node) ({PROBE_OFF}) - 1)", "{{node}}")],
         interval=PROBE_STEP,
-        desc="Средняя доля прошедших запросов по всем транспортам ноды. Жёлтый у ноды, "
-        "на которой из офиса не проходят Vision и gRPC, — постоянный фон, а не авария. "
-        "Серый — проба не работала (тестбед выключен).",
+        mappings=OFF_MAPPING,
+        desc="Средняя доля прошедших запросов по транспортам включённой ноды. Серое "
+        "«Отключена» — административное отключение; отсутствие данных — проба не "
+        "работала. Одна клетка — один час. История до начала учёта административного "
+        "состояния не пересчитывается.",
     ),
     timeline(
         63,
@@ -1086,12 +1172,14 @@ panels += [
         5,
         [(f"avg by (transport) ({PROBE_OK})", "{{transport}}")],
         interval=PROBE_STEP,
-        desc="Средняя доля прошедших запросов по всем нодам. Красное у всех разом при "
-        "красном «прямой выход» — лёг офисный канал, а не VPN.",
+        desc="Средняя доля прошедших запросов только по административно включённым "
+        "нодам. Недоступные, но включённые ноды учитываются как сбой. Красное у всех "
+        "при красном «прямой выход» — проблема офисного канала. Старые интервалы "
+        "сохраняют состояние на тот момент.",
     ),
     timeline(
         61,
-        "Прямой выход и подписка",
+        "Прямой выход, подписка и состояние нод",
         0,
         y + 9,
         8,
@@ -1105,29 +1193,68 @@ panels += [
                 "max(min_over_time(vpn_probe_subscription_success[$__interval]))",
                 "подписка",
             ),
+            (
+                "min(min_over_time(vpn_probe_admin_state_fresh[$__interval]))",
+                "состояние нод актуально",
+            ),
         ],
         interval=PROBE_STEP,
     ),
-    panel(
-        62,
-        "Время ответа через ноду",
-        8,
-        y + 9,
-        16,
-        5,
-        [
-            (
-                "avg by (node) (avg_over_time(vpn_probe_latency_seconds[$__interval]))",
-                "{{node}}",
-            )
-        ],
-        unit="s",
-        interval=PROBE_STEP,
-        calcs=("mean", "max"),
-        desc="Среднее по транспортам, только прошедшие запросы.",
+    hourly(
+        panel(
+            62,
+            "Время ответа через ноду",
+            8,
+            y + 9,
+            8,
+            5,
+            [(probe_by("node", "vpn_probe_latency_seconds"), "{{node}}")],
+            unit="s",
+            interval=PROBE_STEP,
+            calcs=("mean", "max"),
+            desc="Медиана трёх запросов 204, среднее по транспортам; только прошедшие.",
+        )
+    ),
+    hourly(
+        panel(
+            65,
+            "Скорость через ноду",
+            16,
+            y + 9,
+            8,
+            5,
+            [(probe_by("node", "vpn_probe_throughput_bits_per_second"), "{{node}}")],
+            unit="bps",
+            interval=PROBE_STEP,
+            calcs=("mean", "min"),
+            desc="Скачивание 5 МБ через каждый хост по очереди, среднее по транспортам. "
+            "Потолок — офисный канал, поэтому смотреть на разницу между нодами и на "
+            "просадки, а не на абсолютное число.",
+        )
+    ),
+    hourly(
+        panel(
+            66,
+            "Скорость по транспортам",
+            0,
+            y + 14,
+            24,
+            6,
+            [
+                (
+                    probe_by("transport", "vpn_probe_throughput_bits_per_second"),
+                    "{{transport}}",
+                )
+            ],
+            unit="bps",
+            interval=PROBE_STEP,
+            calcs=("mean", "min", "max"),
+            desc="То же скачивание, среднее по нодам. Транспорт без точки в этот час "
+            "не прошёл проверку 204, и скорость не мерилась.",
+        )
     ),
 ]
-y += 14
+y += 20
 
 # --- Доступность -------------------------------------------------------
 # Gatus probes from the control plane in Sweden: TCP connect, ICMP and the
