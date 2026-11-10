@@ -50,6 +50,7 @@ edge_oidc_client_id: 098f02a7-3b37-4aec-b7e3-25dadb4f608b
 
 # --- mesh (headscale + headplane) -------------------------------------------
 mesh_domain: mesh.cosmdandy.dev
+mesh_base_domain: tail.cosmdandy.dev
 
 # Машина в Стокгольме, и метка встроенного DERP должна это отражать: код и
 # имя видны клиентам в `tailscale netcheck`. В дефолтах роли стоит hel от
@@ -242,7 +243,6 @@ observability_alerting_enabled: true
 
 # Usernames next to client IPs in alerts and dashboards; token is gatus's.
 observability_peer_users_enabled: true
-
 
 observability_oidc_enabled: true
 observability_oidc_issuer: https://oidc.cosmdandy.dev

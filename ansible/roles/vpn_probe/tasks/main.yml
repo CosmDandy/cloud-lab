@@ -4,9 +4,11 @@
     that:
       - vpn_probe_subscription_url | length > 0
       - vpn_probe_push_password | length > 0
+      - vpn_probe_panel_api_token | length > 0
     fail_msg: >-
       Нужны vpn_probe_subscription_url (SOPS хоста) и пароль приёма метрик:
       без первого пробовать нечего, без второго некуда отдать результат.
+      Также нужен vpn_probe_panel_api_token с доступом чтения нод.
 
 - name: Install probe dependencies
   ansible.builtin.apt:
@@ -51,6 +53,7 @@
   loop:
     - vpn-probe.py
     - sub2client.py
+    - node_state.py
 
 - name: Write probe environment
   ansible.builtin.template:

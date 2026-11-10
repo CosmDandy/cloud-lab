@@ -429,7 +429,7 @@
             "type": "prometheus",
             "uid": "victoriametrics"
           },
-          "expr": "count(max_over_time(vpn_probe_success_ratio[2h5m]) == 0 and avg_over_time(vpn_probe_success_ratio[1d] offset 2h15m) > 0.5 and on (instance) last_over_time(vpn_probe_direct_success[2h5m]) == 1) or vector(0)",
+          "expr": "count((max_over_time(vpn_probe_success_ratio[2h5m]) == 0 and avg_over_time(vpn_probe_success_ratio[1d] offset 2h15m) > 0.5 and on (instance) last_over_time(vpn_probe_direct_success[2h5m]) == 1) unless on (instance, host) (last_over_time(vpn_probe_host_enabled[70m]) == 0)) or vector(0)",
           "legendFormat": "хостов",
           "refId": "A",
           "range": false,
@@ -1803,7 +1803,7 @@
       "id": 64,
       "type": "table",
       "title": "Сейчас: транспорт × нода",
-      "description": "Доля запросов, прошедших через хост, по последнему прогону пробы. Пусто — такого хоста в подписке нет.",
+      "description": "Последний прогон пробы: серое «Отключена» — нода административно выключена в панели и не проверяется. Включённая, но недоступная нода остаётся красной. Пусто — хоста нет в подписке. При сбое API используется последнее известное состояние; свежесть показана ниже.",
       "datasource": {
         "type": "prometheus",
         "uid": "victoriametrics"
@@ -1818,6 +1818,7 @@
         "defaults": {
           "unit": "percentunit",
           "decimals": 0,
+          "mappings": [{"type": "value", "options": {"-1": {"text": "Отключена", "color": "gray", "index": 0}}}],
           "custom": {
             "align": "center",
             "cellOptions": {
@@ -1857,7 +1858,7 @@
             "type": "prometheus",
             "uid": "victoriametrics"
           },
-          "expr": "max by (transport, node) (last_over_time(vpn_probe_success_ratio[70m]))",
+          "expr": "max by (transport, node) ((last_over_time(vpn_probe_success_ratio[70m]) unless on (instance, host) (last_over_time(vpn_probe_host_enabled[70m]) == 0)) or ((last_over_time(vpn_probe_host_enabled[70m]) == 0) - 1))",
           "refId": "A",
           "instant": true,
           "range": false,
@@ -1889,7 +1890,7 @@
       "id": 60,
       "type": "state-timeline",
       "title": "По нодам",
-      "description": "Средняя доля прошедших запросов по всем транспортам ноды. Жёлтый у ноды, на которой из офиса не проходят Vision и gRPC, — постоянный фон, а не авария. Серый — проба не работала (тестбед выключен). Одна клетка — один час.",
+      "description": "Средняя доля прошедших запросов по транспортам включённой ноды. Серое «Отключена» — административное отключение; отсутствие данных — проба не работала. Одна клетка — один час. История до начала учёта административного состояния не пересчитывается.",
       "datasource": {
         "type": "prometheus",
         "uid": "victoriametrics"
@@ -1902,7 +1903,7 @@
       },
       "fieldConfig": {
         "defaults": {
-          "mappings": [],
+          "mappings": [{"type": "value", "options": {"-1": {"text": "Отключена", "color": "gray", "index": 0}}}],
           "thresholds": {
             "mode": "absolute",
             "steps": [
@@ -1940,7 +1941,7 @@
             "type": "prometheus",
             "uid": "victoriametrics"
           },
-          "expr": "avg by (node) (avg_over_time(vpn_probe_success_ratio[$__interval]))",
+          "expr": "avg by (node) (avg_over_time(vpn_probe_success_ratio[$__interval]) unless on (instance, host) (last_over_time(vpn_probe_host_enabled[70m]) == 0)) or (max by (node) (last_over_time(vpn_probe_host_enabled[70m]) == 0) - 1)",
           "legendFormat": "{{node}}",
           "refId": "A",
           "range": true,
@@ -1952,7 +1953,7 @@
       "id": 63,
       "type": "state-timeline",
       "title": "По транспортам",
-      "description": "Средняя доля прошедших запросов по всем нодам. Красное у всех разом при красном «прямой выход» — лёг офисный канал, а не VPN.",
+      "description": "Средняя доля прошедших запросов только по административно включённым нодам. Недоступные, но включённые ноды учитываются как сбой. Красное у всех при красном «прямой выход» — проблема офисного канала. Старые интервалы сохраняют состояние на тот момент.",
       "datasource": {
         "type": "prometheus",
         "uid": "victoriametrics"
@@ -2003,7 +2004,7 @@
             "type": "prometheus",
             "uid": "victoriametrics"
           },
-          "expr": "avg by (transport) (avg_over_time(vpn_probe_success_ratio[$__interval]))",
+          "expr": "avg by (transport) (avg_over_time(vpn_probe_success_ratio[$__interval]) unless on (instance, host) (last_over_time(vpn_probe_host_enabled[70m]) == 0))",
           "legendFormat": "{{transport}}",
           "refId": "A",
           "range": true,
@@ -2014,7 +2015,7 @@
     {
       "id": 61,
       "type": "state-timeline",
-      "title": "Прямой выход и подписка",
+      "title": "Прямой выход, подписка и состояние нод",
       "description": "",
       "datasource": {
         "type": "prometheus",
@@ -2082,6 +2083,14 @@
           "refId": "B",
           "range": true,
           "interval": "1h"
+        },
+        {
+          "datasource": {"type": "prometheus", "uid": "victoriametrics"},
+          "expr": "min(min_over_time(vpn_probe_admin_state_fresh[$__interval]))",
+          "legendFormat": "состояние нод актуально",
+          "refId": "C",
+          "range": true,
+          "interval": "1h"
         }
       ]
     },
@@ -2134,7 +2143,7 @@
             "type": "prometheus",
             "uid": "victoriametrics"
           },
-          "expr": "avg by (node) (avg_over_time(vpn_probe_latency_seconds[$__interval]))",
+          "expr": "avg by (node) (avg_over_time(vpn_probe_latency_seconds[$__interval]) unless on (instance, host) (last_over_time(vpn_probe_host_enabled[70m]) == 0))",
           "legendFormat": "{{node}}",
           "refId": "A",
           "range": true,
@@ -2191,7 +2200,7 @@
             "type": "prometheus",
             "uid": "victoriametrics"
           },
-          "expr": "avg by (node) (avg_over_time(vpn_probe_throughput_bits_per_second[$__interval]))",
+          "expr": "avg by (node) (avg_over_time(vpn_probe_throughput_bits_per_second[$__interval]) unless on (instance, host) (last_over_time(vpn_probe_host_enabled[70m]) == 0))",
           "legendFormat": "{{node}}",
           "refId": "A",
           "range": true,
@@ -2249,7 +2258,7 @@
             "type": "prometheus",
             "uid": "victoriametrics"
           },
-          "expr": "avg by (transport) (avg_over_time(vpn_probe_throughput_bits_per_second[$__interval]))",
+          "expr": "avg by (transport) (avg_over_time(vpn_probe_throughput_bits_per_second[$__interval]) unless on (instance, host) (last_over_time(vpn_probe_host_enabled[70m]) == 0))",
           "legendFormat": "{{transport}}",
           "refId": "A",
           "range": true,
