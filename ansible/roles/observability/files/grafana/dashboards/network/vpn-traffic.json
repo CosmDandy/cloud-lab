@@ -1081,13 +1081,133 @@
       ]
     },
     {
+      "id": 18,
+      "type": "timeseries",
+      "title": "Объём за час, по нодам",
+      "description": "Отдача и приём вместе, счётчики панели (только xray: без Hysteria2 и AmneziaWG). Столбец подписан началом часа; в легенде сумма за период.",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "victoriametrics"
+      },
+      "gridPos": {
+        "x": 0,
+        "y": 25,
+        "w": 12,
+        "h": 8
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "decbytes",
+          "custom": {
+            "lineWidth": 1,
+            "fillOpacity": 80,
+            "showPoints": "never",
+            "spanNulls": 300000,
+            "drawStyle": "bars",
+            "stacking": {
+              "mode": "normal",
+              "group": "A"
+            }
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "legend": {
+          "displayMode": "table",
+          "placement": "bottom",
+          "showLegend": true,
+          "calcs": [
+            "sum"
+          ]
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "desc"
+        }
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "victoriametrics"
+          },
+          "expr": "sum by (node_name) ((increase(remnawave_node_inbound_download_bytes[1h] offset -1h) + increase(remnawave_node_inbound_upload_bytes[1h] offset -1h)) * on (node_uuid) group_left (node_name) remnawave_node_basic_info{node_name=~\"$node\"})",
+          "legendFormat": "{{node_name}}",
+          "refId": "A",
+          "range": true,
+          "interval": "1h"
+        }
+      ]
+    },
+    {
+      "id": 19,
+      "type": "timeseries",
+      "title": "Объём за час, по людям",
+      "description": "Отдача и приём вместе, все ноды; счётчик панели по человеку. Столбец подписан началом часа. Фильтр Node сюда не действует.",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "victoriametrics"
+      },
+      "gridPos": {
+        "x": 12,
+        "y": 25,
+        "w": 12,
+        "h": 8
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "decbytes",
+          "custom": {
+            "lineWidth": 1,
+            "fillOpacity": 80,
+            "showPoints": "never",
+            "spanNulls": 300000,
+            "drawStyle": "bars",
+            "stacking": {
+              "mode": "normal",
+              "group": "A"
+            }
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "legend": {
+          "displayMode": "table",
+          "placement": "bottom",
+          "showLegend": true,
+          "calcs": [
+            "sum"
+          ]
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "desc"
+        }
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "victoriametrics"
+          },
+          "expr": "(sum by (user) (increase(vpn_user_traffic_bytes_total[1h] offset -1h)) > 0) * on (user) group_left (username) vpn_user_info or ((sum by (user) (increase(vpn_user_traffic_bytes_total[1h] offset -1h)) > 0) unless on (user) vpn_user_info)",
+          "legendFormat": "{{username}}",
+          "refId": "A",
+          "range": true,
+          "interval": "1h"
+        }
+      ]
+    },
+    {
       "id": 107,
       "type": "row",
       "title": "По людям за интервал",
       "collapsed": false,
       "gridPos": {
         "x": 0,
-        "y": 25,
+        "y": 33,
         "w": 24,
         "h": 1
       },
@@ -1104,7 +1224,7 @@
       },
       "gridPos": {
         "x": 0,
-        "y": 26,
+        "y": 34,
         "w": 12,
         "h": 8
       },
@@ -1165,7 +1285,7 @@
       },
       "gridPos": {
         "x": 12,
-        "y": 26,
+        "y": 34,
         "w": 12,
         "h": 8
       },
@@ -1220,7 +1340,7 @@
       "collapsed": false,
       "gridPos": {
         "x": 0,
-        "y": 34,
+        "y": 42,
         "w": 24,
         "h": 1
       },
@@ -1237,7 +1357,7 @@
       },
       "gridPos": {
         "x": 0,
-        "y": 35,
+        "y": 43,
         "w": 12,
         "h": 8
       },
@@ -1294,7 +1414,7 @@
       },
       "gridPos": {
         "x": 12,
-        "y": 35,
+        "y": 43,
         "w": 12,
         "h": 8
       },
@@ -1346,7 +1466,7 @@
       "collapsed": false,
       "gridPos": {
         "x": 0,
-        "y": 43,
+        "y": 51,
         "w": 24,
         "h": 1
       },
@@ -1363,7 +1483,7 @@
       },
       "gridPos": {
         "x": 0,
-        "y": 44,
+        "y": 52,
         "w": 12,
         "h": 8
       },
@@ -1441,7 +1561,7 @@
       },
       "gridPos": {
         "x": 12,
-        "y": 44,
+        "y": 52,
         "w": 8,
         "h": 8
       },
@@ -1538,7 +1658,7 @@
       },
       "gridPos": {
         "x": 20,
-        "y": 44,
+        "y": 52,
         "w": 4,
         "h": 8
       },
@@ -1594,7 +1714,7 @@
       "collapsed": false,
       "gridPos": {
         "x": 0,
-        "y": 52,
+        "y": 60,
         "w": 24,
         "h": 1
       },
@@ -1611,7 +1731,7 @@
       },
       "gridPos": {
         "x": 0,
-        "y": 53,
+        "y": 61,
         "w": 24,
         "h": 8
       },
@@ -1673,7 +1793,7 @@
       "collapsed": false,
       "gridPos": {
         "x": 0,
-        "y": 61,
+        "y": 69,
         "w": 24,
         "h": 1
       },
@@ -1690,7 +1810,7 @@
       },
       "gridPos": {
         "x": 0,
-        "y": 62,
+        "y": 70,
         "w": 8,
         "h": 9
       },
@@ -1776,7 +1896,7 @@
       },
       "gridPos": {
         "x": 8,
-        "y": 62,
+        "y": 70,
         "w": 16,
         "h": 4
       },
@@ -1839,7 +1959,7 @@
       },
       "gridPos": {
         "x": 8,
-        "y": 66,
+        "y": 74,
         "w": 16,
         "h": 5
       },
@@ -1902,7 +2022,7 @@
       },
       "gridPos": {
         "x": 0,
-        "y": 71,
+        "y": 79,
         "w": 8,
         "h": 5
       },
@@ -1976,7 +2096,7 @@
       },
       "gridPos": {
         "x": 8,
-        "y": 71,
+        "y": 79,
         "w": 8,
         "h": 5
       },
@@ -2033,7 +2153,7 @@
       },
       "gridPos": {
         "x": 16,
-        "y": 71,
+        "y": 79,
         "w": 8,
         "h": 5
       },
@@ -2090,7 +2210,7 @@
       },
       "gridPos": {
         "x": 0,
-        "y": 76,
+        "y": 84,
         "w": 24,
         "h": 6
       },
@@ -2144,7 +2264,7 @@
       "collapsed": false,
       "gridPos": {
         "x": 0,
-        "y": 82,
+        "y": 90,
         "w": 24,
         "h": 1
       },
@@ -2161,7 +2281,7 @@
       },
       "gridPos": {
         "x": 0,
-        "y": 83,
+        "y": 91,
         "w": 4,
         "h": 6
       },
@@ -2226,7 +2346,7 @@
       },
       "gridPos": {
         "x": 4,
-        "y": 83,
+        "y": 91,
         "w": 20,
         "h": 6
       },
@@ -2300,7 +2420,7 @@
       },
       "gridPos": {
         "x": 0,
-        "y": 89,
+        "y": 97,
         "w": 12,
         "h": 7
       },
@@ -2355,7 +2475,7 @@
       },
       "gridPos": {
         "x": 12,
-        "y": 89,
+        "y": 97,
         "w": 12,
         "h": 7
       },

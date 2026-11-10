@@ -775,6 +775,59 @@ panels += [
 ]
 y += 8
 
+# Rates above answer "how fast right now"; people think in "how much did it
+# take", so the same counters again as a volume per fixed hour. The hour is
+# fixed (not $__interval) so a bar means the same thing at any zoom.
+HOUR = "[1h] offset -1h"
+panels += [
+    panel(
+        18,
+        "Объём за час, по нодам",
+        0,
+        y,
+        12,
+        8,
+        [
+            (
+                f"sum by (node_name) ((increase({RW_INBOUND['downlink']}{HOUR})"
+                f" + increase({RW_INBOUND['uplink']}{HOUR})) {RW_NODE})",
+                "{{node_name}}",
+            )
+        ],
+        unit="decbytes",
+        stack=True,
+        bars=True,
+        interval="1h",
+        calcs=("sum",),
+        desc="Отдача и приём вместе, счётчики панели (только xray: без Hysteria2 и "
+        "AmneziaWG). Столбец подписан началом часа; в легенде сумма за период.",
+    ),
+    panel(
+        19,
+        "Объём за час, по людям",
+        12,
+        y,
+        12,
+        8,
+        [
+            (
+                named_user(
+                    f"sum by (user) (increase(vpn_user_traffic_bytes_total{HOUR})) > 0"
+                ),
+                "{{username}}",
+            )
+        ],
+        unit="decbytes",
+        stack=True,
+        bars=True,
+        interval="1h",
+        calcs=("sum",),
+        desc="Отдача и приём вместе, все ноды; счётчик панели по человеку. "
+        "Столбец подписан началом часа. Фильтр Node сюда не действует.",
+    ),
+]
+y += 8
+
 # --- По людям за интервал -------------------------------------------------
 # Bars per person per bucket answer "was it bad for someone" without the
 # per-IP noise of the live graphs; the bucket follows the chosen range.
