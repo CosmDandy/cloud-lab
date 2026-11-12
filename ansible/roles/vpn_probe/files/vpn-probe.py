@@ -50,7 +50,14 @@ INSTANCE = os.environ.get("VPN_PROBE_INSTANCE", socket.gethostname())
 XRAY = os.environ.get("VPN_PROBE_XRAY", "/usr/local/bin/xray")
 TRIES = int(os.environ.get("VPN_PROBE_TRIES", "3"))
 WORKERS = int(os.environ.get("VPN_PROBE_WORKERS", "4"))
-SPEED_BYTES = int(os.environ.get("VPN_PROBE_SPEED_BYTES", "5000000"))
+# The Russian filter does not always cut a connection: it may freeze it
+# after the first ~16 KB. A 204 fits under that and passes while real
+# traffic stalls, so every host that answers also has to move this much.
+TRANSFER_BYTES = int(os.environ.get("VPN_PROBE_TRANSFER_BYTES", "262144"))
+# A Pi Zero spends ~2.5 s on one TLS handshake with no tunnel at all; the
+# office defaults would read its CPU as a dead protocol.
+FETCH_TIMEOUT = int(os.environ.get("VPN_PROBE_FETCH_TIMEOUT", "8"))
+START_TIMEOUT = float(os.environ.get("VPN_PROBE_START_TIMEOUT", "5"))
 STATE = os.environ.get("STATE_DIRECTORY", "/var/lib/vpn-probe")
 SUB_CACHE = os.path.join(STATE, "subscription.txt")
 PANEL_URL = os.environ["VPN_PROBE_PANEL_API_URL"]
@@ -59,10 +66,10 @@ SPOOL = os.path.join(STATE, "spool.prom")
 PUSH_ATTEMPTS = 10
 PUSH_PAUSE = 60
 TARGET = "https://www.gstatic.com/generate_204"
-SPEED_URL = f"https://speed.cloudflare.com/__down?bytes={SPEED_BYTES}"
+TRANSFER_URL = f"https://speed.cloudflare.com/__down?bytes={TRANSFER_BYTES}"
 
 
-def fetch(proxy_port=None, timeout=8):
+def fetch(proxy_port=None, timeout=FETCH_TIMEOUT):
     """One request; seconds to completion, or None on failure."""
     cmd = ["curl", "-s", "-o", "/dev/null", "--max-time", str(timeout)]
     if proxy_port:
@@ -74,8 +81,8 @@ def fetch(proxy_port=None, timeout=8):
     return float(out[1]) if len(out) == 2 and out[0] == "204" else None
 
 
-def speed(proxy_port):
-    """Download SPEED_BYTES through the proxy; bits per second, or None."""
+def transfer(proxy_port):
+    """Download TRANSFER_BYTES through the proxy; True if all of it arrived."""
     out = subprocess.run(
         [
             "curl",
@@ -87,16 +94,14 @@ def speed(proxy_port):
             "-x",
             f"socks5h://127.0.0.1:{proxy_port}",
             "-w",
-            "%{http_code} %{size_download} %{time_total}",
-            SPEED_URL,
+            "%{http_code} %{size_download}",
+            TRANSFER_URL,
         ],
         capture_output=True,
         text=True,
         check=False,
     ).stdout.split()
-    if len(out) != 3 or out[0] != "200" or int(out[1]) < SPEED_BYTES:
-        return None
-    return int(out[1]) * 8 / float(out[2])
+    return len(out) == 2 and out[0] == "200" and int(out[1]) >= TRANSFER_BYTES
 
 
 def free_port():
@@ -105,7 +110,7 @@ def free_port():
         return s.getsockname()[1]
 
 
-def wait_listening(port, deadline=5.0):
+def wait_listening(port, deadline=START_TIMEOUT):
     end = time.monotonic() + deadline
     while time.monotonic() < end:
         with socket.socket() as s:
@@ -136,11 +141,15 @@ def through(entry, measure):
 
 
 def probe(entry):
+    # The transfer runs in the same xray session, and only once a 204 got
+    # through: a host that does not answer at all says nothing about stalls.
     def measure(port):
         times = [t for t in (fetch(port) for _ in range(TRIES)) if t is not None]
-        return len(times), statistics.median(times) if times else None
+        if not times:
+            return 0, None, None
+        return len(times), statistics.median(times), transfer(port)
 
-    return through(entry, measure) or (0, None)
+    return through(entry, measure) or (0, None, None)
 
 
 def load_links():
@@ -240,12 +249,6 @@ def main():
     active = [entry for entry, flag in zip(entries, enabled, strict=True) if flag]
     with ThreadPoolExecutor(WORKERS) as pool:
         results = list(pool.map(probe, active))
-    # One at a time: parallel downloads would split the office uplink and
-    # measure each other instead of the path.
-    speeds = [
-        through(entry, speed) if ok else None
-        for entry, (ok, _) in zip(active, results, strict=True)
-    ]
 
     lines = [
         f"vpn_probe_direct_success {int(direct)}",
@@ -255,13 +258,13 @@ def main():
     ]
     for entry, flag in zip(entries, enabled, strict=True):
         lines.append(f"vpn_probe_host_enabled{{{host_labels(entry)}}} {int(flag)}")
-    for entry, (ok, latency), bps in zip(active, results, speeds, strict=True):
+    for entry, (ok, latency, moved) in zip(active, results, strict=True):
         tags = host_labels(entry)
         lines.append(f"vpn_probe_success_ratio{{{tags}}} {ok / TRIES:.3f}")
         if latency is not None:
             lines.append(f"vpn_probe_latency_seconds{{{tags}}} {latency:.3f}")
-        if bps is not None:
-            lines.append(f"vpn_probe_throughput_bits_per_second{{{tags}}} {bps:.0f}")
+        if moved is not None:
+            lines.append(f"vpn_probe_transfer_success{{{tags}}} {int(moved)}")
     lines += [
         f"vpn_probe_hosts {len(active)}",
         f"vpn_probe_disabled_hosts {len(entries) - len(active)}",
