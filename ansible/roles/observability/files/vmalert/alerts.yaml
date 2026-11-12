@@ -217,13 +217,13 @@ groups:
       # разбудить человека бессмысленно. Метрика
       # vpn_client_tcp_reordering остаётся для разбора инцидентов руками.
 
-  # Проба из офиса в России (roles/vpn_probe), раз в час в :05. Gatus этого
+  # Пробы из России (roles/vpn_probe: офис и дом), каждые 10 минут. Gatus этого
   # не видит: он ходит из Швеции, и 17-18.10 AMS Vision был мёртв из России
   # при полностью зелёных проверках.
   - name: vpn-probe
     interval: 1m
     rules:
-      # Два прогона подряд (два часа) без единого ответа, при живом прямом
+      # Два часа (12 прогонов) без единого ответа, при живом прямом
       # выходе из офиса: когда лежит сам офисный канал, падает всё разом, и к
       # VPN это отношения не имеет. Один прогон — мало: провайдер офиса
       # закрывает наши адреса окнами по несколько минут.
@@ -237,14 +237,14 @@ groups:
           (max_over_time(vpn_probe_success_ratio[2h5m]) == 0
           and avg_over_time(vpn_probe_success_ratio[1d] offset 2h15m) > 0.5
           and on (instance) last_over_time(vpn_probe_direct_success[2h5m]) == 1)
-          unless on (instance, host) (last_over_time(vpn_probe_host_enabled[70m]) == 0)
+          unless on (instance, host) (last_over_time(vpn_probe_host_enabled[15m]) == 0)
         labels:
           severity: critical
         annotations:
-          summary: "{{ $labels.host }} does not work from Russia"
+          summary: "{{ $labels.host }} does not work from {{ $labels.instance }}"
           description: >-
             Every probe through {{ $labels.transport }} on {{ $labels.node }}
-            failed two hourly runs in a row while the office reached the
+            failed every run for two hours while the probe reached the
             internet directly.
 
       # Клиенты обновляют конфиг с этого домена; недоступен из России —
@@ -263,14 +263,14 @@ groups:
       # «всё хорошо», а «из России сейчас не смотрит никто».
       - alert: VpnProbeSilent
         expr: >-
-          time() - max(last_over_time(vpn_probe_last_run_timestamp_seconds[1d])) > 9000
+          time() - max by (instance) (last_over_time(vpn_probe_last_run_timestamp_seconds[1d])) > 1800
           or absent_over_time(vpn_probe_last_run_timestamp_seconds[1d])
         for: 10m
         labels:
           severity: info
         annotations:
-          summary: "No probe results from Russia for 2.5+ hours"
-          description: "testbed-l-01 is off or cannot push; protocols are unwatched from inside Russia"
+          summary: "No probe results from {{ $labels.instance }} for 30+ minutes"
+          description: "The probe is off or cannot push; protocols are unwatched from that network"
 
   - name: scraping
     interval: 30s
