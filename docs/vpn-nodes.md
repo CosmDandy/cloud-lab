@@ -508,6 +508,27 @@ openssl s_client -connect www.nvidia.com:443 -servername www.nvidia.com -showcer
 оно задано в хостах явно. Клиенты подхватывают новый SNI при обновлении
 подписки.
 
+Второе условие появляется с xray 26.9.8 на ноде: сайт из `dest` должен
+договариваться о группе `X25519MLKEM768`. Такой сервер Reality требует её в
+ClientHello и проводит рукопожатие с сайтом теми же группами; сайт без неё
+обрывает рукопожатие, и инбаунд молчит. 13.11.2026 на `remnawave/node:3.4.5`
+(xray 26.11.9) у `mis-sto-01` и `hhh-ams-01` замолчали XHTTP-Stream и
+XHTTP-Packet на `www.swisscom.ch`. Vision и gRPC на nvidia и cisco при этом
+работали. В логе ни одной ошибки XHTTP, только
+`handshake did not complete successfully`. Ноды откатили на 3.4.3; на
+локальном стенде 26.11.9 swisscom даёт 0 из 3 с ML-DSA и без, `www.oracle.com`
+даёт 5 из 5. Проверять группу и длину цепочки сразу:
+
+```bash
+openssl s_client -connect www.oracle.com:443 -servername www.oracle.com \
+  -groups X25519MLKEM768 -tls1_3 -showcerts </dev/null | grep 'Negotiated TLS1.3 group'
+```
+
+Замеры 13.11 с mis-sto-01, ams и sto-04 одинаковы: ML-KEM есть у microsoft
+(5879 Б), nvidia (5031), cisco (4936), oracle (4815), ibm (4331), intel и sap
+(3,1–3,3 КБ, коротки для ML-DSA); у swisscom (5908) его нет. Microsoft сам
+xray помечает как цель, повышающую риск блокировки.
+
 ## sing-box
 
 С нашими основными инбаундами sing-box не работает по двум независимым
