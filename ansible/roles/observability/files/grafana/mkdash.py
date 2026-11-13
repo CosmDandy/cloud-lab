@@ -1114,11 +1114,23 @@ PROBE_STEP = "10m"
 PROBE_OK = f"avg_over_time(vpn_probe_success_ratio{BUCKET}){UNLESS_OFF}"
 
 
+# Before the 10-minute schedule the probe ran once an hour, so older history has
+# one point an hour: bridging 70 minutes joins those into one line instead of
+# a dash per hour. A pause longer than that still shows as a gap.
+PROBE_GAP_MS = 70 * 60 * 1000
+
+
 def hourly(p):
-    """One point a run: draw the points and bridge one missed run."""
+    """One point a run: draw the points and join them across the old hourly gaps."""
     p["fieldConfig"]["defaults"]["custom"].update(
-        {"showPoints": "always", "pointSize": 4, "spanNulls": 20 * 60 * 1000}
+        {"showPoints": "always", "pointSize": 4, "spanNulls": PROBE_GAP_MS}
     )
+    return p
+
+
+def joined(p):
+    """State timeline: connect the points so hourly history is not dashes."""
+    p["fieldConfig"]["defaults"].setdefault("custom", {})["spanNulls"] = PROBE_GAP_MS
     return p
 
 
@@ -1135,7 +1147,7 @@ probe_now = {
     "красной. Пусто — хоста нет в подписке. При сбое API используется последнее "
     "известное состояние; свежесть показана ниже.",
     "datasource": DS,
-    "gridPos": {"x": 0, "y": y, "w": 8, "h": 9},
+    "gridPos": {"x": 0, "y": y, "w": 10, "h": 9},
     "fieldConfig": {
         "defaults": {
             "unit": "percentunit",
@@ -1144,7 +1156,7 @@ probe_now = {
             "custom": {
                 "align": "center",
                 "cellOptions": {"type": "color-background"},
-                "minWidth": 56,
+                "minWidth": 76,
             },
             "color": {"mode": "thresholds"},
             "thresholds": {
@@ -1161,7 +1173,7 @@ probe_now = {
                 "matcher": {"id": "byRegexp", "options": "^transport"},
                 "properties": [
                     {"id": "displayName", "value": "Протокол"},
-                    {"id": "custom.width", "value": 112},
+                    {"id": "custom.width", "value": 160},
                     {"id": "custom.align", "value": "left"},
                     {"id": "custom.cellOptions", "value": {"type": "auto"}},
                 ],
@@ -1208,9 +1220,9 @@ panels += [
     timeline(
         60,
         "По нодам",
-        8,
+        10,
         y,
-        16,
+        14,
         4,
         [(f"avg by (node) ({PROBE_OK}) or (max by (node) ({PROBE_OFF}) - 1)", "{{node}}")],
         interval=PROBE_STEP,
@@ -1224,9 +1236,9 @@ panels += [
     timeline(
         63,
         "По транспортам",
-        8,
+        10,
         y + 4,
-        16,
+        14,
         5,
         [(f"avg by (transport) ({PROBE_OK})", "{{transport}}")],
         interval=PROBE_STEP,
@@ -1288,6 +1300,9 @@ panels += [
         "не проверяли.",
     ),
 ]
+for p in panels:
+    if p["id"] in (60, 61, 63, 65):
+        joined(p)
 y += 14
 
 # --- Доступность -------------------------------------------------------
