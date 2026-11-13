@@ -1,0 +1,4 @@
+---
+# Second node on the Xray 26.11.9 image after the mis-sto-01 canary
+# (2026-11-13); see the note in host_vars/mis-sto-01/main.yml.
+remnanode_image: remnawave/node:3.4.5
