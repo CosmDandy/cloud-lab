@@ -71,3 +71,10 @@ all:
         testbed-l-01:
           ansible_host: 192.168.20.207
           ansible_user: root
+        # rpi-local-l-01 — Pi Zero at home: the home ISP path, to tell an
+        # office-only block from a Russia-wide one. Reached by its LAN
+        # address: the headscale ACL closes :22 on its tailnet address, and
+        # 10.0.1.0/24 is routed into the tailnet by the Pi itself.
+        rpi-local-l-01:
+          ansible_host: 10.0.1.13
+          ansible_user: cosmdandy

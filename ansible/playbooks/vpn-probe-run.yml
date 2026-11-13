@@ -1,0 +1,28 @@
+---
+# Run the probe now, outside its timer, and print its summary line.
+#   ansible-playbook -i inventory/local.yml -i inventory/cloud.yml \
+#     playbooks/vpn-probe-run.yml -l rpi-local-l-01
+# On the stand itself: sudo systemctl start vpn-probe.service — it blocks
+# until the run ends (Type=oneshot), then journalctl -u vpn-probe.service.
+# A manual run lands in the same hourly bucket as the timer's and is
+# averaged with it on the dashboard.
+- name: Run the VPN probe now
+  hosts: ru_probes
+  become: true
+  gather_facts: false
+
+  tasks:
+    # start on a oneshot unit returns only when the run is over.
+    - name: Run the probe and wait for it to finish
+      ansible.builtin.systemd_service:
+        name: vpn-probe.service
+        state: started
+
+    - name: Read the run summary
+      ansible.builtin.command: journalctl -u vpn-probe.service -t python3 -n 3 -o cat --no-pager
+      register: vpn_probe_run_summary
+      changed_when: false
+
+    - name: Show the run summary
+      ansible.builtin.debug:
+        msg: "{{ vpn_probe_run_summary.stdout_lines }}"

@@ -73,6 +73,38 @@ def scoped(expr):
     return SELECTOR.sub(add, expr)
 
 
+# Several probes (office, home) push the same series, told apart only by
+# `instance`; the probe row repeats per $probe value.
+PROBE_METRIC = re.compile(r'(?<![\w"])(vpn_probe_\w+)(\{[^}]*\})?')
+
+
+def probe_scoped(expr):
+    def add(m):
+        inner = (m.group(2) or "{}")[1:-1].strip()
+        sel = 'instance=~"$probe"'
+        return f"{m.group(1)}{{{sel}{', ' + inner if inner else ''}}}"
+
+    return PROBE_METRIC.sub(add, expr)
+
+
+PROBE_VAR = {
+    "name": "probe",
+    "label": "Probe",
+    "type": "query",
+    "datasource": DS,
+    "definition": "label_values(vpn_probe_last_run_timestamp_seconds, instance)",
+    "query": {
+        "query": "label_values(vpn_probe_last_run_timestamp_seconds, instance)",
+        "refId": "probe",
+    },
+    "multi": True,
+    "includeAll": True,
+    "current": {"selected": True, "text": ["All"], "value": ["$__all"]},
+    "refresh": 2,
+    "sort": 1,
+}
+
+
 # Same volume gate as the alerts in vmalert/alerts.yaml: below 64 KiB/s a
 # connection is mostly idle, and a share computed from a few retransmitted
 # bytes over a few sent ones reads as "100 % loss" while nobody suffers.
@@ -296,7 +328,7 @@ RW_NODE = "* on (node_uuid) group_left (node_name) remnawave_node_basic_info"
 # The probe marks hosts the panel has switched off with host_enabled == 0 and
 # does not test them: they must not count as failures, and the grid shows them
 # as -1 ("Отключена") instead of an empty cell.
-PROBE_OFF = "last_over_time(vpn_probe_host_enabled[70m]) == 0"
+PROBE_OFF = "last_over_time(vpn_probe_host_enabled[15m]) == 0"
 UNLESS_OFF = f" unless on (instance, host) ({PROBE_OFF})"
 OFF_MAPPING = [
     {
@@ -421,11 +453,13 @@ def table(pid, title, x, y, w, h, columns, desc=""):
     }
 
 
-def dump(name, dashboard):
+def dump(name, dashboard, probe=False):
     for p in dashboard["panels"]:
         for t in p.get("targets", []):
             t["expr"] = scoped(t["expr"])
-    dashboard["templating"] = {"list": [NODE_VAR]}
+            if probe:
+                t["expr"] = probe_scoped(t["expr"])
+    dashboard["templating"] = {"list": [NODE_VAR] + ([PROBE_VAR] if probe else [])}
     with open(f"{OUT}/{name}", "w", encoding="utf-8") as fh:
         json.dump(dashboard, fh, ensure_ascii=False, indent=2)
         fh.write("\n")
@@ -1066,28 +1100,42 @@ y += 8
 
 # --- Из России ----------------------------------------------------------
 # roles/vpn_probe on the office testbed: every subscription host, the way a
-# user connects, once an hour at :05. 24 hosts in one timeline were unreadable,
+# user connects, every 10 minutes. 24 hosts in one timeline were unreadable,
 # so the same data is cut three ways: now as a transport x node grid, and over
 # time per node and per transport.
-panels.append(row(108, "Из России (проба из офиса)", y))
+# One row per probe: All shows the office and the home path one under the
+# other, with the same panels.
+panels.append(dict(row(108, "Из России — проба $probe", y), repeat="probe"))
 y += 1
-# The timer fires at a fixed minute every hour, so a 1h window always holds
-# exactly one run; a gap means the probe really did not run. Runs that could
-# not be delivered at once arrive later with their own timestamps.
-PROBE_STEP = "1h"
-PROBE_OK = f"avg_over_time(vpn_probe_success_ratio[$__interval]){UNLESS_OFF}"
+# The timer fires every 10 minutes at :05, so a 10m window holds exactly one
+# run; a gap means the probe really did not run. Runs that could not be
+# delivered at once arrive later with their own timestamps.
+PROBE_STEP = "10m"
+PROBE_OK = f"avg_over_time(vpn_probe_success_ratio{BUCKET}){UNLESS_OFF}"
+
+
+# Before the 10-minute schedule the probe ran once an hour, so older history has
+# one point an hour: bridging 70 minutes joins those into one line instead of
+# a dash per hour. A pause longer than that still shows as a gap.
+PROBE_GAP_MS = 70 * 60 * 1000
 
 
 def hourly(p):
-    """One point an hour: draw the points and join them across the hour."""
+    """One point a run: draw the points and join them across the old hourly gaps."""
     p["fieldConfig"]["defaults"]["custom"].update(
-        {"showPoints": "always", "pointSize": 4, "spanNulls": 2 * 3600 * 1000}
+        {"showPoints": "always", "pointSize": 4, "spanNulls": PROBE_GAP_MS}
     )
     return p
 
 
+def joined(p):
+    """State timeline: connect the points so hourly history is not dashes."""
+    p["fieldConfig"]["defaults"].setdefault("custom", {})["spanNulls"] = PROBE_GAP_MS
+    return p
+
+
 def probe_by(label, metric):
-    return f"avg by ({label}) (avg_over_time({metric}[$__interval]){UNLESS_OFF})"
+    return f"avg by ({label}) (avg_over_time({metric}{BUCKET}){UNLESS_OFF})"
 
 
 probe_now = {
@@ -1099,13 +1147,17 @@ probe_now = {
     "красной. Пусто — хоста нет в подписке. При сбое API используется последнее "
     "известное состояние; свежесть показана ниже.",
     "datasource": DS,
-    "gridPos": {"x": 0, "y": y, "w": 8, "h": 9},
+    "gridPos": {"x": 0, "y": y, "w": 10, "h": 9},
     "fieldConfig": {
         "defaults": {
             "unit": "percentunit",
             "decimals": 0,
             "mappings": OFF_MAPPING,
-            "custom": {"align": "center", "cellOptions": {"type": "color-background"}},
+            "custom": {
+                "align": "center",
+                "cellOptions": {"type": "color-background"},
+                "minWidth": 76,
+            },
             "color": {"mode": "thresholds"},
             "thresholds": {
                 "mode": "absolute",
@@ -1116,14 +1168,28 @@ probe_now = {
                 ],
             },
         },
-        "overrides": [],
+        "overrides": [
+            {
+                "matcher": {"id": "byRegexp", "options": "^transport"},
+                "properties": [
+                    {"id": "displayName", "value": "Протокол"},
+                    {"id": "custom.width", "value": 160},
+                    {"id": "custom.align", "value": "left"},
+                    {"id": "custom.cellOptions", "value": {"type": "auto"}},
+                ],
+            }
+        ],
     },
-    "options": {"showHeader": True, "cellHeight": "sm"},
+    "options": {
+        "showHeader": True,
+        "cellHeight": "sm",
+        "frozenColumns": {"left": 1},
+    },
     "targets": [
         {
             "datasource": DS,
             "expr": "max by (transport, node) "
-            f"((last_over_time(vpn_probe_success_ratio[70m]){UNLESS_OFF})"
+            f"((last_over_time(vpn_probe_success_ratio[15m]){UNLESS_OFF})"
             f" or (({PROBE_OFF}) - 1))",
             "refId": "A",
             "instant": True,
@@ -1144,6 +1210,9 @@ probe_now = {
                 "valueField": "Value",
             },
         },
+        # HHH-STO-04 -> STO-04: the header is no wider than the 100 % under it.
+        {"id": "renameByRegex", "options": {"regex": "^HHH-(.*)$", "renamePattern": "$1"}},
+        {"id": "renameByRegex", "options": {"regex": "^MIS-STO-01$", "renamePattern": "MIS"}},
     ],
 }
 panels += [
@@ -1151,24 +1220,25 @@ panels += [
     timeline(
         60,
         "По нодам",
-        8,
+        10,
         y,
-        16,
+        14,
         4,
         [(f"avg by (node) ({PROBE_OK}) or (max by (node) ({PROBE_OFF}) - 1)", "{{node}}")],
         interval=PROBE_STEP,
         mappings=OFF_MAPPING,
         desc="Средняя доля прошедших запросов по транспортам включённой ноды. Серое "
         "«Отключена» — административное отключение; отсутствие данных — проба не "
-        "работала. Одна клетка — один час. История до начала учёта административного "
+        "работала. Одна клетка — один прогон (10 минут) или среднее за шаг на "
+        "длинном диапазоне. История до начала учёта административного "
         "состояния не пересчитывается.",
     ),
     timeline(
         63,
         "По транспортам",
-        8,
+        10,
         y + 4,
-        16,
+        14,
         5,
         [(f"avg by (transport) ({PROBE_OK})", "{{transport}}")],
         interval=PROBE_STEP,
@@ -1186,15 +1256,15 @@ panels += [
         5,
         [
             (
-                "max(min_over_time(vpn_probe_direct_success[$__interval]))",
+                "max(min_over_time(vpn_probe_direct_success[$__interval] offset -$__interval))",
                 "прямой выход",
             ),
             (
-                "max(min_over_time(vpn_probe_subscription_success[$__interval]))",
+                "max(min_over_time(vpn_probe_subscription_success[$__interval] offset -$__interval))",
                 "подписка",
             ),
             (
-                "min(min_over_time(vpn_probe_admin_state_fresh[$__interval]))",
+                "min(min_over_time(vpn_probe_admin_state_fresh[$__interval] offset -$__interval))",
                 "состояние нод актуально",
             ),
         ],
@@ -1215,46 +1285,25 @@ panels += [
             desc="Медиана трёх запросов 204, среднее по транспортам; только прошедшие.",
         )
     ),
-    hourly(
-        panel(
-            65,
-            "Скорость через ноду",
-            16,
-            y + 9,
-            8,
-            5,
-            [(probe_by("node", "vpn_probe_throughput_bits_per_second"), "{{node}}")],
-            unit="bps",
-            interval=PROBE_STEP,
-            calcs=("mean", "min"),
-            desc="Скачивание 5 МБ через каждый хост по очереди, среднее по транспортам. "
-            "Потолок — офисный канал, поэтому смотреть на разницу между нодами и на "
-            "просадки, а не на абсолютное число.",
-        )
-    ),
-    hourly(
-        panel(
-            66,
-            "Скорость по транспортам",
-            0,
-            y + 14,
-            24,
-            6,
-            [
-                (
-                    probe_by("transport", "vpn_probe_throughput_bits_per_second"),
-                    "{{transport}}",
-                )
-            ],
-            unit="bps",
-            interval=PROBE_STEP,
-            calcs=("mean", "min", "max"),
-            desc="То же скачивание, среднее по нодам. Транспорт без точки в этот час "
-            "не прошёл проверку 204, и скорость не мерилась.",
-        )
+    timeline(
+        65,
+        "Передача 256 КБ",
+        16,
+        y + 9,
+        8,
+        5,
+        [(probe_by("node", "vpn_probe_transfer_success"), "{{node}}")],
+        interval=PROBE_STEP,
+        desc="Доля хостов ноды, через которые 256 КБ дошли целиком. Фильтр в "
+        "России иногда не рвёт соединение, а замораживает его после ~16 КБ: 204 "
+        "проходит, а реальная загрузка висит. Пусто — 204 не прошёл, передачу "
+        "не проверяли.",
     ),
 ]
-y += 20
+for p in panels:
+    if p["id"] in (60, 61, 63, 65):
+        joined(p)
+y += 14
 
 # --- Доступность -------------------------------------------------------
 # Gatus probes from the control plane in Sweden: TCP connect, ICMP and the
@@ -1357,25 +1406,23 @@ panels += [
 ]
 y += 13
 
-dump(
-    "network/vpn-traffic.json",
-    {
-        "uid": "vpn-traffic-quality",
-        "title": "VPN · traffic & quality",
-        "description": "Сводка, трафик по транспортам, нодам и людям, качество TCP и "
-        "Hysteria2, проба из России, доступность VPN.",
-        "tags": ["vpn", "traffic"],
-        "timezone": "browser",
-        "graphTooltip": 1,
-        "schemaVersion": 39,
-        "version": 2,
-        "refresh": "1m",
-        "time": {"from": "now-7d", "to": "now"},
-        "editable": True,
-        "panels": panels,
-        "templating": {"list": []},
-    },
-)
+traffic = {
+    "uid": "vpn-traffic-quality",
+    "title": "VPN · traffic & quality",
+    "description": "Сводка, трафик по транспортам, нодам и людям, качество TCP и "
+    "Hysteria2, проба из России, доступность VPN.",
+    "tags": ["vpn", "traffic"],
+    "timezone": "browser",
+    "graphTooltip": 1,
+    "schemaVersion": 39,
+    "version": 2,
+    "refresh": "1m",
+    "time": {"from": "now-7d", "to": "now"},
+    "editable": True,
+    "panels": panels,
+    "templating": {"list": []},
+}
+dump("network/vpn-traffic.json", traffic, probe=True)
 
 # =========================================================================
 # VPN: здоровье нод
