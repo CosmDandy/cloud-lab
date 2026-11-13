@@ -1,0 +1,6 @@
+---
+# Canary for the node image with Xray 26.10.31 (started 2026-11-13). From
+# 26.9.8 the REALITY server rejects a ClientHello without X25519MLKEM768:
+# sing-box, and the qq/edge/ios/random fingerprints, can no longer connect.
+# The other nodes stay on the role default until this one has run a day clean.
+remnanode_image: remnawave/node:3.4.5
