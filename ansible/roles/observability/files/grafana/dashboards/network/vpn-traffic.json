@@ -429,7 +429,7 @@
             "type": "prometheus",
             "uid": "victoriametrics"
           },
-          "expr": "count((max_over_time(vpn_probe_success_ratio[2h5m]) == 0 and avg_over_time(vpn_probe_success_ratio[1d] offset 2h15m) > 0.5 and on (instance) last_over_time(vpn_probe_direct_success[2h5m]) == 1) unless on (instance, host) (last_over_time(vpn_probe_host_enabled[70m]) == 0)) or vector(0)",
+          "expr": "count((max_over_time(vpn_probe_success_ratio{instance=~\"$probe\"}[2h5m]) == 0 and avg_over_time(vpn_probe_success_ratio{instance=~\"$probe\"}[1d] offset 2h15m) > 0.5 and on (instance) last_over_time(vpn_probe_direct_success{instance=~\"$probe\"}[2h5m]) == 1) unless on (instance, host) (last_over_time(vpn_probe_host_enabled{instance=~\"$probe\"}[15m]) == 0)) or vector(0)",
           "legendFormat": "хостов",
           "refId": "A",
           "range": false,
@@ -1789,7 +1789,7 @@
     {
       "id": 108,
       "type": "row",
-      "title": "Из России (проба из офиса)",
+      "title": "Из России — проба $probe",
       "collapsed": false,
       "gridPos": {
         "x": 0,
@@ -1797,7 +1797,8 @@
         "w": 24,
         "h": 1
       },
-      "panels": []
+      "panels": [],
+      "repeat": "probe"
     },
     {
       "id": 64,
@@ -1811,7 +1812,7 @@
       "gridPos": {
         "x": 0,
         "y": 70,
-        "w": 8,
+        "w": 10,
         "h": 9
       },
       "fieldConfig": {
@@ -1834,7 +1835,8 @@
             "align": "center",
             "cellOptions": {
               "type": "color-background"
-            }
+            },
+            "minWidth": 76
           },
           "color": {
             "mode": "thresholds"
@@ -1857,11 +1859,41 @@
             ]
           }
         },
-        "overrides": []
+        "overrides": [
+          {
+            "matcher": {
+              "id": "byRegexp",
+              "options": "^transport"
+            },
+            "properties": [
+              {
+                "id": "displayName",
+                "value": "Протокол"
+              },
+              {
+                "id": "custom.width",
+                "value": 160
+              },
+              {
+                "id": "custom.align",
+                "value": "left"
+              },
+              {
+                "id": "custom.cellOptions",
+                "value": {
+                  "type": "auto"
+                }
+              }
+            ]
+          }
+        ]
       },
       "options": {
         "showHeader": true,
-        "cellHeight": "sm"
+        "cellHeight": "sm",
+        "frozenColumns": {
+          "left": 1
+        }
       },
       "targets": [
         {
@@ -1869,7 +1901,7 @@
             "type": "prometheus",
             "uid": "victoriametrics"
           },
-          "expr": "max by (transport, node) ((last_over_time(vpn_probe_success_ratio[70m]) unless on (instance, host) (last_over_time(vpn_probe_host_enabled[70m]) == 0)) or ((last_over_time(vpn_probe_host_enabled[70m]) == 0) - 1))",
+          "expr": "max by (transport, node) ((last_over_time(vpn_probe_success_ratio{instance=~\"$probe\"}[15m]) unless on (instance, host) (last_over_time(vpn_probe_host_enabled{instance=~\"$probe\"}[15m]) == 0)) or ((last_over_time(vpn_probe_host_enabled{instance=~\"$probe\"}[15m]) == 0) - 1))",
           "refId": "A",
           "instant": true,
           "range": false,
@@ -1894,6 +1926,20 @@
             "rowField": "transport",
             "valueField": "Value"
           }
+        },
+        {
+          "id": "renameByRegex",
+          "options": {
+            "regex": "^HHH-(.*)$",
+            "renamePattern": "$1"
+          }
+        },
+        {
+          "id": "renameByRegex",
+          "options": {
+            "regex": "^MIS-STO-01$",
+            "renamePattern": "MIS"
+          }
         }
       ]
     },
@@ -1901,15 +1947,15 @@
       "id": 60,
       "type": "state-timeline",
       "title": "По нодам",
-      "description": "Средняя доля прошедших запросов по транспортам включённой ноды. Серое «Отключена» — административное отключение; отсутствие данных — проба не работала. Одна клетка — один час. История до начала учёта административного состояния не пересчитывается.",
+      "description": "Средняя доля прошедших запросов по транспортам включённой ноды. Серое «Отключена» — административное отключение; отсутствие данных — проба не работала. Одна клетка — один прогон (10 минут) или среднее за шаг на длинном диапазоне. История до начала учёта административного состояния не пересчитывается.",
       "datasource": {
         "type": "prometheus",
         "uid": "victoriametrics"
       },
       "gridPos": {
-        "x": 8,
+        "x": 10,
         "y": 70,
-        "w": 16,
+        "w": 14,
         "h": 4
       },
       "fieldConfig": {
@@ -1945,6 +1991,9 @@
           },
           "color": {
             "mode": "thresholds"
+          },
+          "custom": {
+            "spanNulls": 4200000
           }
         },
         "overrides": []
@@ -1963,11 +2012,11 @@
             "type": "prometheus",
             "uid": "victoriametrics"
           },
-          "expr": "avg by (node) (avg_over_time(vpn_probe_success_ratio[$__interval]) unless on (instance, host) (last_over_time(vpn_probe_host_enabled[70m]) == 0)) or (max by (node) (last_over_time(vpn_probe_host_enabled[70m]) == 0) - 1)",
+          "expr": "avg by (node) (avg_over_time(vpn_probe_success_ratio{instance=~\"$probe\"}[$__interval] offset -$__interval) unless on (instance, host) (last_over_time(vpn_probe_host_enabled{instance=~\"$probe\"}[15m]) == 0)) or (max by (node) (last_over_time(vpn_probe_host_enabled{instance=~\"$probe\"}[15m]) == 0) - 1)",
           "legendFormat": "{{node}}",
           "refId": "A",
           "range": true,
-          "interval": "1h"
+          "interval": "10m"
         }
       ]
     },
@@ -1981,9 +2030,9 @@
         "uid": "victoriametrics"
       },
       "gridPos": {
-        "x": 8,
+        "x": 10,
         "y": 74,
-        "w": 16,
+        "w": 14,
         "h": 5
       },
       "fieldConfig": {
@@ -2008,6 +2057,9 @@
           },
           "color": {
             "mode": "thresholds"
+          },
+          "custom": {
+            "spanNulls": 4200000
           }
         },
         "overrides": []
@@ -2026,11 +2078,11 @@
             "type": "prometheus",
             "uid": "victoriametrics"
           },
-          "expr": "avg by (transport) (avg_over_time(vpn_probe_success_ratio[$__interval]) unless on (instance, host) (last_over_time(vpn_probe_host_enabled[70m]) == 0))",
+          "expr": "avg by (transport) (avg_over_time(vpn_probe_success_ratio{instance=~\"$probe\"}[$__interval] offset -$__interval) unless on (instance, host) (last_over_time(vpn_probe_host_enabled{instance=~\"$probe\"}[15m]) == 0))",
           "legendFormat": "{{transport}}",
           "refId": "A",
           "range": true,
-          "interval": "1h"
+          "interval": "10m"
         }
       ]
     },
@@ -2071,6 +2123,9 @@
           },
           "color": {
             "mode": "thresholds"
+          },
+          "custom": {
+            "spanNulls": 4200000
           }
         },
         "overrides": []
@@ -2089,33 +2144,33 @@
             "type": "prometheus",
             "uid": "victoriametrics"
           },
-          "expr": "max(min_over_time(vpn_probe_direct_success[$__interval]))",
+          "expr": "max(min_over_time(vpn_probe_direct_success{instance=~\"$probe\"}[$__interval] offset -$__interval))",
           "legendFormat": "прямой выход",
           "refId": "A",
           "range": true,
-          "interval": "1h"
+          "interval": "10m"
         },
         {
           "datasource": {
             "type": "prometheus",
             "uid": "victoriametrics"
           },
-          "expr": "max(min_over_time(vpn_probe_subscription_success[$__interval]))",
+          "expr": "max(min_over_time(vpn_probe_subscription_success{instance=~\"$probe\"}[$__interval] offset -$__interval))",
           "legendFormat": "подписка",
           "refId": "B",
           "range": true,
-          "interval": "1h"
+          "interval": "10m"
         },
         {
           "datasource": {
             "type": "prometheus",
             "uid": "victoriametrics"
           },
-          "expr": "min(min_over_time(vpn_probe_admin_state_fresh[$__interval]))",
+          "expr": "min(min_over_time(vpn_probe_admin_state_fresh{instance=~\"$probe\"}[$__interval] offset -$__interval))",
           "legendFormat": "состояние нод актуально",
           "refId": "C",
           "range": true,
-          "interval": "1h"
+          "interval": "10m"
         }
       ]
     },
@@ -2141,7 +2196,7 @@
             "lineWidth": 1,
             "fillOpacity": 8,
             "showPoints": "always",
-            "spanNulls": 7200000,
+            "spanNulls": 4200000,
             "pointSize": 4
           }
         },
@@ -2168,19 +2223,19 @@
             "type": "prometheus",
             "uid": "victoriametrics"
           },
-          "expr": "avg by (node) (avg_over_time(vpn_probe_latency_seconds[$__interval]) unless on (instance, host) (last_over_time(vpn_probe_host_enabled[70m]) == 0))",
+          "expr": "avg by (node) (avg_over_time(vpn_probe_latency_seconds{instance=~\"$probe\"}[$__interval] offset -$__interval) unless on (instance, host) (last_over_time(vpn_probe_host_enabled{instance=~\"$probe\"}[15m]) == 0))",
           "legendFormat": "{{node}}",
           "refId": "A",
           "range": true,
-          "interval": "1h"
+          "interval": "10m"
         }
       ]
     },
     {
       "id": 65,
-      "type": "timeseries",
-      "title": "Скорость через ноду",
-      "description": "Скачивание 5 МБ через каждый хост по очереди, среднее по транспортам. Потолок — офисный канал, поэтому смотреть на разницу между нодами и на просадки, а не на абсолютное число.",
+      "type": "state-timeline",
+      "title": "Передача 256 КБ",
+      "description": "Доля хостов ноды, через которые 256 КБ дошли целиком. Фильтр в России иногда не рвёт соединение, а замораживает его после ~16 КБ: 204 проходит, а реальная загрузка висит. Пусто — 204 не прошёл, передачу не проверяли.",
       "datasource": {
         "type": "prometheus",
         "uid": "victoriametrics"
@@ -2193,30 +2248,39 @@
       },
       "fieldConfig": {
         "defaults": {
-          "unit": "bps",
+          "mappings": [],
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "red",
+                "value": null
+              },
+              {
+                "color": "yellow",
+                "value": 0.5
+              },
+              {
+                "color": "green",
+                "value": 0.99
+              }
+            ]
+          },
+          "color": {
+            "mode": "thresholds"
+          },
           "custom": {
-            "lineWidth": 1,
-            "fillOpacity": 8,
-            "showPoints": "always",
-            "spanNulls": 7200000,
-            "pointSize": 4
+            "spanNulls": 4200000
           }
         },
         "overrides": []
       },
       "options": {
+        "showValue": "never",
+        "mergeValues": true,
+        "rowHeight": 0.8,
         "legend": {
-          "displayMode": "table",
-          "placement": "bottom",
-          "showLegend": true,
-          "calcs": [
-            "mean",
-            "min"
-          ]
-        },
-        "tooltip": {
-          "mode": "multi",
-          "sort": "desc"
+          "showLegend": false
         }
       },
       "targets": [
@@ -2225,69 +2289,11 @@
             "type": "prometheus",
             "uid": "victoriametrics"
           },
-          "expr": "avg by (node) (avg_over_time(vpn_probe_throughput_bits_per_second[$__interval]) unless on (instance, host) (last_over_time(vpn_probe_host_enabled[70m]) == 0))",
+          "expr": "avg by (node) (avg_over_time(vpn_probe_transfer_success{instance=~\"$probe\"}[$__interval] offset -$__interval) unless on (instance, host) (last_over_time(vpn_probe_host_enabled{instance=~\"$probe\"}[15m]) == 0))",
           "legendFormat": "{{node}}",
           "refId": "A",
           "range": true,
-          "interval": "1h"
-        }
-      ]
-    },
-    {
-      "id": 66,
-      "type": "timeseries",
-      "title": "Скорость по транспортам",
-      "description": "То же скачивание, среднее по нодам. Транспорт без точки в этот час не прошёл проверку 204, и скорость не мерилась.",
-      "datasource": {
-        "type": "prometheus",
-        "uid": "victoriametrics"
-      },
-      "gridPos": {
-        "x": 0,
-        "y": 84,
-        "w": 24,
-        "h": 6
-      },
-      "fieldConfig": {
-        "defaults": {
-          "unit": "bps",
-          "custom": {
-            "lineWidth": 1,
-            "fillOpacity": 8,
-            "showPoints": "always",
-            "spanNulls": 7200000,
-            "pointSize": 4
-          }
-        },
-        "overrides": []
-      },
-      "options": {
-        "legend": {
-          "displayMode": "table",
-          "placement": "bottom",
-          "showLegend": true,
-          "calcs": [
-            "mean",
-            "min",
-            "max"
-          ]
-        },
-        "tooltip": {
-          "mode": "multi",
-          "sort": "desc"
-        }
-      },
-      "targets": [
-        {
-          "datasource": {
-            "type": "prometheus",
-            "uid": "victoriametrics"
-          },
-          "expr": "avg by (transport) (avg_over_time(vpn_probe_throughput_bits_per_second[$__interval]) unless on (instance, host) (last_over_time(vpn_probe_host_enabled[70m]) == 0))",
-          "legendFormat": "{{transport}}",
-          "refId": "A",
-          "range": true,
-          "interval": "1h"
+          "interval": "10m"
         }
       ]
     },
@@ -2298,7 +2304,7 @@
       "collapsed": false,
       "gridPos": {
         "x": 0,
-        "y": 90,
+        "y": 84,
         "w": 24,
         "h": 1
       },
@@ -2315,7 +2321,7 @@
       },
       "gridPos": {
         "x": 0,
-        "y": 91,
+        "y": 85,
         "w": 4,
         "h": 6
       },
@@ -2380,7 +2386,7 @@
       },
       "gridPos": {
         "x": 4,
-        "y": 91,
+        "y": 85,
         "w": 20,
         "h": 6
       },
@@ -2454,7 +2460,7 @@
       },
       "gridPos": {
         "x": 0,
-        "y": 97,
+        "y": 91,
         "w": 12,
         "h": 7
       },
@@ -2509,7 +2515,7 @@
       },
       "gridPos": {
         "x": 12,
-        "y": 97,
+        "y": 91,
         "w": 12,
         "h": 7
       },
@@ -2568,6 +2574,33 @@
         "query": {
           "query": "label_values(xray_up, instance)",
           "refId": "node"
+        },
+        "multi": true,
+        "includeAll": true,
+        "current": {
+          "selected": true,
+          "text": [
+            "All"
+          ],
+          "value": [
+            "$__all"
+          ]
+        },
+        "refresh": 2,
+        "sort": 1
+      },
+      {
+        "name": "probe",
+        "label": "Probe",
+        "type": "query",
+        "datasource": {
+          "type": "prometheus",
+          "uid": "victoriametrics"
+        },
+        "definition": "label_values(vpn_probe_last_run_timestamp_seconds, instance)",
+        "query": {
+          "query": "label_values(vpn_probe_last_run_timestamp_seconds, instance)",
+          "refId": "probe"
         },
         "multi": true,
         "includeAll": true,

@@ -26,17 +26,28 @@ vpn_probe_instance: "{{ inventory_hostname }}"
 # minClientVer 26.3.27, а клиент без ML-DSA не проверит подпись так, как
 # это делает живое приложение.
 vpn_probe_xray_version: "26.7.28"
+# Release asset suffix per CPU: the home probe is a Pi Zero (armv6l).
+vpn_probe_xray_arch: >-
+  {{ {'x86_64': '64', 'aarch64': 'arm64-v8a', 'armv7l': 'arm32-v7a',
+      'armv6l': 'arm32-v6'}[ansible_facts['architecture']] }}
 vpn_probe_xray_url: >-
-  https://github.com/XTLS/Xray-core/releases/download/v{{ vpn_probe_xray_version }}/Xray-linux-64.zip
+  https://github.com/XTLS/Xray-core/releases/download/v{{ vpn_probe_xray_version }}/Xray-linux-{{ vpn_probe_xray_arch }}.zip
 
 # Последовательный прогон при недоступности всего подряд занимал бы десятки
 # минут: три попытки по 8 секунд на хост, четыре хоста разом.
 vpn_probe_tries: 3
 vpn_probe_workers: 4
-# Раз в час в фиксированную минуту: окно часа на дашборде всегда содержит
-# ровно один прогон. Чаще не нужно — из офиса виден один путь, и минутные
-# провалы на нём (окна, когда провайдер режет TLS к нашим адресам) — шум.
-vpn_probe_schedule: "*-*-* *:05:00"
-# Скачивание через каждый хост по очереди: 24 хоста по 5 МБ — около 120 МБ
-# в час на офисный канал и ноды.
-vpn_probe_speed_bytes: 5000000
+# Every 10 minutes at :05, :15, ...: a 10-minute dashboard bucket holds
+# exactly one run. The office path has minute-long windows when the ISP
+# cuts TLS to our addresses; alerts still need two hours of failures, so
+# those windows show on the dashboard and do not page. A run takes ~30 s
+# in the office and ~3.5 min on the Pi; if one overruns, systemd skips
+# the next trigger instead of stacking runs.
+vpn_probe_schedule: "*-*-* *:05/10:00"
+# Past the ~16 KB after which the Russian filter freezes a connection
+# instead of cutting it: a 204 passes under that, real traffic stalls.
+vpn_probe_transfer_bytes: 262144
+# One request through the tunnel, and how long xray may take to start
+# listening. Raised per host on slow boards, see host_vars/rpi-local-l-01.
+vpn_probe_fetch_timeout: 8
+vpn_probe_start_timeout: 5
