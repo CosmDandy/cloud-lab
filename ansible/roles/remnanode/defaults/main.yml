@@ -9,7 +9,8 @@ remnanode_owner: root
 # negotiate X25519MLKEM768 (docs/vpn-nodes.md, "Сайт-маскировка Reality и
 # ML-DSA"). The dests left swisscom on 2026-11-20 and the sing-box-only NoPQ
 # inbound is gone (sing-box#4520 no longer blocks a bump), so the 3.4.5 canary
-# can be retried.
+# can be retried; confirm XHTTP on the new dests with xray 26.11.9 first, they
+# were only checked on 26.7.28.
 remnanode_image: remnawave/node:3.4.3
 
 # Порт агента, которым панель управляет нодой. Наружу не выставлен.
