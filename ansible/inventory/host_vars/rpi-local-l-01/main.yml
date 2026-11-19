@@ -1,0 +1,8 @@
+---
+# Pi Zero v1.3: one armv6 core, 475 MB. xray starts in 0.8 s and holds
+# 28 MB, so memory is fine; the CPU is the limit — a bare TLS fetch of
+# the 204 takes 2.5 s and a download tops out near 3.3 Mbit/s even
+# without a tunnel (measured 2026-11-12).
+vpn_probe_workers: 1
+vpn_probe_fetch_timeout: 20
+vpn_probe_start_timeout: 15

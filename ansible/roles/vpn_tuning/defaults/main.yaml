@@ -66,6 +66,12 @@ vpn_tuning_sysctl:
   net.netfilter.nf_conntrack_udp_timeout: "60"
   net.netfilter.nf_conntrack_udp_timeout_stream: "180"
 
+  # Go 1.24+ opens every TCP listener as MPTCP, and an IPv4 MPTCP listener is
+  # remotely exploitable for root on unpatched kernels (Linux TCP flaw of
+  # 2026-10, CVSS 9.8; Xray PR #7291). Nothing here needs MPTCP: off, Go falls
+  # back to plain TCP. Rollback: drop this line, sysctl -w net.mptcp.enabled=1.
+  net.mptcp.enabled: "0"
+
   # Auto-reboot on kernel panic
   kernel.panic: "10"
   kernel.panic_on_oops: "1"
