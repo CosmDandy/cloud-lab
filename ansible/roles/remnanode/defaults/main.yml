@@ -5,8 +5,11 @@ remnanode_owner: root
 # Тег закреплён намеренно. latest разрешается в digest один раз — в момент
 # pull, — и дальше контейнер держит именно его: на проде метка latest
 # простояла с 15.07 по 14.08 на образе, собранном до выхода node 3.0.0.
-# NOTE: 3.4.3 carries xray 26.7.28. Anything with xray >= 26.9.8 locks out
-# sing-box clients on VLESS-Vision-NoPQ (sing-box#4520) — check before bumping.
+# NOTE: 3.4.3 carries xray 26.7.28. From xray 26.9.8 every REALITY dest must
+# negotiate X25519MLKEM768 (docs/vpn-nodes.md, "Сайт-маскировка Reality и
+# ML-DSA"). The dests left swisscom on 2026-11-20 and the sing-box-only NoPQ
+# inbound is gone (sing-box#4520 no longer blocks a bump), so the 3.4.5 canary
+# can be retried.
 remnanode_image: remnawave/node:3.4.3
 
 # Порт агента, которым панель управляет нодой. Наружу не выставлен.
